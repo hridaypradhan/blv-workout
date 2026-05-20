@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+sqlalchemy
+asyncpg
+google-generativeai
+mediapipe
+yt-dlp
+librosa
+google-cloud-texttospeech
+python-dotenv
+httpx
+python-multipart

@@ -1,0 +1,56 @@
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+import Sidebar from "@/components/layout/Sidebar";
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+});
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+});
+
+export const metadata: Metadata = {
+  title: "FitA11y - AI Fitness for Blind and Low Vision Users",
+  description: "An AI-assisted, audio-first fitness application helping blind and low vision users work out safely with real-time feedback and haptic guidance.",
+};
+
+import { LayoutProvider } from "@/components/layout/LayoutContext";
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" className="dark scroll-smooth">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-slate-950 text-slate-100 min-h-screen`}
+      >
+        {/* Skip to Content Link for Keyboard & Screen Reader Users */}
+        <a
+          href="#main-content"
+          className="absolute left-4 top-[-100px] z-50 bg-yellow-400 text-slate-950 px-4 py-2 rounded-md font-bold transition-all duration-300 focus:top-4 focus:outline focus:outline-2 focus:outline-slate-950"
+          id="skip-to-content-link"
+        >
+          Skip to main content
+        </a>
+
+        {/* Layout container wrapped in provider */}
+        <LayoutProvider>
+          <div className="relative min-h-screen">
+            {/* Global Sidebar */}
+            <Sidebar id="global-sidebar" />
+
+            {/* Children views */}
+            {children}
+          </div>
+        </LayoutProvider>
+      </body>
+    </html>
+  );
+}

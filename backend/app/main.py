@@ -1,11 +1,13 @@
 """FastAPI application entrypoint for the FitA11y backend."""
 
+import os
 from functools import partial
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.core.config import settings
 from app.routers import coach, haptic, preprocessing, session, user
 
 app = FastAPI(title="FitA11y Backend", version="0.1.0")
@@ -33,3 +35,9 @@ app.add_api_route(
     methods=["GET"],
     tags=["health"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Create the import directory on startup if it does not exist."""
+    os.makedirs(settings.IMPORT_DIR, exist_ok=True)

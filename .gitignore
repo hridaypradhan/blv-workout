@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Virtual environment
+.venv/
+venv/
+
+# Backend storage (downloaded media files)
+backend/storage/
+
+# OS files
+.DS_Store
+Thumbs.db

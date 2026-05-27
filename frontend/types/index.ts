@@ -5,11 +5,27 @@ export enum CoachPersona {
 }
 
 export enum ProcessingStage {
-  DOWNLOADING = "DOWNLOADING",
-  SEGMENTING = "SEGMENTING",
-  EXTRACTING = "EXTRACTING",
-  GENERATING_HAPTICS = "GENERATING_HAPTICS",
-  READY = "READY",
+  SUBMITTED = "submitted",
+  DOWNLOADING = "downloading",
+  TRANSCRIBING = "transcribing",
+  SEGMENTING = "segmenting",
+  ANALYZING = "analyzing",
+  GENERATING_MANIFEST = "generating_manifest",
+  COMPLETED = "completed",
+  FAILED = "failed",
+}
+
+/** Lightweight import job record returned by the backend. */
+export interface ImportJob {
+  video_id: string;
+  youtube_url: string;
+  stage: ProcessingStage;
+  error?: string | null;
+  title?: string | null;
+  duration?: number | null;
+  video_path?: string | null;
+  audio_path?: string | null;
+  created_at?: string | null;
 }
 
 export interface SleeveStatus {

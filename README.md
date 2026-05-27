@@ -14,6 +14,10 @@ FitA11y is an AI-powered fitness accessibility application designed specifically
    Maintains structured, screen-reader-accessible workout logs, session duration trends, and form accuracy history.
 4. **YouTube Workout Preprocessing**
    Processes any workout video from YouTube, extracts exercises using AI, generates posture benchmarks, and builds custom audio/haptic manifests.
+5. **Adaptive Pacing & Rhythmic Tempo Engine**
+   Tracks repetition timings (lag ratios, drift, irregularity scores) using MediaPipe to dynamically generate tailored speed adjustments and vocal pacing cues.
+6. **Interactive API Lab Playground**
+   An internal Postman-like interface to inspect, build, and run API requests directly in the browser with full OpenAPI spec auto-syncing.
 
 ---
 
@@ -99,6 +103,18 @@ Start the development server:
 npm run dev
 ```
 The UI will run on [http://localhost:3000](http://localhost:3000). Open this address in your browser to view the application.
+
+---
+
+## Development Utilities & Testing
+
+### API Lab Playground
+FitA11y includes a browser-based HTTP testing suite under the route `/api-lab` to help developer debugging:
+* **Auto-Discovery**: Dynamically queries the backend server's `/openapi.json` specs on demand, so frontend testing lists are always synchronized with the FastAPI implementation.
+* **No Path Truncation**: Fully wrapped endpoint path strings (with native hover tooltips) allow easy identification of long routes.
+* **Expected Mock Responses**: Pre-loaded request templates include sample expected output schemas (collapsible and copy-to-clipboard ready) so developers can understand expected server behavior instantly.
+* **Base URL Configurator**: Allows testing local, staging, or remote backend hosts using local storage caching.
+* **Safety Confirmations**: Protects against accidental state modifications with confirmations on operations like `DELETE`.
 
 ---
 

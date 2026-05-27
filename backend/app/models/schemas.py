@@ -232,3 +232,104 @@ class HapticTriggerRequest(BaseModel):
     sleeve_sides: list[SleeveSide]
     pattern_name: str
     intensity: float
+
+
+class PlaybackInstruction(BaseModel):
+    """Playback speed adjustment commands for the player."""
+
+    action: str
+    suggested_speed: float | None = None
+
+
+class HapticInstruction(BaseModel):
+    """Haptic feedback instruction for sleeves."""
+
+    enabled: bool
+    pattern: str | None = None
+    sleeves: list[SleeveSide] = Field(default_factory=list)
+    intensity: float | None = None
+
+
+class RepAdjustment(BaseModel):
+    """Target rep adjustment recommendation."""
+
+    original_target: int
+    adjusted_target: int
+    reason: str | None = None
+
+
+class PacingMetrics(BaseModel):
+    """Calculated metric inputs for adaptive video pacing."""
+
+    latest_lag_ratio: float
+    rolling_average_lag_ratio: float
+    sustained_lag: bool
+    recovery_detected: bool
+    form_errors_increasing: bool
+
+
+class AdaptivePacingRequest(BaseModel):
+    """Request body for F3.5 Adaptive Video Pacing Control."""
+
+    session_id: UUID
+    exercise_id: UUID
+    exercise_name: str
+    expected_rep_duration_seconds: float | None = None
+    rep_durations_seconds: list[float] | None = None
+    recent_lag_ratios: list[float] | None = None
+    completed_reps: int = 0
+    target_reps: int | None = None
+    recent_form_error_counts: list[int] | None = None
+    primary_sleeves: list[SleeveSide] = Field(default_factory=list)
+    current_playback_speed: float = 1.0
+    user_command: str | None = None
+    persona: CoachPersona = CoachPersona.SUPPORTIVE
+
+
+class AdaptivePacingResponse(BaseModel):
+    """Structured response body for F3.5 Adaptive Video Pacing Control."""
+
+    feature: str = "adaptive_pacing"
+    decision: str
+    coach_message: str
+    playback: PlaybackInstruction
+    haptic: HapticInstruction
+    rep_adjustment: RepAdjustment | None = None
+    metrics: PacingMetrics
+    reason: str
+
+
+class RhythmMetrics(BaseModel):
+    """Calculated rhythm drift and variance metrics."""
+
+    expected_rep_duration_seconds: float
+    user_average_rep_duration_seconds: float
+    drift_ratio: float
+    drift_percent: float
+    irregularity_score: float
+
+
+class RhythmPacingRequest(BaseModel):
+    """Request body for F3.6 Beat & Rhythm Pacing Coach."""
+
+    session_id: UUID
+    exercise_id: UUID
+    exercise_name: str
+    beat_timestamps_seconds: list[float] | None = None
+    bpm: float | None = None
+    expected_beats_per_rep: int | None = None
+    expected_rep_duration_seconds: float | None = None
+    rep_timestamps_seconds: list[float] | None = None
+    rep_durations_seconds: list[float] | None = None
+    persona: CoachPersona = CoachPersona.SUPPORTIVE
+
+
+class RhythmPacingResponse(BaseModel):
+    """Structured response body for F3.6 Beat & Rhythm Pacing Coach."""
+
+    feature: str = "rhythm_pacing"
+    decision: str
+    coach_message: str
+    rhythm: RhythmMetrics
+    reason: str
+

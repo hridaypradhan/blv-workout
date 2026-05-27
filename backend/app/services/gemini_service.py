@@ -37,7 +37,29 @@ def generate_correction(exercise: Exercise, joint: str, angle: float, persona: C
 
 def generate_pacing_feedback(lag_ratio: float, persona: CoachPersona) -> str:
     """Generate pacing feedback based on a user's timing lag ratio."""
-    raise NotImplementedError("TODO: implement")
+    if lag_ratio <= 1.0:
+        phrases = {
+            CoachPersona.SUPPORTIVE: "Excellent pacing! Keep up the good work.",
+            CoachPersona.DIRECT: "On pace. Continue.",
+            CoachPersona.ENERGETIC: "Fantastic tempo! Keep moving!",
+            CoachPersona.CALM: "Nice steady pace. Maintain this tempo."
+        }
+    elif lag_ratio <= 1.2:
+        phrases = {
+            CoachPersona.SUPPORTIVE: "You're doing great, but try to speed up just a little bit.",
+            CoachPersona.DIRECT: "Slight lag. Increase speed.",
+            CoachPersona.ENERGETIC: "A little slow! Pick up the pace slightly!",
+            CoachPersona.CALM: "You are slightly behind. Gently find a bit more speed."
+        }
+    else:
+        phrases = {
+            CoachPersona.SUPPORTIVE: "Let's take it slow, take your time to finish the movement.",
+            CoachPersona.DIRECT: "Significant lag. Focus on completing the exercise.",
+            CoachPersona.ENERGETIC: "Don't rush, but let's try to close the gap!",
+            CoachPersona.CALM: "Take a deep breath and match the pace when you are ready."
+        }
+    return phrases.get(persona, phrases[CoachPersona.SUPPORTIVE])
+
 
 
 def generate_motivation(milestone_event: str, persona: CoachPersona) -> str:

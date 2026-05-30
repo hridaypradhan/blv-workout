@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { ImportJob, ProcessingStage } from "@/types";
+import { AssistanceJob, ProcessingStage } from "@/types";
 import { getJobs } from "@/lib/api";
 
 /** Hardcoded demo videos shown when the backend has no imported videos yet. */
@@ -11,7 +11,7 @@ const DEMO_VIDEOS = [
   {
     id: "v-squat-1",
     title: "Beginner Bodyweight Squats & Alignment",
-    exercises: 4,
+    channelName: "Bodyweight Coach",
     duration: "12 mins",
     lastSession: "2 days ago",
     thumbnailBg: "from-blue-600 to-indigo-800",
@@ -19,7 +19,7 @@ const DEMO_VIDEOS = [
   {
     id: "v-lunges-2",
     title: "Leg Strength: Reverse Lunges Tutorial",
-    exercises: 3,
+    channelName: "Fit Foundations",
     duration: "15 mins",
     lastSession: "1 week ago",
     thumbnailBg: "from-amber-600 to-orange-800",
@@ -27,7 +27,7 @@ const DEMO_VIDEOS = [
   {
     id: "v-core-3",
     title: "Core Stability: Deadbug & Bird-dog Guide",
-    exercises: 5,
+    channelName: "A11y Movement",
     duration: "10 mins",
     lastSession: "Never",
     thumbnailBg: "from-emerald-600 to-teal-800",
@@ -41,9 +41,14 @@ function stageBadge(stage: ProcessingStage) {
       return { text: "Ready", classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" };
     case ProcessingStage.FAILED:
       return { text: "Failed", classes: "bg-red-500/10 text-red-400 border-red-500/30" };
-    case ProcessingStage.DOWNLOADING:
+    case ProcessingStage.SUBMITTED:
+    case ProcessingStage.FETCHING_METADATA:
     case ProcessingStage.TRANSCRIBING:
-      return { text: "Processing", classes: "bg-yellow-400/10 text-yellow-400 border-yellow-400/30" };
+    case ProcessingStage.ANCHORING_TIMELINE:
+    case ProcessingStage.CLASSIFYING_TRAINER_INSTRUCTIONS:
+    case ProcessingStage.ANALYZING_MOVEMENT_WINDOWS:
+    case ProcessingStage.GENERATING_SIDECAR_MANIFEST:
+      return { text: "Preparing", classes: "bg-yellow-400/10 text-yellow-400 border-yellow-400/30" };
     default:
       return { text: stage, classes: "bg-slate-800 text-slate-400 border-slate-700" };
   }
@@ -69,7 +74,7 @@ const CARD_GRADIENTS = [
 ];
 
 export default function Dashboard() {
-  const [importedJobs, setImportedJobs] = useState<ImportJob[]>([]);
+  const [importedJobs, setImportedJobs] = useState<AssistanceJob[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,25 +93,24 @@ export default function Dashboard() {
   }, []);
 
   const handleStartSession = (videoId: string) => {
-    // TODO: Prepare and start setup flow for the specified videoId
     console.log("Starting session for video ID:", videoId);
   };
 
   return (
     <PageWrapper id="dashboard-page-wrapper">
-      {/* Header section with "+ Add Video" button */}
+      {/* Header section with "+ Prepare Assistance" button */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-extrabold text-white">Video Library</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Browse and start sessions for your processed workouts.
+            Browse and start assisted playback for your YouTube workouts.
           </p>
         </div>
 
         <Link
           href="/process"
           className="inline-flex items-center justify-center px-5 py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
-          id="add-video-btn"
+          id="prepare-assistance-btn"
         >
           <svg
             className="w-4 h-4 mr-2"
@@ -118,7 +122,7 @@ export default function Dashboard() {
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
           </svg>
-          Add Video
+          Prepare Assistance
         </Link>
       </div>
 
@@ -129,7 +133,7 @@ export default function Dashboard() {
             <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
             </svg>
-            Imported Videos
+            Assistance-Ready Videos
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {importedJobs.map((job, idx) => {
@@ -172,6 +176,11 @@ export default function Dashboard() {
                       >
                         {job.title || "Untitled Video"}
                       </h3>
+                      {job.channel_name && (
+                        <p className="text-xs text-slate-400 mb-2 font-medium">
+                          Trainer: {job.channel_name}
+                        </p>
+                      )}
                       <p className="text-xs text-slate-500 truncate mb-3">
                         {job.youtube_url}
                       </p>
@@ -185,9 +194,9 @@ export default function Dashboard() {
                         href={`/session/${job.video_id}/setup`}
                         onClick={() => handleStartSession(job.video_id)}
                         className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all"
-                        aria-label={`Start session for ${job.title || "imported video"}`}
+                        aria-label={`Start assisted playback for ${job.title || "imported video"}`}
                       >
-                        Start Session
+                        Start Assisted Playback
                         <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
                         </svg>
@@ -197,11 +206,11 @@ export default function Dashboard() {
                         href="/process"
                         className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold rounded-xl text-sm border border-red-500/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 transition-all"
                       >
-                        Retry Import
+                        Retry Preparation
                       </Link>
                     ) : (
                       <div className="w-full flex items-center justify-center px-4 py-2.5 bg-slate-800/50 text-slate-500 font-semibold rounded-xl text-sm border border-slate-800">
-                        Processing…
+                        Preparing…
                       </div>
                     )}
                   </div>
@@ -214,11 +223,9 @@ export default function Dashboard() {
 
       {/* Demo / Placeholder Video Cards */}
       <section aria-labelledby="demo-heading">
-        {importedJobs.length > 0 && (
-          <h2 id="demo-heading" className="text-lg font-bold text-slate-300 mb-4">
-            Sample Workouts
-          </h2>
-        )}
+        <h2 id="demo-heading" className="text-lg font-bold text-slate-300 mb-4">
+          {importedJobs.length > 0 ? "Sample Videos" : "Sample Playback Companions"}
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {DEMO_VIDEOS.map((video) => (
             <article
@@ -263,11 +270,11 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-2 gap-4 text-xs text-slate-400 mb-6" role="list">
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold text-slate-500 uppercase tracking-wider">Exercises</span>
-                      <span className="text-slate-300 text-sm font-semibold">{video.exercises} modules</span>
+                      <span className="font-semibold text-slate-500 uppercase tracking-wider">Trainer</span>
+                      <span className="text-slate-300 text-sm font-semibold">{video.channelName}</span>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold text-slate-500 uppercase tracking-wider">Last Practice</span>
+                      <span className="font-semibold text-slate-500 uppercase tracking-wider">Last Playback</span>
                       <span className="text-slate-300 text-sm font-semibold">{video.lastSession}</span>
                     </div>
                   </div>
@@ -278,10 +285,10 @@ export default function Dashboard() {
                   href={`/session/${video.id}/setup`}
                   onClick={() => handleStartSession(video.id)}
                   className="w-full inline-flex items-center justify-center px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all"
-                  aria-label={`Start setup session for ${video.title}`}
+                  aria-label={`Start assisted playback setup for ${video.title}`}
                   id={`start-btn-${video.id}`}
                 >
-                  Start Session
+                  Start Assisted Playback
                   <svg
                     className="w-4 h-4 ml-2"
                     fill="none"

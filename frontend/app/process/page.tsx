@@ -11,22 +11,42 @@ const PIPELINE_STEPS = [
   {
     key: ProcessingStage.SUBMITTED,
     name: "Submitted",
-    desc: "Your video has been queued for processing.",
+    desc: "Your YouTube video has been queued for assistance preparation.",
   },
   {
-    key: ProcessingStage.DOWNLOADING,
-    name: "Downloading",
-    desc: "Retrieving video files and metadata from YouTube.",
+    key: ProcessingStage.FETCHING_METADATA,
+    name: "Fetching Metadata",
+    desc: "Retrieving channel name, duration, and video metadata.",
   },
   {
     key: ProcessingStage.TRANSCRIBING,
-    name: "Extracting Audio",
-    desc: "Separating the audio track from the video file.",
+    name: "Transcribing",
+    desc: "Analyzing the trainer's speech track for alignment.",
+  },
+  {
+    key: ProcessingStage.ANCHORING_TIMELINE,
+    name: "Anchoring Timeline",
+    desc: "Identifying key workout segments and transitions.",
+  },
+  {
+    key: ProcessingStage.CLASSIFYING_TRAINER_INSTRUCTIONS,
+    name: "Classifying Instructions",
+    desc: "Mapping exercise cues, rep calls, and instructions.",
+  },
+  {
+    key: ProcessingStage.ANALYZING_MOVEMENT_WINDOWS,
+    name: "Analyzing Movement",
+    desc: "Determining expected joint angles and rep thresholds.",
+  },
+  {
+    key: ProcessingStage.GENERATING_SIDECAR_MANIFEST,
+    name: "Generating Sidecar Manifest",
+    desc: "Compiling the final sidecar data structure for playback.",
   },
   {
     key: ProcessingStage.COMPLETED,
     name: "Completed",
-    desc: "Video and audio are ready in your library.",
+    desc: "Assistance sidecar is ready in your library.",
   },
 ] as const;
 
@@ -40,6 +60,7 @@ export default function ProcessVideo() {
   const [currentStage, setCurrentStage] = useState<ProcessingStage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   /** Cleanup SSE connection on unmount. */
@@ -86,15 +107,14 @@ export default function ProcessVideo() {
     };
   }, [currentStage]);
 
-  /** Handle form submission. */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /** Helper to trigger URL submission */
+  const submitUrl = useCallback(async (url: string) => {
     setError(null);
     setCurrentStage(null);
     setIsSubmitting(true);
 
     try {
-      const result = await submitVideo(youtubeUrl);
+      const result = await submitVideo(url);
       setCurrentStage(ProcessingStage.SUBMITTED);
       connectSSE(result.video_id);
     } catch (err) {
@@ -102,9 +122,28 @@ export default function ProcessVideo() {
     } finally {
       setIsSubmitting(false);
     }
+  }, [connectSSE]);
+
+  /** Auto-submit on mount if URL parameter is present */
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlParam = params.get("url");
+      if (urlParam && !hasAutoSubmitted) {
+        setYoutubeUrl(urlParam);
+        setHasAutoSubmitted(true);
+        submitUrl(urlParam);
+      }
+    }
+  }, [submitUrl, hasAutoSubmitted]);
+
+  /** Handle form submission. */
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitUrl(youtubeUrl);
   };
 
-  /** Whether the import pipeline is actively running. */
+  /** Whether the assistance preparation pipeline is actively running. */
   const isProcessing =
     currentStage !== null &&
     currentStage !== ProcessingStage.COMPLETED &&
@@ -132,7 +171,7 @@ export default function ProcessVideo() {
   function badgeText() {
     if (isFailed) return "Failed";
     if (isCompleted) return "Completed";
-    if (isProcessing) return "Processing…";
+    if (isProcessing) return "Preparing…";
     return "Idle";
   }
 
@@ -152,9 +191,9 @@ export default function ProcessVideo() {
       <div className="max-w-3xl mx-auto py-4">
         {/* Title */}
         <div className="mb-8">
-          <h1 className="text-3xl font-extrabold text-white">Process New Workout</h1>
+          <h1 className="text-3xl font-extrabold text-white">Prepare Video Assistance</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Convert any video guide into an interactive session with spatial audio cues and haptic guidance.
+            Submit any YouTube video link to generate an assistance sidecar manifest containing expected movement windows, haptic cues, and pacing structures.
           </p>
         </div>
 
@@ -193,8 +232,8 @@ export default function ProcessVideo() {
               {isSubmitting
                 ? "Submitting…"
                 : isProcessing
-                ? "Processing…"
-                : "Process Video"}
+                ? "Preparing…"
+                : "Prepare Assistance"}
             </button>
           </form>
         </section>
@@ -221,7 +260,7 @@ export default function ProcessVideo() {
                 />
               </svg>
               <div>
-                <h3 className="text-sm font-bold text-red-400">Import Failed</h3>
+                <h3 className="text-sm font-bold text-red-400">Preparation Failed</h3>
                 <p className="text-sm text-red-300/80 mt-1">{error}</p>
               </div>
             </div>
@@ -248,10 +287,10 @@ export default function ProcessVideo() {
               </svg>
               <div>
                 <h3 className="text-sm font-bold text-emerald-400">
-                  Import Complete
+                  Preparation Complete
                 </h3>
                 <p className="text-sm text-emerald-300/80 mt-1">
-                  Video and audio have been downloaded and extracted successfully.
+                  Assistance sidecar is ready. You can now start assisted playback of the YouTube video.
                 </p>
                 <Link
                   href="/dashboard"
@@ -274,7 +313,7 @@ export default function ProcessVideo() {
         >
           <div className="flex items-center justify-between mb-6">
             <h2 id="status-heading" className="text-xl font-bold text-white">
-              Processing Progress
+              Preparation Progress
             </h2>
             <span
               className={`text-xs font-semibold px-2.5 py-1 rounded-md border uppercase tracking-wider ${badgeClasses()}`}
@@ -288,9 +327,9 @@ export default function ProcessVideo() {
             {currentStage && (
               <span>
                 {isFailed
-                  ? `Processing failed: ${error}`
+                  ? `Preparation failed: ${error}`
                   : isCompleted
-                  ? "Video import completed successfully."
+                  ? "Assistance preparation completed successfully."
                   : `Current stage: ${PIPELINE_STEPS[activeIdx]?.name || currentStage}`}
               </span>
             )}

@@ -1,14 +1,14 @@
-import { User, Video, Session, ImportJob } from "../types";
+import { User, Video, Session, AssistanceJob } from "../types";
 
 /** Base URL for the FastAPI backend. */
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ---------------------------------------------------------------------------
-// F1.1 — YouTube Import Pipeline
+// Assistance Preparation Pipeline
 // ---------------------------------------------------------------------------
 
-/** Submit a YouTube URL for import processing. Returns the new video_id. */
+/** Submit a YouTube URL for assistance preparation. Returns the new video_id. */
 export async function submitVideo(
   youtubeUrl: string
 ): Promise<{ video_id: string }> {
@@ -24,10 +24,10 @@ export async function submitVideo(
   return res.json();
 }
 
-/** Fetch the current processing status for a video. */
+/** Fetch the current assistance preparation status for a video. */
 export async function getProcessingStatus(
   videoId: string
-): Promise<ImportJob> {
+): Promise<AssistanceJob> {
   const res = await fetch(
     `${API_BASE_URL}/api/preprocessing/status/${videoId}`
   );
@@ -38,12 +38,12 @@ export async function getProcessingStatus(
   return res.json();
 }
 
-/** Build the full SSE endpoint URL for EventSource. */
+/** Build the full SSE endpoint URL for EventSource updates. */
 export function getSSEUrl(videoId: string): string {
   return `${API_BASE_URL}/api/preprocessing/events/${videoId}`;
 }
 
-/** Delete a video import job and its associated files. */
+/** Delete an assistance preparation job record. */
 export async function deleteVideo(videoId: string): Promise<void> {
   const res = await fetch(
     `${API_BASE_URL}/api/preprocessing/${videoId}`,
@@ -55,8 +55,8 @@ export async function deleteVideo(videoId: string): Promise<void> {
   }
 }
 
-/** List all import jobs (newest first). */
-export async function getJobs(): Promise<ImportJob[]> {
+/** List all assistance preparation jobs (newest first). */
+export async function getJobs(): Promise<AssistanceJob[]> {
   const res = await fetch(`${API_BASE_URL}/api/preprocessing/jobs`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -66,11 +66,11 @@ export async function getJobs(): Promise<ImportJob[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Existing stubs for future features (unchanged)
+// Existing stubs for future features (v2 updated)
 // ---------------------------------------------------------------------------
 
-export async function processVideo(youtubeUrl: string): Promise<Video> {
-  console.log("Processing YouTube URL:", youtubeUrl);
+export async function prepareAssistance(youtubeUrl: string): Promise<Video> {
+  console.log("Preparing assistance for YouTube URL:", youtubeUrl);
   throw new Error("Not implemented");
 }
 
@@ -84,22 +84,32 @@ export async function getVideo(videoId: string): Promise<Video> {
 }
 
 export async function startSession(videoId: string): Promise<Session> {
-  console.log("Starting session for video:", videoId);
+  console.log("Starting assisted playback session for video:", videoId);
   throw new Error("Not implemented");
 }
 
 export async function sendCorrection(sessionId: string, jointData: object): Promise<void> {
-  console.log("Sending joint pose data for session:", sessionId, jointData);
+  console.log("Sending joint pose data for session correction:", sessionId, jointData);
   throw new Error("Not implemented");
 }
 
-export async function askCoach(sessionId: string, question: string): Promise<string> {
-  console.log("Asking coach question in session:", sessionId, question);
+export async function askAssistant(sessionId: string, question: string): Promise<string> {
+  console.log("Asking assistant question in session:", sessionId, question);
   throw new Error("Not implemented");
+}
+
+export async function recordPlaybackEvent(
+  sessionId: string,
+  eventType: string,
+  timestampMs: number,
+  metadata?: object
+): Promise<void> {
+  console.log("Recording playback event:", { sessionId, eventType, timestampMs, metadata });
+  // In the future this makes a POST /api/session/{sessionId}/playback-event request
 }
 
 export async function endSession(sessionId: string): Promise<Session> {
-  console.log("Ending session:", sessionId);
+  console.log("Ending assisted playback session:", sessionId);
   throw new Error("Not implemented");
 }
 

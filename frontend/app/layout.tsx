@@ -15,8 +15,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "FitA11y - AI Fitness for Blind and Low Vision Users",
-  description: "An AI-assisted, audio-first fitness application helping blind and low vision users work out safely with real-time feedback and haptic guidance.",
+  title: "FitA11y - Assistive Playback Companion for BLV Users",
+  description: "An assistive companion for blind and low vision users that provides supplementary guidance (form correction, motivation, haptics) alongside original YouTube workouts.",
 };
 
 import { LayoutProvider } from "@/components/layout/LayoutContext";

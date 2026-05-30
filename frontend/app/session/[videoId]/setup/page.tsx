@@ -13,11 +13,11 @@ interface SetupPageProps {
 export default function SessionSetup({ params }: SetupPageProps) {
   const handleAskQuestion = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Send query to LLM AI Coach for vocal response about the exercises
+    // TODO: Send query to LLM Assistant for vocal response about the exercises
   };
 
   const handleStartWorkout = () => {
-    // TODO: Transition to live session tracking interface
+    // TODO: Transition to live assisted playback interface
   };
 
   const sleeveStatus = [
@@ -35,9 +35,9 @@ export default function SessionSetup({ params }: SetupPageProps) {
           <span className="text-xs uppercase font-extrabold text-yellow-400 tracking-widest block mb-1">
             Pre-Session Setup
           </span>
-          <h1 className="text-3xl font-extrabold text-white">Get Ready to Workout</h1>
+          <h1 className="text-3xl font-extrabold text-white">Get Ready: Assisted Playback</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Verify hardware connections and camera positioning before commencing.
+            Verify companion audio settings, camera position, and hardware before starting playback.
           </p>
         </div>
 
@@ -51,7 +51,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                   Camera Check
                 </h2>
                 <p className="text-xs text-slate-400 mb-4">
-                  Position your camera 5-8 feet away to capture your full body outline.
+                  Position your camera 5-8 feet away to capture your full body outline for form analysis.
                 </p>
               </div>
 
@@ -102,13 +102,13 @@ export default function SessionSetup({ params }: SetupPageProps) {
             </section>
           </div>
 
-          {/* Difficulty Selector */}
+          {/* Assistant Interruption & Tolerances Selector */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="difficulty-heading">
             <h2 id="difficulty-heading" className="text-lg font-bold text-white mb-2">
               How are you feeling today?
             </h2>
             <p className="text-xs text-slate-400 mb-4">
-              AI coach adjusts speech interruptions and haptic tolerances based on your state.
+              The assistant adjusts its interruption level and haptic tolerances based on your current state.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="radiogroup" aria-labelledby="difficulty-heading">
@@ -127,6 +127,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                     id={diff.id}
                     name="difficulty"
                     value={diff.id}
+                    defaultChecked={diff.id === "diff-norm"}
                     className="sr-only"
                   />
                   <span className="text-sm font-bold text-white mb-1">{diff.label}</span>
@@ -136,13 +137,47 @@ export default function SessionSetup({ params }: SetupPageProps) {
             </div>
           </section>
 
-          {/* AI pre-workout query */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="ask-heading">
-            <h2 id="ask-heading" className="text-lg font-bold text-white mb-1">
-              Ask AI Coach
+          {/* Audio Coexistence Settings */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="audio-coexistence-heading">
+            <h2 id="audio-coexistence-heading" className="text-lg font-bold text-white mb-2">
+              Audio Coexistence Preferences
             </h2>
             <p className="text-xs text-slate-400 mb-4">
-              Have questions about the moves? Ask the coach vocal assistance before starting.
+              Control how the assistant&apos;s voice coexists with the trainer&apos;s YouTube audio.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { id: "coexist-haptic", label: "Haptic Only", desc: "No speech interruptions. Tactile cues only." },
+                { id: "coexist-duck", label: "Duck & Speak", desc: "Lower YouTube volume when assistant speaks." },
+                { id: "coexist-pause", label: "Pause & Speak", desc: "Briefly pause YouTube video when assistant speaks." },
+              ].map((opt) => (
+                <label
+                  key={opt.id}
+                  htmlFor={opt.id}
+                  className="relative flex flex-col p-4 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 text-center"
+                >
+                  <input
+                    type="radio"
+                    id={opt.id}
+                    name="coexistence"
+                    value={opt.id}
+                    defaultChecked={opt.id === "coexist-duck"}
+                    className="sr-only"
+                  />
+                  <span className="text-sm font-bold text-white mb-1">{opt.label}</span>
+                  <span className="text-[10px] text-slate-500 leading-normal">{opt.desc}</span>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          {/* Assistant pre-workout Q&A */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="ask-heading">
+            <h2 id="ask-heading" className="text-lg font-bold text-white mb-1">
+              Ask Assistant
+            </h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Have questions about the moves? Ask the assistant for supplementary tips before starting.
             </p>
 
             <form onSubmit={handleAskQuestion} className="flex flex-col sm:flex-row gap-3">
@@ -163,7 +198,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
             </form>
           </section>
 
-          {/* Start Workout Button */}
+          {/* Start Assisted Playback Button */}
           <div className="pt-2">
             <Link
               href={`/session/${params.videoId}`}
@@ -171,7 +206,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
               className="w-full inline-flex items-center justify-center px-6 py-4 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-extrabold rounded-xl text-base transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10 text-center"
               id="start-workout-btn"
             >
-              Start Workout Session
+              Start Assisted Playback
             </Link>
           </div>
         </div>

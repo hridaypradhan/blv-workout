@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
 
 export default function Home() {
+  const router = useRouter();
+
   const handleQuickConnect = () => {
     // TODO: Quick haptic sleeve connection trigger
   };
 
   const handleQuickSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Submit search or YouTube URL for fast processing
+    const input = document.getElementById("quick-submit-input") as HTMLInputElement;
+    if (input && input.value) {
+      router.push(`/process?url=${encodeURIComponent(input.value)}`);
+    }
   };
 
   return (
@@ -45,7 +51,7 @@ export default function Home() {
           </h1>
           
           <p className="text-lg md:text-xl text-slate-300 font-medium mb-8 leading-relaxed">
-            AI-powered fitness for blind and low vision users. Work out confidently with real-time audio coaching, form corrections, and haptic feedback.
+            An assistive playback companion for blind and low vision users. Pair your favorite YouTube trainers with supplementary audio assistance, form correction cues, and spatial haptic feedback.
           </p>
 
           <div className="flex flex-wrap gap-4">
@@ -105,9 +111,9 @@ export default function Home() {
               />
             </svg>
           </div>
-          <h2 className="text-lg font-bold text-white mb-2">Audio-First AI Coaching</h2>
+          <h2 className="text-lg font-bold text-white mb-2">Assistive Audio Companion</h2>
           <p className="text-sm text-slate-400 leading-relaxed">
-            Real-time vocal guidance that calls out rep counts, timing guides, and subtle posture tips without requiring you to look at a display.
+            Brief, contextual voice notifications that call out pacing adaptations, form risks, and motivation without talking over the YouTube trainer.
           </p>
         </div>
 
@@ -151,13 +157,13 @@ export default function Home() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth="2"
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 00-2 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
               />
             </svg>
           </div>
           <h2 className="text-lg font-bold text-white mb-2">Smart Progress Tracking</h2>
           <p className="text-sm text-slate-400 leading-relaxed">
-            Maintains structured workout records, tracking progress trends, session durations, and accuracy levels for screen readers.
+            Maintains structured session records, tracking progress trends, session durations, and accuracy levels for screen readers.
           </p>
         </div>
       </section>
@@ -165,10 +171,10 @@ export default function Home() {
       {/* Quick Search/Actions Panel */}
       <section className="p-6 rounded-2xl bg-slate-900 border border-slate-800" aria-labelledby="quick-submit-heading">
         <h2 id="quick-submit-heading" className="text-xl font-bold text-white mb-3">
-          Process a New Workout Video
+          Prepare Assistance for a YouTube Workout
         </h2>
         <p className="text-sm text-slate-400 mb-4">
-          Submit any YouTube video link to scan, analyze movements, and create audio guides.
+          Submit any YouTube workout video link to fetch metadata, analyze movement windows, and generate an assistance sidecar manifest.
         </p>
 
         <form onSubmit={handleQuickSearchSubmit} className="flex flex-col sm:flex-row gap-3">
@@ -185,7 +191,7 @@ export default function Home() {
             className="px-6 py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
             id="quick-submit-btn"
           >
-            Process Video
+            Prepare Assistance
           </button>
         </form>
       </section>

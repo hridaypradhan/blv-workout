@@ -1,6 +1,6 @@
 # Pacing & Rhythm Backend Testing Guide (Windows/PowerShell Compatible)
 
-This guide describes how to run the FitA11y backend server and test all logic flows for Adaptive Video Pacing Control and Beat & Rhythm Pacing Coach using PowerShell-compatible commands.
+This guide describes how to run the FitA11y backend server and test all logic flows for Adaptive Video Pacing Control and Beat & Rhythm Pacing Assistant using PowerShell-compatible commands.
 
 > [!IMPORTANT]
 > **PowerShell Alias Warning**: By default, `curl` in PowerShell is an alias for `Invoke-WebRequest`, which does not support the standard Unix headers syntax and throws binding errors. 
@@ -109,12 +109,12 @@ Adaptive pacing monitors user rep pacing compared to the video guide and suggest
 User's rep durations closely match the expected 4 seconds.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/adaptive `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/adaptive `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Squat", "expected_rep_duration_seconds": 4.0, "rep_durations_seconds": [3.9, 4.0, 3.8], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/adaptive `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Squat\", \"expected_rep_duration_seconds\": 4.0, \"rep_durations_seconds\": [3.9, 4.0, 3.8], \"persona\": \"supportive\"}'
 ```
@@ -124,12 +124,12 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
 User is slightly behind pace (between 1% and 20% slower than expected).
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/adaptive `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/adaptive `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Squat", "expected_rep_duration_seconds": 4.0, "rep_durations_seconds": [4.5], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/adaptive `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Squat\", \"expected_rep_duration_seconds\": 4.0, \"rep_durations_seconds\": [4.5], \"persona\": \"supportive\"}'
 ```
@@ -139,42 +139,42 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
 User has sustained lag (ratios > 1.2 for at least 2 reps) and is between 21% and 40% behind.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/adaptive `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/adaptive `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Squat", "expected_rep_duration_seconds": 4.0, "recent_lag_ratios": [1.3, 1.3], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/adaptive `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Squat\", \"expected_rep_duration_seconds\": 4.0, \"recent_lag_ratios\": [1.3, 1.3], \"persona\": \"supportive\"}'
 ```
 **Expected Response:** Decision `"hold_cue"`. Action is `"pause"`, suggested speed is `0.0`, and the `sustained-vibe` haptic pattern is triggered on the sleeves.
 
-### 3.4 Scenario: Sustained Severe Pacing Lag (`rep_reduction`)
+### 3.4 Scenario: Sustained Severe Pacing Lag (`adaptation_recommendation`)
 User is more than 40% behind pace on a sustained basis. Target reps is reduced.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/adaptive `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/adaptive `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Squat", "expected_rep_duration_seconds": 4.0, "recent_lag_ratios": [1.5, 1.6], "target_reps": 10, "completed_reps": 3, "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/adaptive `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Squat\", \"expected_rep_duration_seconds\": 4.0, \"recent_lag_ratios\": [1.5, 1.6], \"target_reps\": 10, \"completed_reps\": 3, \"persona\": \"supportive\"}'
 ```
-**Expected Response:** Decision `"rep_reduction"`. Action `"slow"`, suggested speed `0.75`. `rep_adjustment` shows the target reduced from 10 to 8. Haptic pattern is `triple-pulse`.
+**Expected Response:** Decision `"adaptation_recommendation"`. Action `"slow"`, suggested speed `0.75`. `adaptation_recommendation` shows the tracking target adjusted from 10 to 8. Haptic pattern is `triple-pulse`.
 
 ### 3.5 Scenario: Sustained Lag with Increasing Form Errors (`modification_offer`)
 Sustained pacing lag accompanied by climbing form error counts.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/adaptive `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/adaptive `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Squat", "expected_rep_duration_seconds": 4.0, "recent_lag_ratios": [1.3, 1.3], "recent_form_error_counts": [1, 2], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/adaptive `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Squat\", \"expected_rep_duration_seconds\": 4.0, \"recent_lag_ratios\": [1.3, 1.3], \"recent_form_error_counts\": [1, 2], \"persona\": \"supportive\"}'
 ```
@@ -184,27 +184,27 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
 User catches up and returns below the lag threshold.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/adaptive `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/adaptive `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Squat", "expected_rep_duration_seconds": 4.0, "recent_lag_ratios": [1.0, 1.0], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/adaptive `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Squat\", \"expected_rep_duration_seconds\": 4.0, \"recent_lag_ratios\": [1.0, 1.0], \"persona\": \"supportive\"}'
 ```
-**Expected Response:** Decision `"recovery"`. Action is `"resume"`, suggested speed is `1.0`. Haptic is `success-spark`.
+**Expected Response:** Decision `"recovery"`. Action is `"play"`, suggested speed is `1.0`. Haptic is `success-spark`.
 
 ### 3.7 Scenario: User Command Override (`override_acknowledged`)
 User command `"keep_going"` bypasses the pacing intervention.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/adaptive `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/adaptive `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Squat", "expected_rep_duration_seconds": 4.0, "recent_lag_ratios": [1.3, 1.3], "user_command": "keep_going", "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/adaptive `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Squat\", \"expected_rep_duration_seconds\": 4.0, \"recent_lag_ratios\": [1.3, 1.3], \"user_command\": \"keep_going\", \"persona\": \"supportive\"}'
 ```
@@ -212,7 +212,7 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/adaptive `
 
 ---
 
-## 4. Rhythm Pacing Coach Endpoints
+## 4. Rhythm Pacing Assistant Endpoints
 
 Rhythm pacing calculates the drift ratio and irregularity of user movements relative to beat tracks.
 
@@ -220,12 +220,12 @@ Rhythm pacing calculates the drift ratio and irregularity of user movements rela
 User average durations perfectly match the expected 3.0s interval.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/rhythm `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/rhythm `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Pushup", "expected_rep_duration_seconds": 3.0, "rep_durations_seconds": [3.0, 3.1, 2.9], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/rhythm `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Pushup\", \"expected_rep_duration_seconds\": 3.0, \"rep_durations_seconds\": [3.0, 3.1, 2.9], \"persona\": \"supportive\"}'
 ```
@@ -235,12 +235,12 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
 User reps are on average slower than the 3.0s guide.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/rhythm `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/rhythm `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Pushup", "expected_rep_duration_seconds": 3.0, "rep_durations_seconds": [3.5, 3.6, 3.4], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/rhythm `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Pushup\", \"expected_rep_duration_seconds\": 3.0, \"rep_durations_seconds\": [3.5, 3.6, 3.4], \"persona\": \"supportive\"}'
 ```
@@ -250,12 +250,12 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
 User reps are consistently faster than the 3.0s pace.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/rhythm `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/rhythm `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Pushup", "expected_rep_duration_seconds": 3.0, "rep_durations_seconds": [2.5, 2.6, 2.4], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/rhythm `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Pushup\", \"expected_rep_duration_seconds\": 3.0, \"rep_durations_seconds\": [2.5, 2.6, 2.4], \"persona\": \"supportive\"}'
 ```
@@ -265,12 +265,12 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
 User pace fluctuates widely between repetitions.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/rhythm `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/rhythm `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Pushup", "expected_rep_duration_seconds": 3.0, "rep_durations_seconds": [2.0, 4.0, 2.2, 3.8], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/rhythm `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Pushup\", \"expected_rep_duration_seconds\": 3.0, \"rep_durations_seconds\": [2.0, 4.0, 2.2, 3.8], \"persona\": \"supportive\"}'
 ```
@@ -280,12 +280,12 @@ curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
 User has only completed 1 rep so far, preventing standard deviation calculations.
 ```powershell
 # PowerShell native
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/coach/pacing/rhythm `
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/assistant/pacing/rhythm `
   -ContentType "application/json" `
   -Body '{"session_id": "00000000-0000-0000-0000-000000000000", "exercise_id": "22222222-2222-2222-2222-222222222222", "exercise_name": "Pushup", "expected_rep_duration_seconds": 3.0, "rep_durations_seconds": [3.0], "persona": "supportive"}'
 
 # curl.exe
-curl.exe -X POST http://localhost:8000/api/coach/pacing/rhythm `
+curl.exe -X POST http://localhost:8000/api/assistant/pacing/rhythm `
   -H "Content-Type: application/json" `
   -d '{\"session_id\": \"00000000-0000-0000-0000-000000000000\", \"exercise_id\": \"22222222-2222-2222-2222-222222222222\", \"exercise_name\": \"Pushup\", \"expected_rep_duration_seconds\": 3.0, \"rep_durations_seconds\": [3.0], \"persona\": \"supportive\"}'
 ```

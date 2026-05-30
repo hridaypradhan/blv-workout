@@ -24,7 +24,7 @@ export default function Onboarding() {
             Setup FitA11y
           </h1>
           <p className="text-slate-400">
-            Follow these steps to tailor the audio coaching and pair your haptic feedback sleeve.
+            Follow these steps to tailor your assistive companion preferences and pair your haptic feedback sleeves.
           </p>
         </div>
 
@@ -36,7 +36,7 @@ export default function Onboarding() {
                 1
               </span>
               <h2 id="step1-heading" className="text-2xl font-bold text-white">
-                Configure Profile & Screen Reader
+                Configure Profile & Audio Coexistence
               </h2>
             </div>
 

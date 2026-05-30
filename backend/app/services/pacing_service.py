@@ -1,8 +1,14 @@
-"""Pacing service for FitA11y containing deterministic pacing algorithms."""
+"""Pacing service for FitA11y containing deterministic adaptive pacing algorithms.
+
+Provides supplementary pacing assistance alongside the embedded YouTube video.
+Playback actions map to YouTube IFrame commands (pause, play, set_speed).
+Rep adjustments are assistant tracking recommendations only — FitA11y never
+rewrites the trainer's workout.
+"""
 
 from typing import Optional, Any
 from app.models.schemas import (
-    CoachPersona,
+    AssistantPersona,
     SleeveSide,
     PlaybackInstruction,
     HapticInstruction,
@@ -13,83 +19,83 @@ from app.models.schemas import (
     RhythmPacingResponse
 )
 
-# Deterministic Coach Messages for Adaptive Pacing Decisions
+# Deterministic Assistant Messages for Adaptive Pacing Decisions
 ADAPTIVE_PACING_MESSAGES = {
     "none": {
-        CoachPersona.SUPPORTIVE: "Great pace! Keep it up.",
-        CoachPersona.DIRECT: "Good pace. Continue.",
-        CoachPersona.ENERGETIC: "Awesome speed! Keep crushing it!",
-        CoachPersona.CALM: "Nice and steady. Keep moving."
+        AssistantPersona.SUPPORTIVE: "Great pace! Keep it up.",
+        AssistantPersona.DIRECT: "Good pace. Continue.",
+        AssistantPersona.ENERGETIC: "Awesome speed! Keep crushing it!",
+        AssistantPersona.CALM: "Nice and steady. Keep moving."
     },
     "slow_prompt": {
-        CoachPersona.SUPPORTIVE: "Take your time, slow it down.",
-        CoachPersona.DIRECT: "Slow down your reps.",
-        CoachPersona.ENERGETIC: "Woah there, let's control the pace a bit!",
-        CoachPersona.CALM: "Breathe and ease into a slower tempo."
+        AssistantPersona.SUPPORTIVE: "Take your time, slow it down.",
+        AssistantPersona.DIRECT: "Slow down your reps.",
+        AssistantPersona.ENERGETIC: "Woah there, let's control the pace a bit!",
+        AssistantPersona.CALM: "Breathe and ease into a slower tempo."
     },
     "hold_cue": {
-        CoachPersona.SUPPORTIVE: "Let's pause here. Take a brief hold to catch up with the video.",
-        CoachPersona.DIRECT: "Hold pose. Wait for video.",
-        CoachPersona.ENERGETIC: "Hold it right there! Catch your breath!",
-        CoachPersona.CALM: "Find stillness for a moment. Let the video catch up."
+        AssistantPersona.SUPPORTIVE: "Let's pause here. Take a brief hold to catch up with the video.",
+        AssistantPersona.DIRECT: "Hold pose. Wait for video.",
+        AssistantPersona.ENERGETIC: "Hold it right there! Catch your breath!",
+        AssistantPersona.CALM: "Find stillness for a moment. Let the video catch up."
     },
-    "rep_reduction": {
-        CoachPersona.SUPPORTIVE: "Let's reduce the target reps slightly so you can focus on quality over speed.",
-        CoachPersona.DIRECT: "Target reps reduced.",
-        CoachPersona.ENERGETIC: "Let's adjust the target and make every single rep count!",
-        CoachPersona.CALM: "Reducing the rep count to maintain a peaceful, steady flow."
+    "adaptation_recommendation": {
+        AssistantPersona.SUPPORTIVE: "I've adjusted your tracking target so you can focus on quality over speed.",
+        AssistantPersona.DIRECT: "Tracking target adjusted.",
+        AssistantPersona.ENERGETIC: "Let's adjust the target and make every single rep count!",
+        AssistantPersona.CALM: "Adjusting the tracking target to maintain a peaceful, steady flow."
     },
     "modification_offer": {
-        CoachPersona.SUPPORTIVE: "If this is feeling tough, we can try a modified version to keep you safe.",
-        CoachPersona.DIRECT: "Form is slipping. Modify exercise.",
-        CoachPersona.ENERGETIC: "Let's switch it up to a modified move and keep the energy high!",
-        CoachPersona.CALM: "Let's transition to a gentler modification to protect your alignment."
+        AssistantPersona.SUPPORTIVE: "If this is feeling tough, the trainer may show a modified version you can follow.",
+        AssistantPersona.DIRECT: "Form is slipping. Consider a modification.",
+        AssistantPersona.ENERGETIC: "Let's switch it up to a modified move and keep the energy high!",
+        AssistantPersona.CALM: "Consider transitioning to a gentler modification to protect your alignment."
     },
     "recovery": {
-        CoachPersona.SUPPORTIVE: "Excellent job catching up. Resuming normal speed.",
-        CoachPersona.DIRECT: "Resuming normal speed.",
-        CoachPersona.ENERGETIC: "You're back on track! Let's pick up the speed!",
-        CoachPersona.CALM: "Well recovered. Gently returning to standard tempo."
+        AssistantPersona.SUPPORTIVE: "Excellent job catching up. Resuming normal speed.",
+        AssistantPersona.DIRECT: "Resuming normal speed.",
+        AssistantPersona.ENERGETIC: "You're back on track! Let's pick up the speed!",
+        AssistantPersona.CALM: "Well recovered. Gently returning to standard tempo."
     },
     "override_acknowledged": {
-        CoachPersona.SUPPORTIVE: "Alright, keep going! I'll stay on your pace.",
-        CoachPersona.DIRECT: "Command received. Continuing.",
-        CoachPersona.ENERGETIC: "Got it! Keep pushing, let's go!",
-        CoachPersona.CALM: "Acknowledged. Continue at your own comfort."
+        AssistantPersona.SUPPORTIVE: "Alright, keep going! I'll stay on your pace.",
+        AssistantPersona.DIRECT: "Command received. Continuing.",
+        AssistantPersona.ENERGETIC: "Got it! Keep pushing, let's go!",
+        AssistantPersona.CALM: "Acknowledged. Continue at your own comfort."
     }
 }
 
-# Deterministic Coach Messages for Rhythm Pacing Decisions
+# Deterministic Assistant Messages for Rhythm Pacing Decisions
 RHYTHM_PACING_MESSAGES = {
     "on_rhythm": {
-        CoachPersona.SUPPORTIVE: "Perfect rhythm! You're matching the beat beautifully.",
-        CoachPersona.DIRECT: "On rhythm.",
-        CoachPersona.ENERGETIC: "Boom! Locked in on the beat! Let's go!",
-        CoachPersona.CALM: "Harmonious rhythm. Keep flowing with the tempo."
+        AssistantPersona.SUPPORTIVE: "Perfect rhythm! You're matching the beat beautifully.",
+        AssistantPersona.DIRECT: "On rhythm.",
+        AssistantPersona.ENERGETIC: "Boom! Locked in on the beat! Let's go!",
+        AssistantPersona.CALM: "Harmonious rhythm. Keep flowing with the tempo."
     },
     "too_slow": {
-        CoachPersona.SUPPORTIVE: "You're falling slightly behind the beat. Let's speed up just a bit.",
-        CoachPersona.DIRECT: "Too slow. Match the beat.",
-        CoachPersona.ENERGETIC: "Pick it up! Let's match that tempo!",
-        CoachPersona.CALM: "Gently increase your pace to realign with the rhythm."
+        AssistantPersona.SUPPORTIVE: "You're falling slightly behind the beat. Let's speed up just a bit.",
+        AssistantPersona.DIRECT: "Too slow. Match the beat.",
+        AssistantPersona.ENERGETIC: "Pick it up! Let's match that tempo!",
+        AssistantPersona.CALM: "Gently increase your pace to realign with the rhythm."
     },
     "too_fast": {
-        CoachPersona.SUPPORTIVE: "You're ahead of the beat. Let's slow down and feel the rhythm.",
-        CoachPersona.DIRECT: "Too fast. Slow down.",
-        CoachPersona.ENERGETIC: "Hold on, you're rushing! Feel the beat!",
-        CoachPersona.CALM: "Slow down. Align your movements with the gentle cadence."
+        AssistantPersona.SUPPORTIVE: "You're ahead of the beat. Let's slow down and feel the rhythm.",
+        AssistantPersona.DIRECT: "Too fast. Slow down.",
+        AssistantPersona.ENERGETIC: "Hold on, you're rushing! Feel the beat!",
+        AssistantPersona.CALM: "Slow down. Align your movements with the gentle cadence."
     },
     "irregular": {
-        CoachPersona.SUPPORTIVE: "Your rhythm is a bit uneven. Try to find a steady, consistent bounce.",
-        CoachPersona.DIRECT: "Rhythm is irregular. Stabilize pace.",
-        CoachPersona.ENERGETIC: "Let's find the groove again! Focus on a steady bounce!",
-        CoachPersona.CALM: "Try to smooth out your pacing for a more consistent flow."
+        AssistantPersona.SUPPORTIVE: "Your rhythm is a bit uneven. Try to find a steady, consistent bounce.",
+        AssistantPersona.DIRECT: "Rhythm is irregular. Stabilize pace.",
+        AssistantPersona.ENERGETIC: "Let's find the groove again! Focus on a steady bounce!",
+        AssistantPersona.CALM: "Try to smooth out your pacing for a more consistent flow."
     },
     "insufficient_data": {
-        CoachPersona.SUPPORTIVE: "Keep moving! I'll analyze your rhythm after a few more reps.",
-        CoachPersona.DIRECT: "Insufficient data for rhythm analysis.",
-        CoachPersona.ENERGETIC: "Get a few more reps in so we can find your groove!",
-        CoachPersona.CALM: "A few more repetitions will help me understand your tempo."
+        AssistantPersona.SUPPORTIVE: "Keep moving! I'll analyze your rhythm after a few more reps.",
+        AssistantPersona.DIRECT: "Insufficient data for rhythm analysis.",
+        AssistantPersona.ENERGETIC: "Get a few more reps in so we can find your groove!",
+        AssistantPersona.CALM: "A few more repetitions will help me understand your tempo."
     }
 }
 
@@ -140,15 +146,19 @@ def detect_form_errors_increasing(error_counts: list[int]) -> bool:
     return error_counts[-1] > error_counts[-2]
 
 
-def get_deterministic_coach_message(decision: str, persona: CoachPersona) -> str:
-    """Return a persona-aligned coach feedback message for a given pacing decision."""
+def get_deterministic_assistant_message(decision: str, persona: AssistantPersona) -> str:
+    """Return a persona-aligned assistant message for a given pacing decision."""
     # Handle Adaptive Pacing
     if decision in ADAPTIVE_PACING_MESSAGES:
-        return ADAPTIVE_PACING_MESSAGES[decision].get(persona, ADAPTIVE_PACING_MESSAGES[decision][CoachPersona.SUPPORTIVE])
+        return ADAPTIVE_PACING_MESSAGES[decision].get(persona, ADAPTIVE_PACING_MESSAGES[decision][AssistantPersona.SUPPORTIVE])
     # Handle Rhythm Pacing
     if decision in RHYTHM_PACING_MESSAGES:
-        return RHYTHM_PACING_MESSAGES[decision].get(persona, RHYTHM_PACING_MESSAGES[decision][CoachPersona.SUPPORTIVE])
+        return RHYTHM_PACING_MESSAGES[decision].get(persona, RHYTHM_PACING_MESSAGES[decision][AssistantPersona.SUPPORTIVE])
     return "Keep up the good work!"
+
+
+# Backward-compat alias
+get_deterministic_coach_message = get_deterministic_assistant_message
 
 
 def choose_adaptive_intervention(
@@ -161,8 +171,12 @@ def choose_adaptive_intervention(
     target_reps: int,
     user_command: Optional[str]
 ) -> tuple[str, str]:
-    """
-    Decide the appropriate pacing intervention.
+    """Decide the appropriate playback pacing intervention.
+
+    Playback actions map to YouTube IFrame commands. Rep adjustments
+    are tracking recommendations only — the original video is never
+    rewritten.
+
     Returns: (decision_string, reason_string)
     """
     if user_command == "keep_going":
@@ -173,15 +187,15 @@ def choose_adaptive_intervention(
 
     if sustained_lag:
         if form_errors_increasing:
-            return "modification_offer", "Sustained pacing lag coupled with increasing form errors suggests exercise modification is needed."
-        
+            return "modification_offer", "Sustained pacing lag coupled with increasing form errors suggests a modification may help."
+
         # High lag: > 40% behind
         if latest_lag_ratio > 1.4 or rolling_avg_lag > 1.4:
-            # If target reps is set, check if we can reduce reps
+            # If target reps is set, recommend adjusting the tracking target
             if target_reps and completed_reps < target_reps:
-                return "rep_reduction", "Severe sustained lag detected. Reducing target reps to focus on form quality."
+                return "adaptation_recommendation", "Severe sustained lag detected. Adjusting assistant tracking target to focus on form quality."
             else:
-                return "hold_cue", "Severe sustained lag detected. Instructing user to hold until caught up."
+                return "hold_cue", "Severe sustained lag detected. Suggesting user hold until caught up."
 
         # Medium lag: 21-40% behind
         return "hold_cue", "Sustained pacing lag between 21% and 40% behind the expected duration."
@@ -190,7 +204,7 @@ def choose_adaptive_intervention(
     if latest_lag_ratio > 1.0:
         return "slow_prompt", "User is slightly behind the expected repetition pace."
 
-    return "none", "User is maintaining pace with the video guide."
+    return "none", "User is maintaining pace with the video."
 
 
 def build_adaptive_response(
@@ -206,9 +220,15 @@ def build_adaptive_response(
     primary_sleeves: list[SleeveSide],
     current_playback_speed: float,
     user_command: Optional[str],
-    persona: CoachPersona
+    persona: AssistantPersona
 ) -> dict:
-    """Build the final AdaptivePacingResponse dictionary."""
+    """Build the final AdaptivePacingResponse dictionary.
+
+    Playback instructions map to YouTube IFrame commands:
+    - set_speed → YouTube player.setPlaybackRate()
+    - pause → YouTube player.pauseVideo()
+    - play → YouTube player.playVideo()
+    """
     
     # Resolve ratios
     if recent_lag_ratios:
@@ -235,29 +255,29 @@ def build_adaptive_response(
         user_command=user_command
     )
 
-    coach_message = get_deterministic_coach_message(decision, persona)
+    assistant_message = get_deterministic_assistant_message(decision, persona)
 
-    # Calculate PlaybackInstruction
+    # Calculate PlaybackInstruction (YouTube IFrame commands)
     playback_action = "none"
     suggested_speed = current_playback_speed
 
     if decision == "slow_prompt":
-        playback_action = "slow"
+        playback_action = "set_speed"
         suggested_speed = 0.75
     elif decision == "hold_cue":
         playback_action = "pause"
         suggested_speed = 0.0
-    elif decision == "rep_reduction":
-        playback_action = "slow"
+    elif decision == "adaptation_recommendation":
+        playback_action = "set_speed"
         suggested_speed = 0.75
     elif decision == "modification_offer":
-        playback_action = "slow"
+        playback_action = "set_speed"
         suggested_speed = 0.75
     elif decision == "recovery":
-        playback_action = "resume"
+        playback_action = "play"
         suggested_speed = 1.0
     elif decision == "override_acknowledged":
-        playback_action = "resume"
+        playback_action = "play"
         suggested_speed = 1.0
 
     # Calculate HapticInstruction
@@ -265,14 +285,14 @@ def build_adaptive_response(
     haptic_pattern = None
     haptic_intensity = 0.0
 
-    if decision in ["slow_prompt", "hold_cue", "rep_reduction", "modification_offer"]:
+    if decision in ["slow_prompt", "hold_cue", "adaptation_recommendation", "modification_offer"]:
         haptic_enabled = True
         haptic_intensity = 0.8
         if decision == "slow_prompt":
             haptic_pattern = "double-pulse"
         elif decision == "hold_cue":
             haptic_pattern = "sustained-vibe"
-        elif decision == "rep_reduction":
+        elif decision == "adaptation_recommendation":
             haptic_pattern = "triple-pulse"
         elif decision == "modification_offer":
             haptic_pattern = "long-pulse"
@@ -281,21 +301,21 @@ def build_adaptive_response(
         haptic_intensity = 0.5
         haptic_pattern = "success-spark"
 
-    # Calculate RepAdjustment
+    # Calculate RepAdjustment (tracking recommendation only)
     rep_adjustment = None
-    if decision == "rep_reduction" and target_reps:
-        # Reduce target reps by 2, but not below completed_reps
+    if decision == "adaptation_recommendation" and target_reps:
+        # Recommend adjusting the tracking target by 2, but not below completed_reps
         adjusted_target = max(completed_reps, target_reps - 2)
         rep_adjustment = {
             "original_target": target_reps,
-            "adjusted_target": adjusted_target,
-            "reason": "Target reduced to keep user from over-exerting during sustained lag."
+            "assistant_tracking_target": adjusted_target,
+            "reason": "Tracking target adjusted to help focus on form quality during sustained lag."
         }
 
     return {
         "feature": "adaptive_pacing",
         "decision": decision,
-        "coach_message": coach_message,
+        "assistant_message": assistant_message,
         "playback": {
             "action": playback_action,
             "suggested_speed": suggested_speed
@@ -318,7 +338,7 @@ def build_adaptive_response(
     }
 
 
-# F3.6 — Beat & Rhythm Pacing Coach Logic
+# F3.6 — Beat & Rhythm Pacing Assistant Logic
 
 def calculate_expected_rep_duration(
     beat_timestamps: Optional[list[float]],
@@ -396,7 +416,7 @@ def build_rhythm_response(
     expected_rep_duration: Optional[float],
     rep_timestamps: Optional[list[float]],
     rep_durations: Optional[list[float]],
-    persona: CoachPersona
+    persona: AssistantPersona
 ) -> dict:
     """Build the final RhythmPacingResponse dictionary."""
     
@@ -416,11 +436,11 @@ def build_rhythm_response(
         # Insufficient expected data
         decision = "insufficient_data"
         reason = "Could not determine the target rep duration from beat or exercise configuration."
-        coach_message = get_deterministic_coach_message(decision, persona)
+        assistant_message = get_deterministic_assistant_message(decision, persona)
         return {
             "feature": "rhythm_pacing",
             "decision": decision,
-            "coach_message": coach_message,
+            "assistant_message": assistant_message,
             "rhythm": {
                 "expected_rep_duration_seconds": 0.0,
                 "user_average_rep_duration_seconds": sum(user_durs)/len(user_durs) if user_durs else 0.0,
@@ -435,11 +455,11 @@ def build_rhythm_response(
     if len(user_durs) < 2:
         decision = "insufficient_data"
         reason = "At least 2 user repetitions are required to establish a rhythm pattern."
-        coach_message = get_deterministic_coach_message(decision, persona)
+        assistant_message = get_deterministic_assistant_message(decision, persona)
         return {
             "feature": "rhythm_pacing",
             "decision": decision,
-            "coach_message": coach_message,
+            "assistant_message": assistant_message,
             "rhythm": {
                 "expected_rep_duration_seconds": exp_duration,
                 "user_average_rep_duration_seconds": user_durs[0] if user_durs else 0.0,
@@ -455,7 +475,7 @@ def build_rhythm_response(
     irregularity = drift_metrics["irregularity_score"]
 
     decision = choose_rhythm_nudge(drift_ratio, irregularity)
-    coach_message = get_deterministic_coach_message(decision, persona)
+    assistant_message = get_deterministic_assistant_message(decision, persona)
 
     reason_map = {
         "on_rhythm": "User pacing is well aligned with the video tempo.",
@@ -468,7 +488,7 @@ def build_rhythm_response(
     return {
         "feature": "rhythm_pacing",
         "decision": decision,
-        "coach_message": coach_message,
+        "assistant_message": assistant_message,
         "rhythm": {
             "expected_rep_duration_seconds": exp_duration,
             "user_average_rep_duration_seconds": sum(user_durs) / len(user_durs),

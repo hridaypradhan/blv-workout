@@ -1,30 +1,33 @@
 # FitA11y
 
-FitA11y is an AI-powered fitness accessibility application designed specifically for **Blind and Low Vision (BLV)** users. It enables users to exercise confidently by providing real-time audio-first coaching, posture corrections, pacing feedback, and spatial haptic guidance.
+FitA11y is an **assistive playback companion** application designed specifically for **Blind and Low Vision (BLV)** users. Rather than replacing the trainer or hosting standalone AI-led workouts, FitA11y operates alongside original YouTube fitness videos. It provides supplementary, non-intrusive voice cues (for form correction and pacing) and spatial haptic feedback, keeping the YouTube creator as the trainer of record.
 
 ---
 
 ## Key Features
 
-1. **Audio-First AI Coaching**
-   Real-time vocal instructions, repetition counts, pacing feedback, and corrective posture cues.
-2. **Haptic Spatial Feedback**
-   Support for Bluetooth-enabled haptic sleeves to guide users through tactile vibration pulses (speeding up/slowing down, extension limits, posture correction).
-3. **Smart Progress Tracking**
-   Maintains structured, screen-reader-accessible workout logs, session duration trends, and form accuracy history.
-4. **YouTube Workout Preprocessing**
-   Processes any workout video from YouTube, extracts exercises using AI, generates posture benchmarks, and builds custom audio/haptic manifests.
-5. **Adaptive Pacing & Rhythmic Tempo Engine**
-   Tracks repetition timings (lag ratios, drift, irregularity scores) using MediaPipe to dynamically generate tailored speed adjustments and vocal pacing cues.
+1. **Creator-First Policy & YouTube Playback**
+   The user watches the original video via an embedded YouTube IFrame player. FitA11y never downloads, hosts, or distributes the video for playback, preserving creator monetization and ownership.
+2. **Assistance Sidecar Manifest**
+   A JSON sidecar generated during preprocessing that maps exercise anchors, speaking opportunities, expected movement windows, and haptic cues to the original video's timeline.
+3. **Audio Coexistence & Interruption Levels**
+   Intelligent speech ducking and interruption rules (Silent, Haptic Only, Brief Speech, Full Speech, Pause Before Speaking) ensuring the assistant never talks over the trainer unless preferred.
+4. **Haptic & Spatial Feedback**
+   Sends tactile vibration cues to Bluetooth haptic sleeves (for pacing adjustments, joint extension limits, or movement corrections) to augment voice guidance.
+5. **Tracked User Performance**
+   Maintains structured, screen-reader-accessible session records, tracking reps, form logs, and duration trends separately from the trainer's workout benchmark.
 6. **Interactive API Lab Playground**
-   An internal Postman-like interface to inspect, build, and run API requests directly in the browser with full OpenAPI spec auto-syncing.
+   An internal playground to inspect, build, and run API requests directly in the browser with full OpenAPI spec auto-syncing.
 
 ---
 
 ## Tech Stack
 
-- **Backend:** FastAPI (Python), MediaPipe (Pose/Motion Analysis), SQL Alchemy / PostgreSQL, Google Generative AI (Gemini), Google Cloud Text-to-Speech, `yt-dlp` (Video Fetching), `librosa` (Audio Analysis).
+- **Backend (Prototype Level):** FastAPI (Python), MediaPipe (Pose/Motion Analysis), SQL Alchemy / PostgreSQL, Google Generative AI (Gemini), Google Cloud Text-to-Speech, `yt-dlp` (for transient audio/metadata analysis only; never stored for playback), `librosa` (Rhythm Analysis).
 - **Frontend:** Next.js (React), TypeScript, Tailwind CSS.
+
+> [!NOTE]
+> **Prototype Maturity Status**: The backend preprocessing and pose analysis pipelines are current prototype stubs. MediaPipe and Gemini integration functions simulate manifest anchoring and analysis, returning deterministic mock sidecar manifests and cue lists.
 
 ---
 

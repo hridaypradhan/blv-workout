@@ -1,9 +1,7 @@
-"""In-memory job store for the F1.1 import pipeline prototype."""
+"""In-memory job store for the assistance preparation pipeline prototype."""
 
 from __future__ import annotations
 
-import os
-import shutil
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -15,15 +13,21 @@ from app.models.schemas import ProcessingStage
 
 @dataclass
 class JobRecord:
-    """Represents a single video import job."""
+    """Represents a single assistance preparation job.
+
+    Each job tracks the preparation of a sidecar manifest for a YouTube
+    video. No local video files are stored — the user watches the
+    original embedded YouTube video directly.
+    """
 
     video_id: str
     youtube_url: str
     stage: ProcessingStage = ProcessingStage.SUBMITTED
     error: Optional[str] = None
-    video_path: Optional[str] = None
-    audio_path: Optional[str] = None
+    youtube_id: Optional[str] = None
     title: Optional[str] = None
+    channel_name: Optional[str] = None
+    thumbnail_url: Optional[str] = None
     duration: Optional[float] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -34,16 +38,17 @@ class JobRecord:
             "youtube_url": self.youtube_url,
             "stage": self.stage.value,
             "error": self.error,
-            "video_path": self.video_path,
-            "audio_path": self.audio_path,
+            "youtube_id": self.youtube_id,
             "title": self.title,
+            "channel_name": self.channel_name,
+            "thumbnail_url": self.thumbnail_url,
             "duration": self.duration,
             "created_at": self.created_at,
         }
 
 
 class JobStore:
-    """Thread-safe in-memory store for import job records."""
+    """Thread-safe in-memory store for assistance preparation job records."""
 
     def __init__(self) -> None:
         self._jobs: dict[str, JobRecord] = {}
@@ -68,9 +73,10 @@ class JobStore:
         stage: ProcessingStage,
         *,
         error: Optional[str] = None,
-        video_path: Optional[str] = None,
-        audio_path: Optional[str] = None,
+        youtube_id: Optional[str] = None,
         title: Optional[str] = None,
+        channel_name: Optional[str] = None,
+        thumbnail_url: Optional[str] = None,
         duration: Optional[float] = None,
     ) -> None:
         """Update a job's stage and optional metadata fields."""
@@ -81,29 +87,22 @@ class JobStore:
             job.stage = stage
             if error is not None:
                 job.error = error
-            if video_path is not None:
-                job.video_path = video_path
-            if audio_path is not None:
-                job.audio_path = audio_path
+            if youtube_id is not None:
+                job.youtube_id = youtube_id
             if title is not None:
                 job.title = title
+            if channel_name is not None:
+                job.channel_name = channel_name
+            if thumbnail_url is not None:
+                job.thumbnail_url = thumbnail_url
             if duration is not None:
                 job.duration = duration
 
     def delete_job(self, video_id: str) -> bool:
-        """Remove a job and delete its associated files. Returns True if found."""
+        """Remove a job record. Returns True if found and deleted."""
         with self._lock:
             job = self._jobs.pop(video_id, None)
-        if job is None:
-            return False
-        # Clean up files
-        for path in (job.video_path, job.audio_path):
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-        return True
+        return job is not None
 
     def list_jobs(self) -> list[JobRecord]:
         """Return all jobs, newest first."""

@@ -1,9 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import PageWrapper from "@/components/layout/PageWrapper";
 
 export default function Settings() {
+  const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
+
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     // TODO: Persist configuration parameters to local storage / API backend
@@ -20,25 +22,26 @@ export default function Settings() {
         <div className="mb-8">
           <h1 className="text-3xl font-extrabold text-white">Accessibility & Preferences</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Customize voice parameters, haptic feedback density, and coach personalities.
+            Customize assistant voices, audio coexistence, and supplementary cue frequencies.
           </p>
         </div>
 
         <form onSubmit={handleSaveSettings} className="space-y-8">
-          {/* Section 1: Coach Persona */}
+          {/* Section 1: Assistant Persona */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="persona-heading">
             <h2 id="persona-heading" className="text-xl font-bold text-white mb-2">
-              Coach Persona
+              Assistant Persona
             </h2>
             <p className="text-xs text-slate-400 mb-6">
-              Choose the tone of voice guidance and encouragement during exercise.
+              Choose the vocal style of FitA11y&apos;s assistant. This does not affect the creator&apos;s YouTube trainer audio.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4" role="radiogroup" aria-labelledby="persona-heading">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" role="radiogroup" aria-labelledby="persona-heading">
               {[
-                { id: "p-hype", label: "Hype", desc: "High energy, enthusiastic, pushes thresholds." },
-                { id: "p-tech", label: "Technical", desc: "Detailed corrections, precise angles, calm cues." },
-                { id: "p-support", label: "Supportive", desc: "Encouraging, gentle pacing, focuses on comfort." },
+                { id: "p-supportive", label: "Supportive", desc: "Encouraging, reassuring, focuses on steady progress." },
+                { id: "p-direct", label: "Direct", desc: "Concise corrections, anatomical landmarks, clear verbal cues." },
+                { id: "p-energetic", label: "Energetic", desc: "High energy, enthusiastic, pushes pace targets." },
+                { id: "p-calm", label: "Calm", desc: "Gentle tones, quiet cues, low-stimulation pacing." },
               ].map((p) => (
                 <label
                   key={p.id}
@@ -49,8 +52,9 @@ export default function Settings() {
                     <input
                       type="radio"
                       id={p.id}
-                      name="coach-persona"
+                      name="assistant-persona"
                       value={p.id}
+                      defaultChecked={p.id === "p-supportive"}
                       className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
                     />
                     <span className="text-sm font-bold text-white">{p.label}</span>
@@ -61,10 +65,10 @@ export default function Settings() {
             </div>
           </section>
 
-          {/* Section 2: Voice Settings */}
+          {/* Section 2: Voice & Coexistence Settings */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="voice-heading">
             <h2 id="voice-heading" className="text-xl font-bold text-white mb-6">
-              Voice Settings
+              Voice & Coexistence
             </h2>
 
             <div className="space-y-6">
@@ -125,64 +129,117 @@ export default function Settings() {
                 <input
                   type="checkbox"
                   id="spatial-audio-toggle"
+                  defaultChecked
+                  className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
+                />
+              </div>
+
+              {/* Pause Before Speaking Toggle */}
+              <div className="flex items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+                <div className="flex flex-col gap-0.5">
+                  <label htmlFor="pause-before-speaking" className="text-sm font-bold text-slate-200 cursor-pointer">
+                    Pause Before Speaking
+                  </label>
+                  <span className="text-xs text-slate-400">Briefly pauses the YouTube video when the assistant speaks a correction.</span>
+                </div>
+                <input
+                  type="checkbox"
+                  id="pause-before-speaking"
                   className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
                 />
               </div>
             </div>
           </section>
 
-          {/* Section 3: Feedback Frequency */}
+          {/* Section 3: Interruption Level & Correction Frequency */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="frequency-heading">
             <h2 id="frequency-heading" className="text-xl font-bold text-white mb-2">
-              Feedback Frequency
+              Correction Frequency & Interruption Level
             </h2>
             <p className="text-xs text-slate-400 mb-6">
-              Control how frequently the AI interrupts you with haptic ticks or speech updates.
+              Configure how the assistant coexists with or interrupts the original trainer&apos;s audio.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4" role="radiogroup" aria-labelledby="frequency-heading">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {[
-                { id: "f-high", label: "High Frequency", desc: "Ticks every rep, speaks posture tips continuously." },
-                { id: "f-med", label: "Medium Frequency", desc: "Default. Speaks only on error corrections." },
-                { id: "f-low", label: "Low Frequency", desc: "Alerts only for severe safety posture failures." },
-              ].map((freq) => (
+                { id: "int-silent", value: "silent", label: "Silent", desc: "No voice feedback. Playback is entirely uninterrupted." },
+                { id: "int-haptic", value: "haptic_only", label: "Haptic Only", desc: "Vibration cues on sleeves. Speech is fully silenced." },
+                { id: "int-brief", value: "brief_speech", label: "Brief Speech", desc: "Short correction words only during clear speech gaps." },
+                { id: "int-full", value: "full_speech", label: "Full Speech", desc: "Ducks YouTube audio to deliver complete form guidance." },
+              ].map((lvl) => (
                 <label
-                  key={freq.id}
-                  htmlFor={freq.id}
-                  className="relative flex flex-col p-5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-2xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400"
+                  key={lvl.id}
+                  htmlFor={lvl.id}
+                  className="relative flex flex-col p-4 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400"
                 >
                   <div className="flex items-center gap-3">
                     <input
                       type="radio"
-                      id={freq.id}
-                      name="feedback-frequency"
-                      value={freq.id}
-                      className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
+                      id={lvl.id}
+                      name="interruption-level"
+                      value={lvl.value}
+                      checked={interruptionLevel === lvl.value}
+                      onChange={(e) => setInterruptionLevel(e.target.value)}
+                      className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400"
                     />
-                    <span className="text-sm font-bold text-white">{freq.label}</span>
+                    <span className="text-sm font-bold text-white">{lvl.label}</span>
                   </div>
-                  <span className="text-xs text-slate-400 mt-2">{freq.desc}</span>
+                  <span className="text-xs text-slate-400 mt-1.5">{lvl.desc}</span>
                 </label>
               ))}
             </div>
-          </section>
 
-          {/* Section 4: Description Detail */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="detail-heading">
-            <div className="flex items-center justify-between gap-4">
+            {/* Haptic-First Mode Toggle */}
+            <div className="flex items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
               <div className="flex flex-col gap-0.5">
-                <h2 id="detail-heading" className="text-xl font-bold text-white">
-                  Description Detail
-                </h2>
-                <span className="text-xs text-slate-400">
-                  Switch between short summaries and full verbal breakdowns of movement errors.
-                </span>
+                <label htmlFor="haptic-first-toggle" className="text-sm font-bold text-slate-200 cursor-pointer">
+                  Haptic-First Mode
+                </label>
+                <span className="text-xs text-slate-400">Deliver all posture adjustments via haptic sleeve ticks first, only speaking if you don&apos;t adjust.</span>
               </div>
               <input
                 type="checkbox"
-                id="desc-detail-toggle"
+                id="haptic-first-toggle"
+                defaultChecked
                 className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
               />
+            </div>
+          </section>
+
+          {/* Section 4: Assistant Verbosity Level */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="verbosity-heading">
+            <h2 id="verbosity-heading" className="text-xl font-bold text-white mb-2">
+              Assistant Verbosity
+            </h2>
+            <p className="text-xs text-slate-400 mb-6">
+              Set how descriptive or brief the vocal cues are when spoken.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4" role="radiogroup" aria-labelledby="verbosity-heading">
+              {[
+                { id: "v-minimal", label: "Minimal", desc: "Short keywords: e.g., 'lower hip' or 'slow down'." },
+                { id: "v-moderate", label: "Moderate", desc: "Default cue phrasing: e.g., 'Sink your hips lower' or 'Decrease your pacing speed'." },
+                { id: "v-detailed", label: "Detailed", desc: "Full corrections referencing joints, risks, and movement suggestions." },
+              ].map((verb) => (
+                <label
+                  key={verb.id}
+                  htmlFor={verb.id}
+                  className="relative flex flex-col p-4 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400"
+                >
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id={verb.id}
+                      name="assistant-verbosity"
+                      value={verb.id}
+                      defaultChecked={verb.id === "v-moderate"}
+                      className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400"
+                    />
+                    <span className="text-sm font-bold text-white">{verb.label}</span>
+                  </div>
+                  <span className="text-xs text-slate-400 mt-2">{verb.desc}</span>
+                </label>
+              ))}
             </div>
           </section>
 
@@ -190,7 +247,7 @@ export default function Settings() {
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full px-6 py-4 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-base transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
+              className="w-full px-6 py-4 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-base transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10"
               id="save-settings-btn"
             >
               Save Configuration Settings

@@ -1,4 +1,15 @@
-"""MediaPipe pose analysis service stubs for FitA11y."""
+"""MediaPipe pose analysis service for FitA11y.
+
+Provides two categories of pose analysis:
+
+1. **Sidecar preparation** (offline): Extracts expected movement windows
+   and rep thresholds from transient analysis data for the sidecar manifest.
+   This does NOT generate a replacement workout.
+
+2. **Live session** (runtime): Calculates real-time joint angles, detects
+   reps, and identifies form errors from the user's camera feed to provide
+   supplementary form correction alongside the YouTube trainer's instruction.
+"""
 
 from typing import Any
 
@@ -6,17 +17,30 @@ from app.models.schemas import FormError
 
 
 def extract_joint_angles(video_segment_path: str) -> dict[str, list[float]]:
-    """Extract joint angle time series from a workout video segment."""
+    """Extract joint angle time series for expected movement windows in the sidecar manifest.
+
+    This analysis determines what movements the trainer demonstrates so
+    FitA11y can set appropriate rep thresholds and form ranges — it does
+    NOT generate a workout execution plan.
+
+    TODO: Implement using MediaPipe Pose on transient video/audio analysis data.
+    """
     raise NotImplementedError("TODO: implement")
 
 
 def identify_counting_joint(angle_ranges: dict[str, tuple[float, float]]) -> tuple[str, float, float]:
-    """Identify the most useful joint and range for repetition counting."""
+    """Identify the most useful joint and range for rep threshold tracking in the sidecar manifest.
+
+    TODO: Implement.
+    """
     raise NotImplementedError("TODO: implement")
 
 
 def calculate_live_angles(frame: Any) -> dict[str, float]:
-    """Calculate current joint angles from a live camera frame."""
+    """Calculate current joint angles from a live camera frame.
+
+    Used during assisted playback to provide supplementary form correction.
+    """
     if isinstance(frame, dict):
         if "angles" in frame and isinstance(frame["angles"], dict):
             angles = frame["angles"]
@@ -41,7 +65,11 @@ def detect_form_error(
     joint_angles: dict[str, float],
     acceptable_ranges: dict[str, tuple[float, float]],
 ) -> list[FormError]:
-    """Detect form errors by comparing live joint angles to acceptable ranges."""
+    """Detect form errors by comparing live joint angles to acceptable ranges.
+
+    Form errors trigger supplementary correction cues from the assistant —
+    they do not interrupt or replace the trainer's instruction.
+    """
     errors = []
     for joint, angle in joint_angles.items():
         if joint in acceptable_ranges:
@@ -70,4 +98,3 @@ def detect_form_error(
                 message=msg
             ))
     return errors
-

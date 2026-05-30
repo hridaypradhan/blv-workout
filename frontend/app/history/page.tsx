@@ -6,7 +6,7 @@ import PageWrapper from "@/components/layout/PageWrapper";
 
 export default function HistoryList() {
   const handleFilterChange = () => {
-    // TODO: Update state filter for exercise history list
+    // TODO: Update state filter for session history list
   };
 
   const sessions = [
@@ -42,9 +42,9 @@ export default function HistoryList() {
         {/* Title */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-extrabold text-white">Workout History</h1>
+            <h1 className="text-3xl font-extrabold text-white">Session History</h1>
             <p className="text-slate-400 text-sm mt-1">
-              Review and audit your past sessions and form calibration logs.
+              Review your past assisted playback sessions and tracked performance stats.
             </p>
           </div>
 
@@ -55,7 +55,7 @@ export default function HistoryList() {
               className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-350 hover:text-white rounded-xl text-xs border border-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
               id="filter-all-btn"
             >
-              All Workouts
+              All Sessions
             </button>
             <button
               onClick={handleFilterChange}
@@ -77,8 +77,8 @@ export default function HistoryList() {
                   <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Date</th>
                   <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Workout Title</th>
                   <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Duration</th>
-                  <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Reps</th>
-                  <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Accuracy</th>
+                  <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Tracked Reps</th>
+                  <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Form Accuracy</th>
                   <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Details</th>
                 </tr>
               </thead>
@@ -141,11 +141,11 @@ export default function HistoryList() {
                 
                 <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Reps</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Tracked Reps</span>
                     <span className="text-xs font-bold text-slate-300 mt-0.5">{s.repsCompleted} reps</span>
                   </div>
                   <div className="flex flex-col items-end">
-                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider text-right">Accuracy</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider text-right">Form Accuracy</span>
                     <span className={`text-xs font-extrabold mt-0.5 ${s.accuracy >= 90 ? "text-emerald-400" : "text-amber-400"}`}>
                       {s.accuracy}%
                     </span>

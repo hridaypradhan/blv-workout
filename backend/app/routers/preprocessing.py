@@ -1,4 +1,11 @@
-"""Preprocessing routes for FitA11y workout videos — F1.1 implementation."""
+"""Assistance preparation routes for FitA11y — preparing sidecar manifests
+for YouTube workout videos.
+
+The assistance preparation pipeline fetches YouTube metadata, analyzes the
+trainer's audio/video content, and produces an AssistanceSidecarManifest
+that enables contextual, supplementary assistance during embedded playback.
+The original YouTube video is never downloaded for local playback.
+"""
 
 from __future__ import annotations
 
@@ -12,60 +19,82 @@ from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 from app.core.job_store import job_store, JobRecord
-from app.models.schemas import Exercise, ProcessingStage, YouTubeURL
+from app.models.schemas import AssistanceSidecarManifest, ProcessingStage, YouTubeURL
 from app.services.youtube_service import (
-    AudioExtractionError,
-    YouTubeDownloadError,
-    download_video,
-    extract_audio,
+    YouTubeMetadataError,
+    fetch_youtube_metadata,
+    parse_youtube_id,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _run_import_pipeline(video_id: str, youtube_url: str) -> None:
-    """Background task: download video, extract audio, update job state."""
-    import_dir = settings.IMPORT_DIR
+def _run_assistance_preparation(video_id: str, youtube_url: str) -> None:
+    """Background task: fetch metadata, prepare sidecar manifest, update job state.
+
+    At current maturity, this pipeline:
+    1. Validates the YouTube URL and extracts the video ID
+    2. Fetches YouTube metadata (stub/placeholder)
+    3. Stores metadata in the job record
+    4. Marks the job as completed with an empty sidecar manifest
+
+    Future stages (TODO):
+    - Transcribe trainer audio (Whisper)
+    - Anchor exercise timeline (Gemini)
+    - Classify trainer instruction events (Gemini)
+    - Analyze expected movement windows (MediaPipe)
+    - Generate full sidecar manifest
+    """
 
     try:
-        # Stage: downloading
-        job_store.update_stage(video_id, ProcessingStage.DOWNLOADING)
+        # Stage: fetching_metadata
+        job_store.update_stage(video_id, ProcessingStage.FETCHING_METADATA)
 
-        result = download_video(youtube_url, video_id, import_dir)
-        video_path = result["video_path"]
-        title = result.get("title")
-        duration = result.get("duration")
+        youtube_id = parse_youtube_id(youtube_url)
+        metadata = fetch_youtube_metadata(youtube_url)
 
         job_store.update_stage(
             video_id,
-            ProcessingStage.DOWNLOADING,
-            video_path=video_path,
-            title=title,
-            duration=duration,
+            ProcessingStage.FETCHING_METADATA,
+            youtube_id=youtube_id,
+            title=metadata.get("title"),
+            channel_name=metadata.get("channel_name"),
+            thumbnail_url=metadata.get("thumbnail_url"),
+            duration=metadata.get("duration"),
         )
 
-        # Stage: transcribing (audio extraction in F1.1)
+        # Stage: transcribing (TODO: Whisper/caption analysis)
         job_store.update_stage(video_id, ProcessingStage.TRANSCRIBING)
+        # TODO: Extract transcript from captions or transient audio
 
-        audio_path = extract_audio(video_path, import_dir, video_id)
-        job_store.update_stage(
-            video_id,
-            ProcessingStage.TRANSCRIBING,
-            audio_path=audio_path,
-        )
+        # Stage: anchoring_timeline (TODO: Gemini exercise segmentation)
+        job_store.update_stage(video_id, ProcessingStage.ANCHORING_TIMELINE)
+        # TODO: generate_exercise_timeline_anchors()
+
+        # Stage: classifying_trainer_instructions (TODO: Gemini classification)
+        job_store.update_stage(video_id, ProcessingStage.CLASSIFYING_TRAINER_INSTRUCTIONS)
+        # TODO: classify_trainer_instruction_events()
+
+        # Stage: analyzing_movement_windows (TODO: MediaPipe analysis)
+        job_store.update_stage(video_id, ProcessingStage.ANALYZING_MOVEMENT_WINDOWS)
+        # TODO: Analyze expected movement windows for sidecar
+
+        # Stage: generating_sidecar_manifest
+        job_store.update_stage(video_id, ProcessingStage.GENERATING_SIDECAR_MANIFEST)
+        # TODO: Assemble full AssistanceSidecarManifest
 
         # Stage: completed
         job_store.update_stage(video_id, ProcessingStage.COMPLETED)
-        logger.info("Import pipeline completed for video %s", video_id)
+        logger.info("Assistance preparation completed for video %s", video_id)
 
-    except (YouTubeDownloadError, AudioExtractionError) as exc:
-        logger.error("Import pipeline failed for video %s: %s", video_id, exc)
+    except YouTubeMetadataError as exc:
+        logger.error("Assistance preparation failed for video %s: %s", video_id, exc)
         job_store.update_stage(
             video_id, ProcessingStage.FAILED, error=str(exc)
         )
     except Exception as exc:
-        logger.exception("Unexpected error in import pipeline for video %s", video_id)
+        logger.exception("Unexpected error in assistance preparation for video %s", video_id)
         job_store.update_stage(
             video_id, ProcessingStage.FAILED, error=f"Unexpected error: {exc}"
         )
@@ -75,12 +104,13 @@ def _job_to_status_dict(job: JobRecord) -> dict:
     """Convert a JobRecord to the status response payload."""
     return {
         "video_id": job.video_id,
+        "youtube_id": job.youtube_id,
         "stage": job.stage.value,
         "error": job.error,
         "title": job.title,
+        "channel_name": job.channel_name,
+        "thumbnail_url": job.thumbnail_url,
         "duration": job.duration,
-        "video_path": job.video_path,
-        "audio_path": job.audio_path,
         "created_at": job.created_at,
     }
 
@@ -89,7 +119,7 @@ def _job_to_status_dict(job: JobRecord) -> dict:
 async def submit_video(
     payload: YouTubeURL, background_tasks: BackgroundTasks
 ) -> dict:
-    """Accept a YouTube URL and start the video import pipeline."""
+    """Accept a YouTube URL and start the assistance preparation pipeline."""
     url_str = str(payload.url)
 
     # Basic YouTube URL validation
@@ -103,14 +133,14 @@ async def submit_video(
         )
 
     job = job_store.create_job(url_str)
-    background_tasks.add_task(_run_import_pipeline, job.video_id, url_str)
+    background_tasks.add_task(_run_assistance_preparation, job.video_id, url_str)
 
     return {"video_id": job.video_id}
 
 
 @router.get("/status/{video_id}")
 async def get_processing_status(video_id: UUID) -> dict:
-    """Return the current processing status for a submitted video."""
+    """Return the current assistance preparation status for a submitted video."""
     job = job_store.get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
@@ -119,7 +149,7 @@ async def get_processing_status(video_id: UUID) -> dict:
 
 @router.get("/events/{video_id}")
 async def stream_events(video_id: UUID) -> StreamingResponse:
-    """Server-Sent Events endpoint for real-time import status updates."""
+    """Server-Sent Events endpoint for real-time assistance preparation updates."""
     job = job_store.get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
@@ -165,21 +195,25 @@ async def stream_events(video_id: UUID) -> StreamingResponse:
     )
 
 
-@router.get("/manifest/{video_id}", response_model=list[Exercise])
-async def get_exercise_manifest(video_id: UUID) -> list[Exercise]:
-    """Return the full exercise manifest for a processed workout video.
+@router.get("/manifest/{video_id}", response_model=AssistanceSidecarManifest)
+async def get_sidecar_manifest(video_id: UUID) -> AssistanceSidecarManifest:
+    """Return the assistance sidecar manifest for a prepared YouTube video.
 
-    For F1.1, returns an empty list — exercise segmentation is not yet implemented.
+    At current maturity, returns an empty manifest — full sidecar generation
+    (exercise anchors, trainer events, movement windows) is not yet implemented.
     """
     job = job_store.get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
-    return []
+    return AssistanceSidecarManifest(
+        video_id=UUID(job.video_id) if job.video_id else None,
+        youtube_id=job.youtube_id,
+    )
 
 
 @router.delete("/{video_id}")
-async def delete_processed_video(video_id: UUID) -> dict:
-    """Remove a processed video and its generated preprocessing artifacts."""
+async def delete_prepared_video(video_id: UUID) -> dict:
+    """Remove a prepared video and its assistance artifacts."""
     deleted = job_store.delete_job(str(video_id))
     if not deleted:
         raise HTTPException(status_code=404, detail="Video not found.")
@@ -188,6 +222,6 @@ async def delete_processed_video(video_id: UUID) -> dict:
 
 @router.get("/jobs")
 async def list_jobs() -> list[dict]:
-    """List all import jobs (newest first). Used by the dashboard."""
+    """List all assistance preparation jobs (newest first). Used by the dashboard."""
     jobs = job_store.list_jobs()
     return [j.to_dict() for j in jobs]

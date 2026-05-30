@@ -13,6 +13,7 @@ export function useHapticSleeves() {
 
   const connectSleeve = (slot: keyof SleeveStatus) => {
     // TODO: Initiate Web Bluetooth pairing for the chosen sleeve/limb slot
+    // to deliver tactile assistance cues alongside embedded YouTube video playback.
     console.log("Connecting Bluetooth haptic device for slot:", slot);
     setSleeveStatus((prev) => ({ ...prev, [slot]: true }));
   };

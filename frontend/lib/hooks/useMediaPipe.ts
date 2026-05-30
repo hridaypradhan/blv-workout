@@ -8,6 +8,7 @@ export function useMediaPipe() {
 
   const startCamera = () => {
     // TODO: Request camera permissions and initialize MediaPipe Pose tracking
+    // to map user movement against expected windows in the sidecar manifest.
     console.log("Starting camera tracking feed...");
     setIsReady(true);
     setPoseData({ tracking: true });

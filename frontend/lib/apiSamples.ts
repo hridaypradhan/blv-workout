@@ -17,7 +17,7 @@ export const apiSamples: Record<string, ApiSample> = {
     body: JSON.stringify({
       url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     }, null, 2),
-    description: "Submit a YouTube URL for ingestion",
+    description: "Submit a YouTube URL for ingestion and sidecar preparation",
     response: JSON.stringify({
       video_id: "be62cb5a-b4f0-470f-9c53-0e067ae0a91b"
     }, null, 2)
@@ -26,23 +26,33 @@ export const apiSamples: Record<string, ApiSample> = {
     pathParams: {
       video_id: "00000000-0000-0000-0000-000000000000"
     },
-    description: "Check status of ingestion job",
+    description: "Check status of assistance preparation job",
     response: JSON.stringify({
-      status: "downloading"
+      video_id: "be62cb5a-b4f0-470f-9c53-0e067ae0a91b",
+      youtube_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      youtube_id: "dQw4w9WgXcQ",
+      stage: "fetching_metadata",
+      error: null,
+      title: "Beginner Squat Tutorial",
+      channel_name: "Bodyweight Coach",
+      thumbnail_url: "https://img.youtube.com/vi/dQw4w9WgXcQ/0.jpg",
+      duration: 360,
+      created_at: "2026-05-27T01:30:00Z"
     }, null, 2)
   },
   "GET /api/preprocessing/jobs": {
-    description: "List all ingestion jobs",
+    description: "List all assistance preparation jobs",
     response: JSON.stringify([
       {
         video_id: "be62cb5a-b4f0-470f-9c53-0e067ae0a91b",
         youtube_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        stage: "downloading",
+        youtube_id: "dQw4w9WgXcQ",
+        stage: "completed",
         error: null,
         title: "Beginner Squat Tutorial",
+        channel_name: "Bodyweight Coach",
+        thumbnail_url: "https://img.youtube.com/vi/dQw4w9WgXcQ/0.jpg",
         duration: 360,
-        video_path: "/storage/video.mp4",
-        audio_path: "/storage/audio.mp3",
         created_at: "2026-05-27T01:30:00Z"
       }
     ], null, 2)
@@ -51,10 +61,10 @@ export const apiSamples: Record<string, ApiSample> = {
     pathParams: {
       video_id: "00000000-0000-0000-0000-000000000000"
     },
-    description: "Delete an ingested video",
+    description: "Delete an ingested video preparation record",
     response: JSON.stringify({
       status: "deleted",
-      message: "Video and all associated files deleted successfully."
+      message: "Ingestion record deleted successfully."
     }, null, 2)
   },
   "POST /api/session/start": {
@@ -62,7 +72,7 @@ export const apiSamples: Record<string, ApiSample> = {
       user_id: "00000000-0000-0000-0000-000000000000",
       video_id: "11111111-1111-1111-1111-111111111111"
     }, null, 2),
-    description: "Start a new workout session",
+    description: "Start a new assisted playback session",
     response: JSON.stringify({
       id: "be62cb5a-b4f0-470f-9c53-0e067ae0a91b",
       user_id: "00000000-0000-0000-0000-000000000000",
@@ -71,6 +81,7 @@ export const apiSamples: Record<string, ApiSample> = {
       ended_at: null,
       reps: [],
       form_errors: [],
+      playback_events: [],
       summary: null
     }, null, 2)
   },
@@ -83,7 +94,7 @@ export const apiSamples: Record<string, ApiSample> = {
       rep_count: 1,
       metadata: {}
     }, null, 2),
-    description: "Record a completed repetition",
+    description: "Record a completed repetition (tracked performance)",
     response: JSON.stringify({
       status: "recorded"
     }, null, 2)
@@ -102,7 +113,23 @@ export const apiSamples: Record<string, ApiSample> = {
         message: "Left knee is over-flexed."
       }
     }, null, 2),
-    description: "Record a detected form error",
+    description: "Record a detected form error (supplementary correction event)",
+    response: JSON.stringify({
+      status: "recorded"
+    }, null, 2)
+  },
+  "POST /api/session/{session_id}/playback-event": {
+    pathParams: {
+      session_id: "00000000-0000-0000-0000-000000000000"
+    },
+    body: JSON.stringify({
+      event_type: "pause",
+      timestamp_ms: 12500,
+      metadata: {
+        reason: "user_triggered"
+      }
+    }, null, 2),
+    description: "Record a playback state change event during YouTube video playback",
     response: JSON.stringify({
       status: "recorded"
     }, null, 2)
@@ -111,7 +138,7 @@ export const apiSamples: Record<string, ApiSample> = {
     pathParams: {
       session_id: "00000000-0000-0000-0000-000000000000"
     },
-    description: "End an active workout session",
+    description: "End an active assisted playback session",
     response: JSON.stringify({
       status: "ended"
     }, null, 2)
@@ -120,7 +147,7 @@ export const apiSamples: Record<string, ApiSample> = {
     pathParams: {
       session_id: "00000000-0000-0000-0000-000000000000"
     },
-    description: "Retrieve workout session details",
+    description: "Retrieve assisted playback session details",
     response: JSON.stringify({
       id: "576dd7b5-7b0c-4d28-8307-acea7ecc029f",
       user_id: "00000000-0000-0000-0000-000000000000",
@@ -146,10 +173,17 @@ export const apiSamples: Record<string, ApiSample> = {
           message: "Left knee is over-flexed."
         }
       ],
-      summary: "Workout completed! You performed 1 repetitions with 1 form corrections."
+      playback_events: [
+        {
+          event_type: "slow",
+          timestamp_ms: 5000,
+          metadata: { speed: 0.75 }
+        }
+      ],
+      summary: "Session completed! You performed 1 tracked repetitions with 1 haptic/vocal corrections."
     }, null, 2)
   },
-  "POST /api/coach/correction": {
+  "POST /api/assistant/correction": {
     body: JSON.stringify({
       exercise_id: "22222222-2222-2222-2222-222222222222",
       exercise_name: "Squat",
@@ -157,7 +191,7 @@ export const apiSamples: Record<string, ApiSample> = {
       angle: 105.0,
       persona: "supportive"
     }, null, 2),
-    description: "Generate corrective coaching feedback",
+    description: "Generate corrective assistant cue feedback",
     response: JSON.stringify({
       text: "Gently guide your left knee slightly inward to align with your foot.",
       persona: "supportive",
@@ -168,14 +202,14 @@ export const apiSamples: Record<string, ApiSample> = {
       }
     }, null, 2)
   },
-  "POST /api/coach/pacing": {
+  "POST /api/assistant/pacing": {
     body: JSON.stringify({
       session_id: "00000000-0000-0000-0000-000000000000",
       exercise_id: "22222222-2222-2222-2222-222222222222",
       lag_ratio: 1.15,
       persona: "supportive"
     }, null, 2),
-    description: "Generic pacing feedback based on lag",
+    description: "Generic pacing feedback based on user lag",
     response: JSON.stringify({
       text: "Take your time, slow it down.",
       persona: "supportive",
@@ -185,7 +219,7 @@ export const apiSamples: Record<string, ApiSample> = {
       }
     }, null, 2)
   },
-  "POST /api/coach/pacing/adaptive": {
+  "POST /api/assistant/pacing/adaptive": {
     body: JSON.stringify({
       session_id: "00000000-0000-0000-0000-000000000000",
       exercise_id: "22222222-2222-2222-2222-222222222222",
@@ -194,13 +228,13 @@ export const apiSamples: Record<string, ApiSample> = {
       rep_durations_seconds: [3.9, 4.0, 3.8],
       persona: "supportive"
     }, null, 2),
-    description: "F3.5 Adaptive pacing and player adjustments",
+    description: "Adaptive pacing and player playback adjustments",
     response: JSON.stringify({
       feature: "adaptive_pacing",
       decision: "recovery",
-      coach_message: "Excellent job catching up. Resuming normal speed.",
+      assistant_message: "Excellent job catching up. Resuming normal speed.",
       playback: {
-        action: "resume",
+        action: "play",
         suggested_speed: 1.0
       },
       haptic: {
@@ -209,7 +243,7 @@ export const apiSamples: Record<string, ApiSample> = {
         sleeves: [],
         intensity: 0.5
       },
-      rep_adjustment: null,
+      adaptation_recommendation: null,
       metrics: {
         latest_lag_ratio: 0.95,
         rolling_average_lag_ratio: 0.975,
@@ -220,7 +254,7 @@ export const apiSamples: Record<string, ApiSample> = {
       reason: "User has successfully matched the expected pace over recent repetitions."
     }, null, 2)
   },
-  "POST /api/coach/pacing/rhythm": {
+  "POST /api/assistant/pacing/rhythm": {
     body: JSON.stringify({
       session_id: "00000000-0000-0000-0000-000000000000",
       exercise_id: "22222222-2222-2222-2222-222222222222",
@@ -229,11 +263,11 @@ export const apiSamples: Record<string, ApiSample> = {
       rep_durations_seconds: [3.5, 3.6, 3.4],
       persona: "supportive"
     }, null, 2),
-    description: "F3.6 Rhythmic tempo and audio coach messages",
+    description: "Rhythmic tempo and assistant messages",
     response: JSON.stringify({
       feature: "rhythm_pacing",
       decision: "too_slow",
-      coach_message: "You're falling slightly behind the beat. Let's speed up just a bit.",
+      assistant_message: "You're falling slightly behind the beat. Let's speed up just a bit.",
       rhythm: {
         expected_rep_duration_seconds: 3.0,
         user_average_rep_duration_seconds: 3.5,
@@ -244,7 +278,7 @@ export const apiSamples: Record<string, ApiSample> = {
       reason: "User average repetition speed is slower than the video's rhythmic beat."
     }, null, 2)
   },
-  "POST /api/coach/motivation": {
+  "POST /api/assistant/motivation": {
     body: JSON.stringify({
       milestone_event: "completed_5_reps",
       persona: "supportive"
@@ -259,13 +293,13 @@ export const apiSamples: Record<string, ApiSample> = {
       }
     }, null, 2)
   },
-  "POST /api/coach/qa": {
+  "POST /api/assistant/qa": {
     body: JSON.stringify({
       question: "How low should I go on squats?",
       session_context: {},
       persona: "supportive"
     }, null, 2),
-    description: "Interactive Q&A with the coaching persona",
+    description: "Interactive Q&A with the assistant persona",
     response: JSON.stringify({
       text: "For a standard bodyweight squat, try to lower your hips until your thighs are parallel to the floor, ensuring your knees track in line with your toes for stability.",
       persona: "supportive",
@@ -273,11 +307,11 @@ export const apiSamples: Record<string, ApiSample> = {
       metadata: {}
     }, null, 2)
   },
-  "GET /api/coach/correction-templates/{exercise_id}": {
+  "GET /api/assistant/form-risk-templates/{exercise_id}": {
     pathParams: {
       exercise_id: "22222222-2222-2222-2222-222222222222"
     },
-    description: "Get static correction templates for exercise",
+    description: "Get static form risk correction templates for exercise",
     response: JSON.stringify([
       "Keep your back straight and chest proud.",
       "Gently lower your hips a bit more if comfortable.",
@@ -288,7 +322,7 @@ export const apiSamples: Record<string, ApiSample> = {
     body: JSON.stringify({
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      coach_persona: "supportive",
+      assistant_persona: "supportive",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",
@@ -301,7 +335,7 @@ export const apiSamples: Record<string, ApiSample> = {
       id: "00000000-0000-0000-0000-000000000000",
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      coach_persona: "supportive",
+      assistant_persona: "supportive",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",
@@ -320,7 +354,7 @@ export const apiSamples: Record<string, ApiSample> = {
       id: "00000000-0000-0000-0000-000000000000",
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      coach_persona: "supportive",
+      assistant_persona: "supportive",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",
@@ -335,7 +369,7 @@ export const apiSamples: Record<string, ApiSample> = {
       user_id: "00000000-0000-0000-0000-000000000000"
     },
     body: JSON.stringify({
-      coach_persona: "energetic",
+      assistant_persona: "energetic",
       feedback_modalities: ["audio", "haptic", "visual"]
     }, null, 2),
     description: "Update user preferences",
@@ -343,7 +377,7 @@ export const apiSamples: Record<string, ApiSample> = {
       id: "00000000-0000-0000-0000-000000000000",
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      coach_persona: "energetic",
+      assistant_persona: "energetic",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",

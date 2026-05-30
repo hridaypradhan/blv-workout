@@ -12,7 +12,7 @@ interface HistoryDetailPageProps {
 
 export default function HistoryDetail({ params }: HistoryDetailPageProps) {
   const handlePlayVoiceSummary = () => {
-    // TODO: Synthesize and play the AI coach summary aloud using speech synthesis
+    // TODO: Synthesize and play the assistant summary aloud using speech synthesis
   };
 
   const exerciseBreakdown = [
@@ -57,13 +57,14 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
             <span>Date: <strong className="text-slate-200">May 18, 2026</strong></span>
             <span>Duration: <strong className="text-slate-200">12 minutes</strong></span>
             <span>Session ID: <strong className="text-slate-200">{params.sessionId}</strong></span>
+            <span>Original Video: <a href="https://youtube.com/watch?v=..." target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:underline">YouTube Link</a></span>
           </div>
         </header>
 
         {/* Core Stats Cards */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6" aria-label="Key Performance Indicators">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center shadow-lg">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Total Reps</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Tracked Reps</span>
             <span className="text-4xl font-extrabold text-yellow-400">45 reps</span>
           </div>
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center shadow-lg">
@@ -73,6 +74,30 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center shadow-lg">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Pace Score</span>
             <span className="text-4xl font-extrabold text-white">Optimal</span>
+          </div>
+        </section>
+
+        {/* Distinguish Section (v2) */}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl mb-6" aria-labelledby="distinguish-heading">
+          <h2 id="distinguish-heading" className="text-lg font-bold text-white mb-3">
+            Session Details
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-350">
+            <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl">
+              <h3 className="font-bold text-yellow-400 mb-1.5 uppercase tracking-wider text-[10px]">Trainer&apos;s Original Workout</h3>
+              <p className="font-medium text-slate-300">Beginner Squats & Alignment</p>
+              <p className="mt-1 text-slate-400">YouTube Channel: Bodyweight Coach</p>
+            </div>
+            <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl">
+              <h3 className="font-bold text-emerald-400 mb-1.5 uppercase tracking-wider text-[10px]">Your Tracked Performance</h3>
+              <p className="font-medium text-slate-300">Completed Reps: 45 total</p>
+              <p className="mt-1 text-slate-400">Median Accuracy: 92% parallel</p>
+            </div>
+            <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl">
+              <h3 className="font-bold text-sky-400 mb-1.5 uppercase tracking-wider text-[10px]">FitA11y Interventions</h3>
+              <p className="font-medium text-slate-300">Haptic Pulses: 14 cues delivered</p>
+              <p className="mt-1 text-slate-400">Vocal Corrections: 2 cues spoken</p>
+            </div>
           </div>
         </section>
 
@@ -87,7 +112,7 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/40">
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Exercise Module</th>
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Exercise Section</th>
                   <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Reps</th>
                   <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Accuracy</th>
                   <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Most Common Error</th>
@@ -97,7 +122,7 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
                 {exerciseBreakdown.map((row, index) => (
                   <tr key={index} className="hover:bg-slate-800/10">
                     <td className="p-4 text-sm font-bold text-white">{row.name}</td>
-                    <td className="p-4 text-sm text-slate-350">{row.reps}</td>
+                    <td className="p-4 text-sm text-slate-355">{row.reps}</td>
                     <td className="p-4 text-sm font-extrabold text-emerald-400">{row.accuracy}%</td>
                     <td className="p-4 text-sm text-slate-400 italic">{row.error}</td>
                   </tr>
@@ -113,7 +138,7 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
                 <h3 className="text-sm font-bold text-white">{row.name}</h3>
                 <div className="flex justify-between items-center text-xs mt-1 bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Reps</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Tracked Reps</span>
                     <span className="text-xs font-semibold text-slate-300 mt-0.5">{row.reps} reps</span>
                   </div>
                   <div className="flex flex-col items-end">
@@ -132,16 +157,16 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
           </div>
         </section>
 
-        {/* AI Coach Summary (With voice control) */}
+        {/* Assistant Summary (With voice control) */}
         <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="summary-heading">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 id="summary-heading" className="text-lg font-bold text-white">
-              AI Coach Summary
+              Assistant Summary
             </h2>
             <button
               onClick={handlePlayVoiceSummary}
               className="inline-flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-xs border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-              aria-label="Read AI Coach Summary Aloud"
+              aria-label="Read Assistant Summary Aloud"
               id="speak-summary-btn"
             >
               <svg
@@ -165,7 +190,7 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
  
           <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl">
             <p className="text-sm text-slate-300 leading-relaxed">
-              &ldquo;Great job today! Your squats were excellent during set 2, maintaining deep range while keeping your spine straight. In set 1 of lunges, we noticed some forward drift on the left knee which caused minor balance adjustments. Focus on driving through the heel of your front foot to stabilize. Overall, your tempo was consistent and haptic sleeves reported excellent timing compliance.&rdquo;
+              &ldquo;Great job today! Your squats were excellent during set 2, maintaining deep range while keeping your spine straight alongside the YouTube trainer&apos;s pacing. In set 1 of lunges, we noticed some forward drift on the left knee which we flagged with a brief haptic cue. Focus on driving through the heel of your front foot to stabilize. Overall, your tempo matched the trainer&apos;s playback pace consistently and haptic sleeves reported excellent timing compliance.&rdquo;
             </p>
           </div>
         </section>

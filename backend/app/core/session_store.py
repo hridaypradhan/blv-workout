@@ -1,22 +1,22 @@
-"""Thread-safe in-memory store for active workout sessions."""
+"""Thread-safe in-memory store for assisted playback sessions."""
 
 import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.models.schemas import Session, RepEvent, FormError
+from app.models.schemas import Session, RepEvent, FormError, PlaybackEvent
 
 
 class SessionStore:
-    """Thread-safe in-memory store for workout sessions."""
+    """Thread-safe in-memory store for assisted playback sessions."""
 
     def __init__(self) -> None:
         self._sessions: dict[uuid.UUID, Session] = {}
         self._lock = threading.Lock()
 
     def create_session(self, user_id: uuid.UUID, video_id: uuid.UUID) -> Session:
-        """Create a new session and store it in-memory."""
+        """Create a new assisted playback session and store it in-memory."""
         session_id = uuid.uuid4()
         session = Session(
             id=session_id,
@@ -26,6 +26,7 @@ class SessionStore:
             ended_at=None,
             reps=[],
             form_errors=[],
+            playback_events=[],
             summary=None
         )
         with self._lock:
@@ -45,7 +46,7 @@ class SessionStore:
         timestamp: Optional[datetime] = None,
         metadata: Optional[dict] = None
     ) -> bool:
-        """Record a completed repetition for the specified session."""
+        """Record a tracked repetition for the specified assisted playback session."""
         with self._lock:
             session = self._sessions.get(session_id)
             if session is None or session.ended_at is not None:
@@ -67,7 +68,7 @@ class SessionStore:
         session_id: uuid.UUID,
         form_error: FormError
     ) -> bool:
-        """Record a detected form error for the specified session."""
+        """Record a detected form error for the specified assisted playback session."""
         with self._lock:
             session = self._sessions.get(session_id)
             if session is None or session.ended_at is not None:
@@ -77,8 +78,29 @@ class SessionStore:
             session.form_errors.append(form_error)
             return True
 
+    def add_playback_event(
+        self,
+        session_id: uuid.UUID,
+        event_type: str,
+        timestamp_ms: Optional[float] = None,
+        metadata: Optional[dict] = None
+    ) -> bool:
+        """Record a playback interaction (pause, play, seek, speed change, etc.)."""
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None or session.ended_at is not None:
+                return False
+
+            event = PlaybackEvent(
+                event_type=event_type,
+                timestamp_ms=timestamp_ms,
+                metadata=metadata or {}
+            )
+            session.playback_events.append(event)
+            return True
+
     def end_session(self, session_id: uuid.UUID) -> bool:
-        """Mark a session as ended and generate a dummy/fallback summary."""
+        """Mark an assisted playback session as ended and generate a summary."""
         with self._lock:
             session = self._sessions.get(session_id)
             if session is None:
@@ -90,9 +112,11 @@ class SessionStore:
             # Generate a deterministic session summary
             total_reps = len(session.reps)
             total_errors = len(session.form_errors)
+            total_playback_events = len(session.playback_events)
             session.summary = (
-                f"Workout completed! You performed {total_reps} repetitions with "
-                f"{total_errors} form corrections. Great effort keeping up with the pacing coach!"
+                f"Session completed! You performed {total_reps} tracked repetitions with "
+                f"{total_errors} form corrections. FitA11y delivered {total_playback_events} "
+                f"playback interactions during your assisted workout. Great effort!"
             )
             return True
 

@@ -72,34 +72,80 @@ def parse_youtube_id(url: str) -> str:
 def fetch_youtube_metadata(url_or_id: str) -> dict[str, Any]:
     """Fetch YouTube video metadata for assistance preparation.
 
-    At current maturity, this returns deterministic placeholder metadata.
-    In the future, this would use the YouTube Data API v3 or yt-dlp
-    metadata extraction (without downloading the video file).
+    Attempts to use yt-dlp first to extract full details (including duration),
+    and falls back to oEmbed or placeholders if yt-dlp fails or is not present.
 
     Args:
         url_or_id: Full YouTube URL or 11-character video ID.
 
     Returns:
         Dict with keys: title, channel_name, duration, thumbnail_url, youtube_id.
-
-    Raises:
-        YouTubeMetadataError: If metadata extraction fails.
     """
-    # Try to extract YouTube ID for thumbnail URL generation
     try:
         youtube_id = parse_youtube_id(url_or_id) if "youtube" in url_or_id or "youtu.be" in url_or_id else url_or_id
     except YouTubeMetadataError:
         youtube_id = url_or_id
 
-    # TODO: Replace with YouTube Data API v3 call or yt-dlp metadata-only extraction
-    # For now, return deterministic placeholder metadata
-    return {
-        "youtube_id": youtube_id,
-        "title": "YouTube Workout Video",
-        "channel_name": "Fitness Creator",
-        "duration": 600.0,  # 10 minutes placeholder
-        "thumbnail_url": f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg",
-    }
+    if len(url_or_id) == 11 and not ("youtube.com" in url_or_id or "youtu.be" in url_or_id):
+        youtube_url = f"https://www.youtube.com/watch?v={url_or_id}"
+    else:
+        youtube_url = url_or_id
+
+    # Try yt-dlp first
+    if yt_dlp is not None:
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(youtube_url, download=False)
+                if info:
+                    duration = info.get("duration")
+                    duration_val = float(duration) if duration is not None else None
+                    return {
+                        "youtube_id": youtube_id,
+                        "title": info.get("title") or "Prepared YouTube video",
+                        "channel_name": info.get("uploader") or info.get("channel") or "Unknown creator",
+                        "duration": duration_val,
+                        "thumbnail_url": info.get("thumbnail") or f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg",
+                    }
+        except Exception:
+            pass
+
+    # Fallback to oEmbed
+    try:
+        import urllib.request
+        import urllib.parse
+        import json
+
+        encoded_url = urllib.parse.quote(youtube_url)
+        oembed_url = f"https://www.youtube.com/oembed?url={encoded_url}&format=json"
+
+        req = urllib.request.Request(
+            oembed_url,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+
+            return {
+                "youtube_id": youtube_id,
+                "title": data.get("title", "Prepared YouTube video"),
+                "channel_name": data.get("author_name", "Unknown creator"),
+                "duration": None,
+                "thumbnail_url": data.get("thumbnail_url") or f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg",
+            }
+    except Exception:
+        # Fall back gracefully to honest placeholders
+        return {
+            "youtube_id": youtube_id,
+            "title": "Prepared YouTube video",
+            "channel_name": "Unknown creator",
+            "duration": None,
+            "thumbnail_url": f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg",
+        }
 
 
 def fetch_transient_audio_for_analysis(

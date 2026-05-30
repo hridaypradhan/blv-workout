@@ -38,9 +38,9 @@ const DEMO_VIDEOS = [
 function stageBadge(stage: ProcessingStage) {
   switch (stage) {
     case ProcessingStage.COMPLETED:
-      return { text: "Ready", classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" };
+      return { text: "Ready", classes: "bg-emerald-600 text-white border-emerald-500 shadow-md font-bold" };
     case ProcessingStage.FAILED:
-      return { text: "Failed", classes: "bg-red-500/10 text-red-400 border-red-500/30" };
+      return { text: "Failed", classes: "bg-red-600 text-white border-red-500 shadow-md font-bold" };
     case ProcessingStage.SUBMITTED:
     case ProcessingStage.FETCHING_METADATA:
     case ProcessingStage.TRANSCRIBING:
@@ -48,9 +48,9 @@ function stageBadge(stage: ProcessingStage) {
     case ProcessingStage.CLASSIFYING_TRAINER_INSTRUCTIONS:
     case ProcessingStage.ANALYZING_MOVEMENT_WINDOWS:
     case ProcessingStage.GENERATING_SIDECAR_MANIFEST:
-      return { text: "Preparing", classes: "bg-yellow-400/10 text-yellow-400 border-yellow-400/30" };
+      return { text: "Preparing", classes: "bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold" };
     default:
-      return { text: stage, classes: "bg-slate-800 text-slate-400 border-slate-700" };
+      return { text: stage, classes: "bg-slate-800 text-slate-400 border-slate-700 font-bold" };
   }
 }
 
@@ -75,6 +75,11 @@ const CARD_GRADIENTS = [
 
 export default function Dashboard() {
   const [importedJobs, setImportedJobs] = useState<AssistanceJob[]>([]);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  const handleImageError = (videoId: string) => {
+    setFailedImages((prev) => ({ ...prev, [videoId]: true }));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -145,18 +150,38 @@ export default function Dashboard() {
                   className="flex flex-col bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl md:rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 group"
                   aria-labelledby={`title-import-${job.video_id}`}
                 >
-                  {/* Gradient header */}
-                  <div className={`h-32 bg-gradient-to-tr ${gradient} flex items-center justify-center p-6 relative`}>
-                    <div className={`absolute top-3 right-3 px-2.5 py-1 rounded-md text-xs font-semibold border ${badge.classes}`}>
+                  {/* Visual header (with thumbnail when available) */}
+                  <div className="h-32 relative overflow-hidden flex items-center justify-center bg-slate-950">
+                    {job.thumbnail_url && !failedImages[job.video_id] ? (
+                      <img
+                        src={job.thumbnail_url}
+                        alt={`Thumbnail for ${job.title || "video"}`}
+                        onError={() => handleImageError(job.video_id)}
+                        className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className={`absolute inset-0 bg-gradient-to-tr ${gradient}`} />
+                    )}
+
+                    {/* Dark overlay for readability */}
+                    <div className="absolute inset-0 bg-slate-950/20 group-hover:bg-slate-950/10 transition-colors duration-300" />
+
+                    <div className={`absolute top-3 right-3 px-2.5 py-1 rounded-md text-xs font-semibold border z-10 ${badge.classes}`}>
                       {badge.text}
                     </div>
-                    {job.duration && (
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-slate-950/65 backdrop-blur-sm text-xs font-semibold text-slate-200 border border-slate-800">
+
+                    {job.duration ? (
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-slate-950/75 backdrop-blur-sm text-xs font-semibold text-slate-200 border border-slate-800 z-10">
                         {formatDuration(job.duration)}
                       </div>
+                    ) : (
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-slate-950/75 backdrop-blur-sm text-xs font-semibold text-slate-400 border border-slate-800 z-10">
+                        Duration unavailable
+                      </div>
                     )}
+
                     <svg
-                      className="w-10 h-10 text-white/80 group-hover:scale-110 transition-transform duration-300"
+                      className="absolute w-10 h-10 text-white/90 group-hover:scale-110 transition-transform duration-300 drop-shadow-md z-10"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -173,19 +198,17 @@ export default function Dashboard() {
                       <h3
                         id={`title-import-${job.video_id}`}
                         className="text-base font-bold text-white mb-2 group-hover:text-yellow-400 transition-colors line-clamp-2"
+                        title={job.title || "Untitled Video"}
                       >
                         {job.title || "Untitled Video"}
                       </h3>
                       {job.channel_name && (
-                        <p className="text-xs text-slate-400 mb-2 font-medium">
+                        <p className="text-xs text-slate-400 mb-3 font-medium">
                           Trainer: {job.channel_name}
                         </p>
                       )}
-                      <p className="text-xs text-slate-500 truncate mb-3">
-                        {job.youtube_url}
-                      </p>
                       {job.error && (
-                        <p className="text-xs text-red-400 mb-3">Error: {job.error}</p>
+                        <p className="text-xs text-red-400 mb-3 font-medium">Error: {job.error}</p>
                       )}
                     </div>
 
@@ -264,7 +287,11 @@ export default function Dashboard() {
               {/* Content Details */}
               <div className="flex-1 p-6 flex flex-col justify-between">
                 <div>
-                  <h2 id={`title-${video.id}`} className="text-lg font-bold text-white mb-3 group-hover:text-yellow-400 transition-colors line-clamp-2">
+                  <h2
+                    id={`title-${video.id}`}
+                    className="text-lg font-bold text-white mb-3 group-hover:text-yellow-400 transition-colors line-clamp-2"
+                    title={video.title}
+                  >
                     {video.title}
                   </h2>
 

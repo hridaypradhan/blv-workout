@@ -162,6 +162,10 @@ export default function ProcessVideo() {
       if (idx === activeIdx) return "failed";
       return "idle";
     }
+    if (isCompleted) {
+      if (idx <= activeIdx) return "completed";
+      return "idle";
+    }
     if (idx < activeIdx) return "completed";
     if (idx === activeIdx) return "active";
     return "idle";

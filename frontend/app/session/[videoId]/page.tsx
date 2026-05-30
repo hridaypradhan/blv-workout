@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
+import { useYouTubePlayer } from "@/lib/hooks/useYouTubePlayer";
+import { getProcessingStatus } from "@/lib/api";
+import { ProcessingStage } from "@/types";
 
 interface LiveSessionProps {
   params: {
@@ -10,24 +13,138 @@ interface LiveSessionProps {
   };
 }
 
+/** Fallback mapping for demo/sample cards to test-drive real video playback */
+const DEMO_YOUTUBE_IDS: Record<string, { youtube_id: string; title: string; channel_name: string; duration: number }> = {
+  "v-squat-1": {
+    youtube_id: "aclHkVaku9U",
+    title: "Beginner Bodyweight Squats & Alignment",
+    channel_name: "Bodyweight Coach",
+    duration: 720,
+  },
+  "v-lunges-2": {
+    youtube_id: "qyvP6M3VeqY",
+    title: "Leg Strength: Reverse Lunges Tutorial",
+    channel_name: "Fit Foundations",
+    duration: 900,
+  },
+  "v-core-3": {
+    youtube_id: "dJlFm3UxM5A",
+    title: "Core Stability: Deadbug & Bird-dog Guide",
+    channel_name: "A11y Movement",
+    duration: 600,
+  },
+};
+
+/** Helper to format time readouts */
+function formatTime(seconds: number): string {
+  if (isNaN(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s < 10 ? "0" : ""}${s}`;
+}
+
 export default function LiveSession({ params }: LiveSessionProps) {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [isLoadingJob, setIsLoadingJob] = useState(true);
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [youtubeId, setYoutubeId] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<{ title?: string; channel_name?: string; duration?: number } | null>(null);
+  const [jobStage, setJobStage] = useState<ProcessingStage | null>(null);
+
   const [assistantMuted, setAssistantMuted] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
 
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-    console.log("Toggling playback for video ID:", params.videoId);
-  };
+  // Load preparation status on mount
+  useEffect(() => {
+    if (params.videoId in DEMO_YOUTUBE_IDS) {
+      const demo = DEMO_YOUTUBE_IDS[params.videoId];
+      setYoutubeId(demo.youtube_id);
+      setMetadata({
+        title: demo.title,
+        channel_name: demo.channel_name,
+        duration: demo.duration,
+      });
+      setJobStage(ProcessingStage.COMPLETED);
+      setIsLoadingJob(false);
+      return;
+    }
 
-  const handleSpeedChange = (speed: number) => {
-    setPlaybackSpeed(speed);
-    console.log("Setting playback speed to:", speed);
-  };
+    let active = true;
+    const fetchStatus = async () => {
+      try {
+        const job = await getProcessingStatus(params.videoId);
+        if (!active) return;
 
-  const handleRewind = () => {
-    console.log("Rewinding playback by 10 seconds");
-  };
+        setJobStage(job.stage);
+        if (job.stage === ProcessingStage.COMPLETED) {
+          if (job.youtube_id) {
+            setYoutubeId(job.youtube_id);
+            setMetadata({
+              title: job.title || undefined,
+              channel_name: job.channel_name || undefined,
+              duration: job.duration || undefined,
+            });
+          } else {
+            setJobError("YouTube video ID unavailable for this prepared workout.");
+          }
+        } else if (job.stage === ProcessingStage.FAILED) {
+          setJobError(job.error || "Workout assistance preparation failed.");
+        }
+      } catch {
+        if (!active) return;
+        setJobError(
+          "Workout details could not be loaded. Please ensure the backend is running and that the video was imported."
+        );
+      } finally {
+        if (active) {
+          setIsLoadingJob(false);
+        }
+      }
+    };
+
+    fetchStatus();
+
+    return () => {
+      active = false;
+    };
+  }, [params.videoId]);
+
+  // Hook into the YouTube IFrame player
+  const {
+    containerRef,
+    isReady,
+    isPlaying,
+    isBuffering,
+    hasEnded,
+    currentTime,
+    duration,
+    playbackRate,
+    error: playerError,
+    play,
+    pause,
+    seek,
+    setPlaybackRate,
+  } = useYouTubePlayer(youtubeId);
+
+  // Monitor playback states to populate the screen-reader announcement live region
+  const prevIsPlaying = useRef(false);
+  useEffect(() => {
+    if (playerError) {
+      setAnnouncement(`Trainer player error: ${playerError}`);
+    } else if (hasEnded) {
+      setAnnouncement("Trainer video playback ended.");
+    } else if (isBuffering) {
+      setAnnouncement("Trainer video is buffering.");
+    } else if (isPlaying) {
+      setAnnouncement("Trainer video playback started.");
+    } else if (!isPlaying && prevIsPlaying.current) {
+      setAnnouncement("Trainer video playback paused.");
+    } else if (isReady) {
+      setAnnouncement((prev) => prev.includes("ready") ? prev : "Trainer video player is ready.");
+    } else if (!isReady && youtubeId) {
+      setAnnouncement("Loading trainer video player.");
+    }
+    prevIsPlaying.current = isPlaying;
+  }, [isReady, isPlaying, isBuffering, hasEnded, playerError, youtubeId]);
 
   const handleRepeatTrainerInstruction = () => {
     console.log("Seeking to latest trainer_instruction_event");
@@ -43,7 +160,6 @@ export default function LiveSession({ params }: LiveSessionProps) {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Send query to assistant for playback-aware Q&A response
   };
 
   const sleeveStatus = [
@@ -59,8 +175,67 @@ export default function LiveSession({ params }: LiveSessionProps) {
     { sender: "assistant", text: "A bit lower, sink your hips back. You will feel a double haptic pulse on both thigh bands when you reach parallel." },
   ];
 
+  // Conditional screens for preprocessing job states
+  if (isLoadingJob) {
+    return (
+      <PageWrapper id="live-session-loading-wrapper">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Loading Assisted Playback Session</h2>
+          <p className="text-sm text-slate-400">Fetching workout metadata and preparation details...</p>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (jobError) {
+    return (
+      <PageWrapper id="live-session-error-wrapper">
+        <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
+          <span className="text-red-500 text-5xl mb-4" role="img" aria-label="Error">⚠️</span>
+          <h2 className="text-xl font-bold text-white mb-2">Failed to Load Session</h2>
+          <p className="text-sm text-slate-400 mb-6">{jobError}</p>
+          <Link
+            href="/dashboard"
+            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+          >
+            Back to Dashboard
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (jobStage !== ProcessingStage.COMPLETED) {
+    return (
+      <PageWrapper id="live-session-pending-wrapper">
+        <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
+          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Preparation in Progress</h2>
+          <p className="text-sm text-slate-400 mb-2">
+            Workout assistance preparation is not complete yet.
+          </p>
+          <p className="text-xs text-yellow-400 font-semibold bg-yellow-400/10 border border-yellow-400/20 px-3 py-1 rounded-full mb-6">
+            Current Stage: {jobStage ? jobStage.replace(/_/g, " ") : "unknown"}
+          </p>
+          <Link
+            href="/dashboard"
+            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+          >
+            Back to Dashboard
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
   return (
     <PageWrapper id="live-session-wrapper">
+      {/* Screen-reader status announcement live region */}
+      <div className="sr-only" aria-live="assertive" aria-atomic="true">
+        {announcement}
+      </div>
+
       {/* Top Bar: Sleeve Calibration & Device Strip */}
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-6 shadow-md" aria-label="Device Status Bar">
         <div className="flex items-center gap-2">
@@ -70,7 +245,7 @@ export default function LiveSession({ params }: LiveSessionProps) {
         <div className="flex flex-wrap gap-3 sm:gap-4">
           {sleeveStatus.map((s) => (
             <div key={s.label} className="flex items-center gap-1.5" title={`${s.name}: Calibrating`}>
-              <span className={`w-2 h-2 rounded-full bg-yellow-400`} aria-hidden="true" />
+              <span className="w-2 h-2 rounded-full bg-yellow-400" aria-hidden="true" />
               <span className="text-[10px] uppercase font-bold text-slate-400">{s.label}</span>
             </div>
           ))}
@@ -79,58 +254,61 @@ export default function LiveSession({ params }: LiveSessionProps) {
 
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        {/* Left/Center Column: YouTube Embedded Player & Playback Controls (8 cols) */}
+        {/* Left/Center Column: YouTube Embedded Player & Playback Controls */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between" aria-label="Embedded Trainer Video Player">
-            <div className="flex justify-between items-center mb-4">
-              <div>
+            <div className="flex justify-between items-start sm:items-center gap-4 mb-4">
+              <div className="flex-1 min-w-0">
                 <span className="text-xs uppercase font-extrabold text-red-500 tracking-wider block mb-0.5">
                   Original YouTube Trainer Playback
                 </span>
-                <h2 className="text-lg font-bold text-white">Beginner Squats & Lunges Alignment</h2>
+                <h2 className="text-lg font-bold text-white leading-snug">{metadata?.title || "Workout Assistance Companion"}</h2>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">Speed: {playbackSpeed}x</span>
+              <div className="flex items-center gap-3 sm:gap-4 text-xs text-slate-400 shrink-0 whitespace-nowrap pt-1 sm:pt-0">
+                <span>Speed: {playbackRate}x</span>
+                <span className="tabular-nums bg-slate-950 px-2 py-1 rounded-md border border-slate-800/80">
+                  {formatTime(currentTime)}&nbsp;/&nbsp;{formatTime(duration)}
+                </span>
               </div>
             </div>
 
-            {/* YouTube IFrame Placeholder Panel */}
-            <div className="relative aspect-video bg-slate-950 border border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center p-6 mb-6 overflow-hidden">
-              {/* Fake video screen */}
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60 z-10" />
+            {/* Real YouTube Player Mount Frame */}
+            <div className="relative aspect-video bg-slate-950 border border-slate-800 rounded-2xl mb-6 overflow-hidden flex items-center justify-center">
+              <div ref={containerRef} className="w-full h-full absolute inset-0" />
               
-              {/* Playback Status Overlay */}
-              <div className="z-20 flex flex-col items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-slate-900/80 backdrop-blur border border-slate-800 flex items-center justify-center text-yellow-400 hover:text-yellow-300 hover:scale-105 transition-all cursor-pointer shadow-2xl" onClick={handlePlayPause}>
-                  {isPlaying ? (
-                    <svg className="w-10 h-10 fill-current" viewBox="0 0 24 24">
-                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                    </svg>
-                  ) : (
-                    <svg className="w-10 h-10 fill-current translate-x-0.5" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z"/>
-                    </svg>
-                  )}
+              {!isReady && !playerError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-20">
+                  <div className="w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-2" />
+                  <p className="text-xs text-slate-400">Loading trainer video player...</p>
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-white">YouTube IFrame Video Placeholder</p>
-                  <p className="text-xs text-slate-400 mt-1">Playing original workout video by creator</p>
-                </div>
-              </div>
+              )}
 
-              {/* Fake Progress Bar */}
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 z-20">
-                <div className="h-full bg-red-600 transition-all duration-1000" style={{ width: isPlaying ? "35%" : "35%" }} />
-              </div>
+              {playerError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 p-6 z-20 text-center">
+                  <span className="text-red-500 text-3xl mb-2" role="img" aria-label="Warning">⚠️</span>
+                  <p className="text-sm font-bold text-white mb-1">Player Error</p>
+                  <p className="text-xs text-slate-400">{playerError}</p>
+                </div>
+              )}
             </div>
 
-            {/* In-App Playback Adjustments (v2 specific controls) */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-800/60 pt-4" aria-label="Playback Options">
+            {/* In-App Playback Adjustments */}
+            <div className="flex flex-col gap-4 border-t border-slate-800/60 pt-4" aria-label="Playback Options">
+              {/* Custom FitA11y Progress Bar placed here (completely clear of iframe to prevent controls clipping) */}
+              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-850" aria-hidden="true">
+                <div
+                  className="bg-red-600 h-full rounded-full transition-all"
+                  style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleRewind}
+                  onClick={() => seek(Math.max(currentTime - 10, 0))}
                   className="px-3.5 py-2 bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition-all flex items-center gap-1.5"
                   title="Rewind 10 seconds"
+                  aria-label="Rewind trainer video by 10 seconds"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4z"/>
@@ -140,14 +318,15 @@ export default function LiveSession({ params }: LiveSessionProps) {
                 </button>
 
                 <button
-                  onClick={() => handleSpeedChange(playbackSpeed === 1.0 ? 0.75 : 1.0)}
+                  onClick={() => setPlaybackRate(playbackRate === 1.0 ? 0.75 : 1.0)}
                   className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                    playbackSpeed === 0.75
+                    playbackRate === 0.75
                       ? "bg-yellow-400 text-slate-950 border-yellow-400"
                       : "bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-800"
                   }`}
+                  aria-label={playbackRate === 0.75 ? "Set video speed to normal" : "Slow down video speed to 0.75x"}
                 >
-                  {playbackSpeed === 0.75 ? "Normal Speed (1.0x)" : "Slow Down (0.75x)"}
+                  {playbackRate === 0.75 ? "Normal Speed (1.0x)" : "Slow Down (0.75x)"}
                 </button>
               </div>
 
@@ -155,6 +334,7 @@ export default function LiveSession({ params }: LiveSessionProps) {
                 <button
                   onClick={handleRepeatTrainerInstruction}
                   className="px-3.5 py-2 bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition-all flex items-center gap-1.5"
+                  aria-label="Repeat last trainer instruction cue"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -169,11 +349,13 @@ export default function LiveSession({ params }: LiveSessionProps) {
                       ? "bg-red-500/10 text-red-400 border-red-500/30"
                       : "bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-800"
                   }`}
+                  aria-label={assistantMuted ? "Unmute assistant voice" : "Mute assistant voice"}
                 >
                   {assistantMuted ? "Unmute Assistant" : "Mute Assistant"}
                 </button>
               </div>
             </div>
+          </div>
           </section>
 
           {/* Bottom Pose Feed Panel */}
@@ -195,9 +377,8 @@ export default function LiveSession({ params }: LiveSessionProps) {
           </section>
         </div>
 
-        {/* Right Column: Tracked Performance & Assistant Cue Feed (4 cols) */}
+        {/* Right Column: Tracked Performance & Assistant Cue Feed */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          {/* Active Exercise & Performance display */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between text-center" aria-label="Tracked Performance Dashboard">
             <div>
               <span className="text-xs uppercase font-extrabold text-yellow-400 tracking-wider block mb-1">
@@ -206,7 +387,6 @@ export default function LiveSession({ params }: LiveSessionProps) {
               <h2 className="text-xl font-bold text-white mb-2">Bodyweight Squats</h2>
             </div>
    
-            {/* Large Rep Display */}
             <div className="my-4 py-4 px-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col justify-center">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">
                 Your Tracked Performance
@@ -237,7 +417,6 @@ export default function LiveSession({ params }: LiveSessionProps) {
                 Assistant Cue Feed
               </h2>
     
-              {/* Message List */}
               <div className="space-y-4 mb-4 pr-1 max-h-[220px] lg:max-h-[320px] overflow-y-auto">
                 {chatPlaceholder.map((msg, index) => (
                   <div
@@ -257,7 +436,6 @@ export default function LiveSession({ params }: LiveSessionProps) {
               </div>
             </div>
 
-            {/* Question submission Form */}
             <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-slate-800/80 pt-4">
               <input
                 type="text"
@@ -281,9 +459,10 @@ export default function LiveSession({ params }: LiveSessionProps) {
       {/* Bottom Bar: Action buttons */}
       <section className="flex flex-wrap items-center justify-center gap-3 mt-8 pt-6 border-t border-slate-900" aria-label="Playback and Session Controls">
         <button
-          onClick={handlePlayPause}
+          onClick={isPlaying ? pause : play}
           className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
           id="pause-btn"
+          aria-label={isPlaying ? "Pause trainer video playback" : "Resume trainer video playback"}
         >
           {isPlaying ? "Pause Playback" : "Resume Playback"}
         </button>
@@ -292,6 +471,7 @@ export default function LiveSession({ params }: LiveSessionProps) {
           onClick={handleSkipSection}
           className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
           id="skip-btn"
+          aria-label="Skip to next workout exercise section"
         >
           Skip to Next Section
         </button>
@@ -301,6 +481,7 @@ export default function LiveSession({ params }: LiveSessionProps) {
           onClick={handleEndSession}
           className="px-5 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
           id="end-session-btn"
+          aria-label="End this assisted workout session and view progress history"
         >
           End & Save Session
         </Link>

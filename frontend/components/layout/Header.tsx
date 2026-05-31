@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useLayout } from "./LayoutContext";
 
 interface HeaderProps {
@@ -7,7 +8,27 @@ interface HeaderProps {
 }
 
 export default function Header({ id = "main-header" }: HeaderProps) {
+  const pathname = usePathname();
   const { setSidebarOpen } = useLayout();
+
+  const pageTitle =
+    pathname === "/"
+      ? "Home"
+      : pathname === "/video-library"
+      ? "Video Library"
+      : pathname === "/process"
+      ? "Prepare Assistance"
+      : pathname.startsWith("/session")
+      ? "Assisted Playback"
+      : pathname.startsWith("/history")
+      ? "History"
+      : pathname === "/settings"
+      ? "Settings"
+      : pathname === "/api-lab"
+      ? "API Lab"
+      : pathname === "/onboarding"
+      ? "Onboarding"
+      : "FitA11y";
 
   return (
     <header
@@ -37,7 +58,7 @@ export default function Header({ id = "main-header" }: HeaderProps) {
         </button>
 
         <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-200 truncate max-w-[160px] sm:max-w-xs">
-          Fitness Session
+          {pageTitle}
         </h1>
       </div>
 

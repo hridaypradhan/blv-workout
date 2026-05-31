@@ -167,14 +167,14 @@ export default function Onboarding() {
             </div>
           </section>
 
-          {/* Quick Dashboard Action */}
+          {/* Quick Video Library Action */}
           <div className="flex justify-between items-center py-2">
             <Link
-              href="/dashboard"
+              href="/video-library"
               className="w-full inline-flex items-center justify-center px-6 py-3.5 text-base font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
               id="skip-onboarding-btn"
             >
-              Skip Onboarding, Go to Dashboard
+              Skip Onboarding, Go to Video Library
               <svg
                 className="w-4 h-4 ml-2"
                 fill="none"

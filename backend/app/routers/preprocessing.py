@@ -148,6 +148,6 @@ async def delete_prepared_video(video_id: UUID) -> dict:
 
 @router.get("/jobs")
 async def list_jobs() -> list[dict]:
-    """List all assistance preparation jobs (newest first). Used by the dashboard."""
+    """List all assistance preparation jobs (newest first)."""
     jobs = job_store.list_jobs()
     return [j.to_dict() for j in jobs]

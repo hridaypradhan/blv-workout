@@ -117,10 +117,10 @@ export default function LiveSession({ params }: LiveSessionProps) {
           <h2 className="text-xl font-bold text-white mb-2">Failed to Load Session</h2>
           <p className="text-sm text-slate-400 mb-6">{jobError}</p>
           <Link
-            href="/dashboard"
+            href="/video-library"
             className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
           >
-            Back to Dashboard
+            Back to Video Library
           </Link>
         </div>
       </PageWrapper>
@@ -140,10 +140,10 @@ export default function LiveSession({ params }: LiveSessionProps) {
             Current Stage: {jobStage ? jobStage.replace(/_/g, " ") : "unknown"}
           </p>
           <Link
-            href="/dashboard"
+            href="/video-library"
             className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
           >
-            Back to Dashboard
+            Back to Video Library
           </Link>
         </div>
       </PageWrapper>
@@ -219,7 +219,7 @@ export default function LiveSession({ params }: LiveSessionProps) {
 
         {/* Right Column: Tracked Performance & Assistant Cue Feed */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between text-center" aria-label="Tracked Performance Dashboard">
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between text-center" aria-label="Tracked Performance Summary">
             <div>
               <span className="text-xs uppercase font-extrabold text-yellow-400 tracking-wider block mb-1">
                 Active Exercise Section

@@ -109,7 +109,7 @@ export default function ImportedVideoCard({
           </Link>
         ) : (
           <div className="w-full flex items-center justify-center px-4 py-2.5 bg-slate-800/50 text-slate-500 font-semibold rounded-xl text-sm border border-slate-800">
-            Preparing…
+            Preparing...
           </div>
         )}
       </div>

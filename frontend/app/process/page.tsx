@@ -297,10 +297,10 @@ export default function ProcessVideo() {
                   Assistance sidecar is ready. You can now start assisted playback of the YouTube video.
                 </p>
                 <Link
-                  href="/dashboard"
+                  href="/video-library"
                   className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold rounded-lg text-xs border border-emerald-500/30 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
                 >
-                  Go to Dashboard
+                  Go to Video Library
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
                   </svg>

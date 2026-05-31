@@ -20,7 +20,7 @@ export default function Home() {
   };
 
   return (
-    <PageWrapper id="dashboard-wrapper">
+    <PageWrapper id="home-wrapper">
       {/* Hero Section */}
       <section className="relative overflow-hidden rounded-2xl md:rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 md:p-12 mb-6 md:mb-8 shadow-2xl">
         {/* Glow effect */}

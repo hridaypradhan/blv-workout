@@ -48,9 +48,31 @@ export interface SleeveStatus {
   rightLeg: boolean;
 }
 
+export enum FeedbackModality {
+  AUDIO = "audio",
+  HAPTIC = "haptic",
+  VISUAL = "visual",
+}
+
 export interface User {
-  id: string;
+  id?: string | null;
+  email: string;
   name: string;
+  assistant_persona: AssistantPersona;
+  voice_settings?: Record<string, unknown> | null;
+  feedback_modalities?: FeedbackModality[] | null;
+  audio_coexistence?: AudioCoexistenceSettings | null;
+  created_at?: string | null;
+}
+
+export interface UserSettingsUpdate {
+  assistant_persona?: AssistantPersona | null;
+  voice_settings?: Record<string, unknown> | null;
+  feedback_modalities?: FeedbackModality[] | null;
+  audio_coexistence?: AudioCoexistenceSettings | null;
+}
+
+export interface UserPreferencesFormState {
   visionLevel: string;
   screenReaderType: string;
   personaPreference: AssistantPersona;
@@ -81,39 +103,44 @@ export interface ExerciseTimelineAnchor {
 export type Exercise = ExerciseTimelineAnchor;
 
 export interface Video {
-  id: string;
-  youtubeUrl: string;
-  youtube_url?: string;
-  youtube_id?: string;
-  title: string;
-  channel_name?: string;
-  thumbnail_url?: string;
-  exercises?: ExerciseTimelineAnchor[];
-  processingStatus: ProcessingStage;
-  processing_stage?: ProcessingStage;
-  createdAt: string;
+  id?: string | null;
+  youtube_id?: string | null;
+  youtube_url: string;
+  title?: string | null;
+  channel_name?: string | null;
+  thumbnail_url?: string | null;
+  processing_stage: ProcessingStage;
+  transcript?: string | null;
+  created_at?: string | null;
+}
+
+export interface RepEvent {
+  id?: string | null;
+  session_id: string;
+  exercise_id: string;
+  rep_count: number;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
+export interface FormError {
+  joint: string;
+  observed_angle: number;
+  expected_range: [number, number];
+  severity: string;
+  message?: string | null;
 }
 
 export interface Session {
-  id: string;
-  userId: string;
-  videoId: string;
-  startTime: string;
-  endTime: string;
-  repEvents: Array<{
-    timestamp: string;
-    repNumber: number;
-    accuracy: number;
-  }>;
-  formErrors: Array<{
-    timestamp: string;
-    exerciseName: string;
-    errorType: string;
-    details: string;
-  }>;
-  paceScore: string;
-  playbackEvents?: PlaybackEvent[];
-  assistantCuesDelivered?: AssistantCue[];
+  id?: string | null;
+  user_id: string;
+  video_id: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  reps?: RepEvent[];
+  form_errors?: FormError[];
+  playback_events?: PlaybackEvent[];
+  summary?: string | null;
 }
 
 export enum TrainerInstructionEventType {

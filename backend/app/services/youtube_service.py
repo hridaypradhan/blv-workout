@@ -2,13 +2,16 @@
 
 The original YouTube video is always played via the embedded YouTube IFrame
 player. This service provides:
-1. YouTube ID parsing from various URL formats
-2. Video metadata fetching (title, channel, duration, thumbnail)
-3. Transient audio extraction for analysis only (Whisper/Gemini processing)
-4. Cleanup of transient artifacts after analysis
+1. YouTube ID parsing from various URL formats.
+2. Video metadata fetching (title, channel, and thumbnail via oEmbed).
+3. Temporary, metadata-only video duration lookup using yt-dlp flat extraction (no download).
+4. Transient audio extraction for analysis only (Whisper/Gemini processing) in a separate step.
+5. Cleanup of transient artifacts after analysis.
 
-yt-dlp, if present, is used only for transient analysis — never for
-storing video files for local playback.
+yt-dlp, if present, is used:
+- Temporarily for metadata-only duration lookup (with no media downloads).
+- For transient audio extraction (separately, for analysis only).
+It is never used for playing or storing local videos.
 """
 
 from __future__ import annotations
@@ -69,52 +72,12 @@ def parse_youtube_id(url: str) -> str:
     )
 
 
-def fetch_youtube_metadata(url_or_id: str) -> dict[str, Any]:
-    """Fetch YouTube video metadata for assistance preparation.
-
-    Attempts to use yt-dlp first to extract full details (including duration),
-    and falls back to oEmbed or placeholders if yt-dlp fails or is not present.
-
-    Args:
-        url_or_id: Full YouTube URL or 11-character video ID.
+def fetch_oembed_metadata(youtube_url: str, youtube_id: str) -> dict[str, Any]:
+    """Fetch basic YouTube video metadata using the oEmbed API.
 
     Returns:
-        Dict with keys: title, channel_name, duration, thumbnail_url, youtube_id.
+        Dict containing keys: title, channel_name, duration (always None), thumbnail_url, youtube_id.
     """
-    try:
-        youtube_id = parse_youtube_id(url_or_id) if "youtube" in url_or_id or "youtu.be" in url_or_id else url_or_id
-    except YouTubeMetadataError:
-        youtube_id = url_or_id
-
-    if len(url_or_id) == 11 and not ("youtube.com" in url_or_id or "youtu.be" in url_or_id):
-        youtube_url = f"https://www.youtube.com/watch?v={url_or_id}"
-    else:
-        youtube_url = url_or_id
-
-    # Try yt-dlp first
-    if yt_dlp is not None:
-        try:
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(youtube_url, download=False)
-                if info:
-                    duration = info.get("duration")
-                    duration_val = float(duration) if duration is not None else None
-                    return {
-                        "youtube_id": youtube_id,
-                        "title": info.get("title") or "Prepared YouTube video",
-                        "channel_name": info.get("uploader") or info.get("channel") or "Unknown creator",
-                        "duration": duration_val,
-                        "thumbnail_url": info.get("thumbnail") or f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg",
-                    }
-        except Exception:
-            pass
-
-    # Fallback to oEmbed
     try:
         import urllib.request
         import urllib.parse
@@ -146,6 +109,63 @@ def fetch_youtube_metadata(url_or_id: str) -> dict[str, Any]:
             "duration": None,
             "thumbnail_url": f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg",
         }
+
+
+def fetch_duration_metadata_with_ytdlp(youtube_url: str) -> float | None:
+    """Fetch the duration of a YouTube video using yt-dlp.
+
+    NOTE: Using yt-dlp metadata extraction is temporary and for prototype purposes only.
+    No audio or video media is downloaded during this metadata lookup.
+    """
+    # TODO: Replace yt-dlp duration lookup with YouTube Data API or another official/lightweight metadata source.
+    if yt_dlp is None:
+        return None
+
+    try:
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+            if info:
+                duration = info.get("duration")
+                return float(duration) if duration is not None else None
+    except Exception:
+        pass
+    return None
+
+
+def fetch_youtube_metadata(url_or_id: str) -> dict[str, Any]:
+    """Fetch YouTube video metadata by combining oEmbed and yt-dlp.
+
+    Args:
+        url_or_id: Full YouTube URL or 11-character video ID.
+
+    Returns:
+        Dict with keys: title, channel_name, duration, thumbnail_url, youtube_id.
+    """
+    try:
+        youtube_id = parse_youtube_id(url_or_id) if "youtube" in url_or_id or "youtu.be" in url_or_id else url_or_id
+    except YouTubeMetadataError:
+        youtube_id = url_or_id
+
+    if len(url_or_id) == 11 and not ("youtube.com" in url_or_id or "youtu.be" in url_or_id):
+        youtube_url = f"https://www.youtube.com/watch?v={url_or_id}"
+    else:
+        youtube_url = url_or_id
+
+    # Fetch basic oEmbed metadata first
+    metadata = fetch_oembed_metadata(youtube_url, youtube_id)
+
+    # Attempt to fetch real duration via yt-dlp without downloading media
+    duration = fetch_duration_metadata_with_ytdlp(youtube_url)
+    if duration is not None:
+        metadata["duration"] = duration
+
+    return metadata
+
 
 
 def fetch_transient_audio_for_analysis(

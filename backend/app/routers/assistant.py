@@ -7,7 +7,7 @@ secondary to the creator's instruction.
 
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import (
     AssistantCue,
@@ -33,7 +33,7 @@ async def generate_correction(payload: CorrectionRequest) -> AssistantCue:
     This is a brief, contextual correction that supplements — never
     replaces — the trainer's own form instruction in the video.
     """
-    raise NotImplementedError("TODO: implement")
+    raise HTTPException(status_code=501, detail="Form correction generation is not implemented yet.")
 
 
 @router.post("/pacing/adaptive", response_model=AdaptivePacingResponse)
@@ -95,7 +95,7 @@ async def generate_pacing_feedback(payload: PacingRequest) -> AssistantCue:
 @router.post("/motivation", response_model=AssistantCue)
 async def generate_motivation(payload: MotivationRequest) -> AssistantCue:
     """Generate a low-priority motivational assistant cue for a milestone event."""
-    raise NotImplementedError("TODO: implement")
+    raise HTTPException(status_code=501, detail="Motivational cue generation is not implemented yet.")
 
 
 @router.post("/qa", response_model=AssistantCue)
@@ -105,7 +105,7 @@ async def answer_question(payload: QARequest) -> AssistantCue:
     The assistant pauses or waits for a speaking opportunity before
     responding, respecting audio coexistence settings.
     """
-    raise NotImplementedError("TODO: implement")
+    raise HTTPException(status_code=501, detail="Assistant Q&A is not implemented yet.")
 
 
 @router.get("/form-risk-templates/{exercise_id}", response_model=list[str])
@@ -114,4 +114,4 @@ async def get_form_risk_templates(exercise_id: UUID) -> list[str]:
 
     These templates are supplementary cues — not a replacement trainer script.
     """
-    raise NotImplementedError("TODO: implement")
+    raise HTTPException(status_code=501, detail="Retrieving form risk templates is not implemented yet.")

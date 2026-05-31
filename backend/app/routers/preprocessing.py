@@ -20,84 +20,10 @@ from fastapi.responses import StreamingResponse
 from app.core.config import settings
 from app.core.job_store import job_store, JobRecord
 from app.models.schemas import AssistanceSidecarManifest, ProcessingStage, YouTubeURL
-from app.services.youtube_service import (
-    YouTubeMetadataError,
-    fetch_youtube_metadata,
-    parse_youtube_id,
-)
+from app.services.preprocessing_service import run_assistance_preparation
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def _run_assistance_preparation(video_id: str, youtube_url: str) -> None:
-    """Background task: fetch metadata, prepare sidecar manifest, update job state.
-
-    At current maturity, this pipeline:
-    1. Validates the YouTube URL and extracts the video ID
-    2. Fetches YouTube metadata (stub/placeholder)
-    3. Stores metadata in the job record
-    4. Marks the job as completed with an empty sidecar manifest
-
-    Future stages (TODO):
-    - Transcribe trainer audio (Whisper)
-    - Anchor exercise timeline (Gemini)
-    - Classify trainer instruction events (Gemini)
-    - Analyze expected movement windows (MediaPipe)
-    - Generate full sidecar manifest
-    """
-
-    try:
-        # Stage: fetching_metadata
-        job_store.update_stage(video_id, ProcessingStage.FETCHING_METADATA)
-
-        youtube_id = parse_youtube_id(youtube_url)
-        metadata = fetch_youtube_metadata(youtube_url)
-
-        job_store.update_stage(
-            video_id,
-            ProcessingStage.FETCHING_METADATA,
-            youtube_id=youtube_id,
-            title=metadata.get("title"),
-            channel_name=metadata.get("channel_name"),
-            thumbnail_url=metadata.get("thumbnail_url"),
-            duration=metadata.get("duration"),
-        )
-
-        # Stage: transcribing (TODO: Whisper/caption analysis)
-        job_store.update_stage(video_id, ProcessingStage.TRANSCRIBING)
-        # TODO: Extract transcript from captions or transient audio
-
-        # Stage: anchoring_timeline (TODO: Gemini exercise segmentation)
-        job_store.update_stage(video_id, ProcessingStage.ANCHORING_TIMELINE)
-        # TODO: generate_exercise_timeline_anchors()
-
-        # Stage: classifying_trainer_instructions (TODO: Gemini classification)
-        job_store.update_stage(video_id, ProcessingStage.CLASSIFYING_TRAINER_INSTRUCTIONS)
-        # TODO: classify_trainer_instruction_events()
-
-        # Stage: analyzing_movement_windows (TODO: MediaPipe analysis)
-        job_store.update_stage(video_id, ProcessingStage.ANALYZING_MOVEMENT_WINDOWS)
-        # TODO: Analyze expected movement windows for sidecar
-
-        # Stage: generating_sidecar_manifest
-        job_store.update_stage(video_id, ProcessingStage.GENERATING_SIDECAR_MANIFEST)
-        # TODO: Assemble full AssistanceSidecarManifest
-
-        # Stage: completed
-        job_store.update_stage(video_id, ProcessingStage.COMPLETED)
-        logger.info("Assistance preparation completed for video %s", video_id)
-
-    except YouTubeMetadataError as exc:
-        logger.error("Assistance preparation failed for video %s: %s", video_id, exc)
-        job_store.update_stage(
-            video_id, ProcessingStage.FAILED, error=str(exc)
-        )
-    except Exception as exc:
-        logger.exception("Unexpected error in assistance preparation for video %s", video_id)
-        job_store.update_stage(
-            video_id, ProcessingStage.FAILED, error=f"Unexpected error: {exc}"
-        )
 
 
 def _job_to_status_dict(job: JobRecord) -> dict:
@@ -133,7 +59,7 @@ async def submit_video(
         )
 
     job = job_store.create_job(url_str)
-    background_tasks.add_task(_run_assistance_preparation, job.video_id, url_str)
+    background_tasks.add_task(run_assistance_preparation, job.video_id, url_str)
 
     return {"video_id": job.video_id}
 

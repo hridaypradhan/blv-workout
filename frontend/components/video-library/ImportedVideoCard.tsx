@@ -10,6 +10,7 @@ interface ImportedVideoCardProps {
   handleImageError: (videoId: string) => void;
   formatDuration: (seconds: number | null | undefined) => string;
   handleStartSession: (videoId: string) => void;
+  onRequestDelete: (job: AssistanceJob) => void;
 }
 
 export default function ImportedVideoCard({
@@ -20,6 +21,7 @@ export default function ImportedVideoCard({
   handleImageError,
   formatDuration,
   handleStartSession,
+  onRequestDelete,
 }: ImportedVideoCardProps) {
   return (
     <article
@@ -42,30 +44,51 @@ export default function ImportedVideoCard({
         {/* Dark overlay for readability */}
         <div className="absolute inset-0 bg-slate-950/20 group-hover:bg-slate-950/10 transition-colors duration-300" />
 
-        <div className={`absolute top-3 right-3 px-2.5 py-1 rounded-md text-xs font-semibold border z-10 ${badge.classes}`}>
-          {badge.text}
+        {/* Badges on the top-left */}
+        <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
+          {job.duration ? (
+            <div className="px-2.5 py-1 rounded-md bg-slate-950/75 backdrop-blur-sm text-xs font-semibold text-slate-200 border border-slate-800">
+              {formatDuration(job.duration)}
+            </div>
+          ) : (
+            <div className="px-2.5 py-1 rounded-md bg-slate-950/75 backdrop-blur-sm text-xs font-semibold text-slate-400 border border-slate-800">
+              Duration unavailable
+            </div>
+          )}
+          <div className={`px-2.5 py-1 rounded-md text-xs font-semibold border ${badge.classes}`}>
+            {badge.text}
+          </div>
         </div>
 
-        {job.duration ? (
-          <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-slate-950/75 backdrop-blur-sm text-xs font-semibold text-slate-200 border border-slate-800 z-10">
-            {formatDuration(job.duration)}
-          </div>
-        ) : (
-          <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-slate-950/75 backdrop-blur-sm text-xs font-semibold text-slate-400 border border-slate-800 z-10">
-            Duration unavailable
-          </div>
-        )}
-
-        <svg
-          className="absolute w-10 h-10 text-white/90 group-hover:scale-110 transition-transform duration-300 drop-shadow-md z-10"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        {/* Delete button on the top-right */}
+        <div className="absolute top-3 right-3 z-20">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRequestDelete(job);
+            }}
+            className="w-11 h-11 inline-flex items-center justify-center rounded-lg bg-slate-950/75 hover:bg-red-600/90 text-slate-400 hover:text-white border border-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
+            aria-label={`Delete ${job.title || "video"}`}
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Content */}

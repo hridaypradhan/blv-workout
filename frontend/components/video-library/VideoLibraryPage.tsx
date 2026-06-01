@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { AssistanceJob, ProcessingStage } from "@/types";
-import { getJobs } from "@/lib/api";
+import { getJobs, deleteVideo } from "@/lib/api";
 import ImportedVideoCard from "@/components/video-library/ImportedVideoCard";
 import SampleVideoCard from "@/components/video-library/SampleVideoCard";
+import DeleteVideoDialog from "@/components/video-library/DeleteVideoDialog";
 
 /** Hardcoded demo videos shown when the backend has no imported videos yet. */
 const DEMO_VIDEOS = [
@@ -78,9 +79,42 @@ const CARD_GRADIENTS = [
 export default function VideoLibraryPage() {
   const [importedJobs, setImportedJobs] = useState<AssistanceJob[]>([]);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const [selectedJobForDelete, setSelectedJobForDelete] = useState<AssistanceJob | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   const handleImageError = (videoId: string) => {
     setFailedImages((prev) => ({ ...prev, [videoId]: true }));
+  };
+
+  const handleRequestDelete = (job: AssistanceJob) => {
+    setSelectedJobForDelete(job);
+    setDeleteError(null);
+    setIsDeleting(false);
+  };
+
+  const handleCancelDelete = () => {
+    if (isDeleting) return;
+    setSelectedJobForDelete(null);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedJobForDelete) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteVideo(selectedJobForDelete.video_id);
+      setImportedJobs((prev) => prev.filter((j) => j.video_id !== selectedJobForDelete.video_id));
+      setSelectedJobForDelete(null);
+    } catch (err) {
+      console.error("Failed to delete video:", err);
+      const message = err instanceof Error ? err.message : "Failed to delete the video. Please try again.";
+      setDeleteError(message);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   useEffect(() => {
@@ -108,7 +142,7 @@ export default function VideoLibraryPage() {
       {/* Header section with "+ Prepare Assistance" button */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold text-white">Video Library</h1>
+          <h1 ref={headingRef} tabIndex={-1} className="text-3xl font-extrabold text-white focus:outline-none">Video Library</h1>
           <p className="text-slate-400 text-sm mt-1">
             Browse and start assisted playback for your YouTube workouts.
           </p>
@@ -156,6 +190,7 @@ export default function VideoLibraryPage() {
                   handleImageError={handleImageError}
                   formatDuration={formatDuration}
                   handleStartSession={handleStartSession}
+                  onRequestDelete={handleRequestDelete}
                 />
               );
             })}
@@ -178,6 +213,16 @@ export default function VideoLibraryPage() {
           ))}
         </div>
       </section>
+
+      <DeleteVideoDialog
+        job={selectedJobForDelete}
+        isOpen={selectedJobForDelete !== null}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
+        error={deleteError}
+        focusFallbackRef={headingRef}
+      />
     </PageWrapper>
   );
 }

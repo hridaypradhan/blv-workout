@@ -316,6 +316,7 @@ class Session(BaseModel):
     id: UUID | None = None
     user_id: UUID
     video_id: UUID
+    video_title: str | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
     reps: list[RepEvent] = Field(default_factory=list)

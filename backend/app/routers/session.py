@@ -18,6 +18,7 @@ from app.models.schemas import (
     SessionStartRequest,
 )
 from app.core.session_store import session_store
+from app.core.job_store import job_store
 
 router = APIRouter()
 
@@ -25,7 +26,13 @@ router = APIRouter()
 @router.post("/start", response_model=Session)
 async def start_session(payload: SessionStartRequest) -> Session:
     """Start an assisted playback session for a YouTube video and user."""
-    return session_store.create_session(payload.user_id, payload.video_id)
+    job = job_store.get_job(str(payload.video_id))
+    video_title = job.title if job else None
+    return session_store.create_session(
+        user_id=payload.user_id,
+        video_id=payload.video_id,
+        video_title=video_title
+    )
 
 
 @router.post("/{session_id}/rep", response_model=dict[str, str])
@@ -76,6 +83,12 @@ async def end_session(session_id: UUID) -> dict[str, str]:
     if not success:
         raise HTTPException(status_code=404, detail="Session not found.")
     return {"status": "ended"}
+
+
+@router.get("", response_model=list[Session])
+async def list_sessions(user_id: UUID, include_active: bool = False) -> list[Session]:
+    """List all completed (or active) sessions for a user, sorted newest first."""
+    return session_store.list_sessions(user_id, include_active)
 
 
 @router.get("/{session_id}", response_model=Session)

@@ -15,13 +15,19 @@ class SessionStore:
         self._sessions: dict[uuid.UUID, Session] = {}
         self._lock = threading.Lock()
 
-    def create_session(self, user_id: uuid.UUID, video_id: uuid.UUID) -> Session:
+    def create_session(
+        self,
+        user_id: uuid.UUID,
+        video_id: uuid.UUID,
+        video_title: Optional[str] = None
+    ) -> Session:
         """Create a new assisted playback session and store it in-memory."""
         session_id = uuid.uuid4()
         session = Session(
             id=session_id,
             user_id=user_id,
             video_id=video_id,
+            video_title=video_title,
             started_at=datetime.now(timezone.utc),
             ended_at=None,
             reps=[],
@@ -119,6 +125,22 @@ class SessionStore:
                 f"playback interactions during your assisted workout. Great effort!"
             )
             return True
+
+    def list_sessions(self, user_id: uuid.UUID, include_active: bool = False) -> list[Session]:
+        """List all sessions for a user, sorted newest first."""
+        with self._lock:
+            sessions = [
+                s for s in self._sessions.values()
+                if s.user_id == user_id and (include_active or s.ended_at is not None)
+            ]
+        # Sort newest first, using ended_at if present, fallback to started_at
+        def sort_key(s: Session):
+            val = s.ended_at if s.ended_at is not None else s.started_at
+            return val
+
+        sessions.sort(key=sort_key, reverse=True)
+        return sessions
+
 
 
 # Module-level singleton

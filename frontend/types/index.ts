@@ -135,6 +135,7 @@ export interface Session {
   id?: string | null;
   user_id: string;
   video_id: string;
+  video_title?: string | null;
   started_at?: string | null;
   ended_at?: string | null;
   reps?: RepEvent[];

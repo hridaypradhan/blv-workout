@@ -50,14 +50,10 @@ export async function endSession(sessionId: string): Promise<{ status: string }>
   return checkResponse(res, "End session failed");
 }
 
-/** Get a list of past sessions for a user.
- * 
- * TODO: Implement backend history list endpoint when real History UI is added.
- * For now, this is a placeholder stub.
- */
+/** Get a list of past sessions for a user. */
 export async function getSessionHistory(userId: string): Promise<Session[]> {
-  console.log("Fetching session history for user (stub):", userId);
-  return [];
+  const res = await fetch(`${API_BASE_URL}/api/session?user_id=${userId}`);
+  return checkResponse(res, "Fetch session history failed");
 }
 
 /** Fetch details of a past session. */

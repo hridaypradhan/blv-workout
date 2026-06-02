@@ -142,6 +142,5 @@ class SessionStore:
         return sessions
 
 
-
 # Module-level singleton
 session_store = SessionStore()

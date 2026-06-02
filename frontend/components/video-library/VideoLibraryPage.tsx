@@ -8,34 +8,8 @@ import { getJobs, deleteVideo } from "@/lib/api";
 import ImportedVideoCard from "@/components/video-library/ImportedVideoCard";
 import SampleVideoCard from "@/components/video-library/SampleVideoCard";
 import DeleteVideoDialog from "@/components/video-library/DeleteVideoDialog";
+import { DEMO_VIDEOS } from "@/lib/demoVideos";
 
-/** Hardcoded demo videos shown when the backend has no imported videos yet. */
-const DEMO_VIDEOS = [
-  {
-    id: "v-squat-1",
-    title: "Beginner Bodyweight Squats & Alignment",
-    channelName: "Bodyweight Coach",
-    duration: "12 mins",
-    lastSession: "2 days ago",
-    thumbnailBg: "from-blue-600 to-indigo-800",
-  },
-  {
-    id: "v-lunges-2",
-    title: "Leg Strength: Reverse Lunges Tutorial",
-    channelName: "Fit Foundations",
-    duration: "15 mins",
-    lastSession: "1 week ago",
-    thumbnailBg: "from-amber-600 to-orange-800",
-  },
-  {
-    id: "v-core-3",
-    title: "Core Stability: Deadbug & Bird-dog Guide",
-    channelName: "A11y Movement",
-    duration: "10 mins",
-    lastSession: "Never",
-    thumbnailBg: "from-emerald-600 to-teal-800",
-  },
-];
 
 /** Human-readable badge for a processing stage. */
 function stageBadge(stage: ProcessingStage) {

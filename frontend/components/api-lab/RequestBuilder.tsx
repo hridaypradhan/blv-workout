@@ -274,7 +274,7 @@ export default function RequestBuilder({
               <button
                 type="button"
                 onClick={handleCopyExpected}
-                className="absolute top-3 right-3 text-[10px] font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-850 hover:border-slate-700 rounded-lg px-2.5 py-1.5 transition-all shadow-md active:scale-95"
+                className="absolute top-3 right-3 text-[10px] font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg px-2.5 py-1.5 transition-all shadow-md active:scale-95"
               >
                 {copied ? "Copied!" : "Copy"}
               </button>

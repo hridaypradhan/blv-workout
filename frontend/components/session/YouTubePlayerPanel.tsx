@@ -74,7 +74,7 @@ export default function YouTubePlayerPanel({
       {/* In-App Playback Adjustments */}
       <div className="flex flex-col gap-4 border-t border-slate-800/60 pt-4" aria-label="Playback Options">
         {/* Custom FitA11y Progress Bar (clear of iframe to prevent controls clipping) */}
-        <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-850" aria-hidden="true">
+        <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800" aria-hidden="true">
           <div
             className="bg-red-600 h-full rounded-full transition-all"
             style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}

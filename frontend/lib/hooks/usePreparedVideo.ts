@@ -2,32 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { getProcessingStatus } from "../api";
-import { ProcessingStage } from "../../types";
+import { ProcessingStage } from "@/types";
 
-/** Fallback mapping for demo/sample cards to test-drive real video playback */
-const DEMO_YOUTUBE_IDS: Record<
-  string,
-  { youtube_id: string; title: string; channel_name: string; duration: number }
-> = {
-  "v-squat-1": {
-    youtube_id: "aclHkVaku9U",
-    title: "Beginner Bodyweight Squats & Alignment",
-    channel_name: "Bodyweight Coach",
-    duration: 720,
-  },
-  "v-lunges-2": {
-    youtube_id: "qyvP6M3VeqY",
-    title: "Leg Strength: Reverse Lunges Tutorial",
-    channel_name: "Fit Foundations",
-    duration: 900,
-  },
-  "v-core-3": {
-    youtube_id: "dJlFm3UxM5A",
-    title: "Core Stability: Deadbug & Bird-dog Guide",
-    channel_name: "A11y Movement",
-    duration: 600,
-  },
-};
 
 export interface PreparedVideoData {
   isLoading: boolean;
@@ -54,19 +30,6 @@ export function usePreparedVideo(videoId: string): PreparedVideoData {
   const [stage, setStage] = useState<ProcessingStage | null>(null);
 
   useEffect(() => {
-    if (videoId in DEMO_YOUTUBE_IDS) {
-      const demo = DEMO_YOUTUBE_IDS[videoId];
-      setYoutubeId(demo.youtube_id);
-      setMetadata({
-        title: demo.title,
-        channel_name: demo.channel_name,
-        duration: demo.duration,
-      });
-      setStage(ProcessingStage.COMPLETED);
-      setIsLoading(false);
-      return;
-    }
-
     let active = true;
     const fetchStatus = async () => {
       try {

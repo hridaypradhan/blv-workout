@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
+import { startSession } from "@/lib/api";
+import { PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
 
 interface SetupPageProps {
   params: {
@@ -11,13 +13,30 @@ interface SetupPageProps {
 }
 
 export default function SessionSetup({ params }: SetupPageProps) {
+  const router = useRouter();
+  const [isStarting, setIsStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const handleAskQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     // TODO: Send query to LLM Assistant for vocal response about the exercises
   };
 
-  const handleStartWorkout = () => {
-    // TODO: Transition to live assisted playback interface
+  const handleStartWorkout = async () => {
+    setIsStarting(true);
+    setError(null);
+    try {
+      const session = await startSession(params.videoId, PROTOTYPE_USER_ID);
+      if (!session.id) {
+        throw new Error("Backend response did not contain a valid session ID.");
+      }
+      router.push(`/session/${params.videoId}?sessionId=${session.id}`);
+    } catch (err) {
+      console.error("Failed to start session:", err);
+      const message = err instanceof Error ? err.message : "Failed to start assisted playback session. Please check if the backend is running.";
+      setError(message);
+      setIsStarting(false);
+    }
   };
 
   const sleeveStatus = [
@@ -93,7 +112,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                   <div key={sleeve.key} className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
                     <span className="text-xs font-semibold text-slate-300">{sleeve.name}</span>
                     <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-red-500" aria-hidden="true" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500" aria-hidden="true" />
                       <span className="text-[10px] uppercase font-bold text-slate-500">Disconnected</span>
                     </div>
                   </div>
@@ -137,7 +156,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
             </div>
           </section>
 
-          {/* Audio Coexistence Settings */}
+          {/* Audio Coexistence Preferences */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="audio-coexistence-heading">
             <h2 id="audio-coexistence-heading" className="text-lg font-bold text-white mb-2">
               Audio Coexistence Preferences
@@ -200,14 +219,44 @@ export default function SessionSetup({ params }: SetupPageProps) {
 
           {/* Start Assisted Playback Button */}
           <div className="pt-2">
-            <Link
-              href={`/session/${params.videoId}`}
+            {error && (
+              <div
+                className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 font-medium flex items-center gap-2"
+                role="alert"
+              >
+                <svg
+                  className="w-5 h-5 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                <span>{error}</span>
+              </div>
+            )}
+            <button
               onClick={handleStartWorkout}
-              className="w-full inline-flex items-center justify-center px-6 py-4 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-extrabold rounded-xl text-base transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10 text-center"
+              disabled={isStarting}
+              className="w-full inline-flex items-center justify-center px-6 py-4 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-800 disabled:text-slate-400 text-slate-950 font-extrabold rounded-xl text-base transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10 text-center"
               id="start-workout-btn"
             >
-              Start Assisted Playback
-            </Link>
+              {isStarting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <span>Starting session...</span>
+                </div>
+              ) : (
+                "Start Assisted Playback"
+              )}
+            </button>
           </div>
         </div>
       </div>

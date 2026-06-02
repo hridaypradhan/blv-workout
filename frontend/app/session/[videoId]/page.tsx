@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { useYouTubePlayer } from "@/lib/hooks/useYouTubePlayer";
 import { usePreparedVideo } from "@/lib/hooks/usePreparedVideo";
 import { ProcessingStage } from "@/types";
 import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
+import { recordPlaybackEvent, endSession } from "@/lib/api";
 
 interface LiveSessionProps {
   params: {
@@ -23,11 +25,17 @@ function formatTime(seconds: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-export default function LiveSession({ params }: LiveSessionProps) {
+function LiveSessionContent({ params }: LiveSessionProps) {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("sessionId");
+  const router = useRouter();
+
   const { isLoading: isLoadingJob, error: jobError, youtubeId, metadata, stage: jobStage } = usePreparedVideo(params.videoId);
 
   const [assistantMuted, setAssistantMuted] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  const [isEnding, setIsEnding] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
 
   // Hook into the YouTube IFrame player
   const {
@@ -47,7 +55,7 @@ export default function LiveSession({ params }: LiveSessionProps) {
   } = useYouTubePlayer(youtubeId);
 
   // Monitor playback states to populate the screen-reader announcement live region
-  const prevIsPlaying = useRef(false);
+  const prevIsPlayingAnnouncement = useRef(false);
   useEffect(() => {
     if (playerError) {
       setAnnouncement(`Trainer player error: ${playerError}`);
@@ -57,15 +65,76 @@ export default function LiveSession({ params }: LiveSessionProps) {
       setAnnouncement("Trainer video is buffering.");
     } else if (isPlaying) {
       setAnnouncement("Trainer video playback started.");
-    } else if (!isPlaying && prevIsPlaying.current) {
+    } else if (!isPlaying && prevIsPlayingAnnouncement.current) {
       setAnnouncement("Trainer video playback paused.");
     } else if (isReady) {
       setAnnouncement((prev) => prev.includes("ready") ? prev : "Trainer video player is ready.");
     } else if (!isReady && youtubeId) {
       setAnnouncement("Loading trainer video player.");
     }
-    prevIsPlaying.current = isPlaying;
+    prevIsPlayingAnnouncement.current = isPlaying;
   }, [isReady, isPlaying, isBuffering, hasEnded, playerError, youtubeId]);
+
+  // Telemetry recording refs
+  const prevIsPlaying = useRef<boolean | null>(null);
+  const prevPlaybackRate = useRef<number | null>(null);
+  const prevTime = useRef<number>(0);
+  const isInitialTime = useRef<boolean>(true);
+
+  // Track state transitions (play, pause, ended)
+  useEffect(() => {
+    if (!sessionId || !isReady) return;
+
+    if (prevIsPlaying.current !== isPlaying) {
+      if (prevIsPlaying.current !== null) {
+        if (!isPlaying && hasEnded) {
+          recordPlaybackEvent(sessionId, "ended", currentTime * 1000, { source: "youtube_player" })
+            .catch((err) => console.warn("Failed to log playback ended event:", err));
+        } else {
+          const eventType = isPlaying ? "play" : "pause";
+          recordPlaybackEvent(sessionId, eventType, currentTime * 1000, { source: "youtube_player" })
+            .catch((err) => console.warn("Failed to log playback state event:", err));
+        }
+      }
+      prevIsPlaying.current = isPlaying;
+    }
+  }, [isPlaying, hasEnded, isReady, sessionId, currentTime]);
+
+  // Track playback rate changes
+  useEffect(() => {
+    if (!sessionId || !isReady) return;
+
+    if (prevPlaybackRate.current !== null && prevPlaybackRate.current !== playbackRate) {
+      recordPlaybackEvent(sessionId, "speed_change", currentTime * 1000, {
+        from_rate: prevPlaybackRate.current,
+        to_rate: playbackRate,
+      }).catch((err) => console.warn("Failed to log playback rate event:", err));
+    }
+    prevPlaybackRate.current = playbackRate;
+  }, [playbackRate, isReady, sessionId, currentTime]);
+
+  // Track seek events
+  useEffect(() => {
+    if (!sessionId || !isReady) return;
+
+    if (isInitialTime.current) {
+      if (currentTime > 0) {
+        isInitialTime.current = false;
+        prevTime.current = currentTime;
+      }
+      return;
+    }
+
+    const timeDiff = Math.abs(currentTime - prevTime.current);
+    if (timeDiff > 1.5) {
+      recordPlaybackEvent(sessionId, "seek", currentTime * 1000, {
+        from_seconds: prevTime.current,
+        to_seconds: currentTime,
+      }).catch((err) => console.warn("Failed to log playback seek event:", err));
+    }
+
+    prevTime.current = currentTime;
+  }, [currentTime, isReady, sessionId]);
 
   const handleRepeatTrainerInstruction = () => {
     console.log("Seeking to latest trainer_instruction_event");
@@ -75,8 +144,22 @@ export default function LiveSession({ params }: LiveSessionProps) {
     console.log("Skipping to next exercise timeline anchor");
   };
 
-  const handleEndSession = () => {
-    console.log("Ending session and saving summary");
+  const handleEndSession = async () => {
+    if (!sessionId) {
+      router.push(`/session/${params.videoId}/setup`);
+      return;
+    }
+    setIsEnding(true);
+    setEndError(null);
+    try {
+      await endSession(sessionId);
+      router.push("/history");
+    } catch (err) {
+      console.error("Failed to end session:", err);
+      const message = err instanceof Error ? err.message : "Failed to end session. Please try again.";
+      setEndError(message);
+      setIsEnding(false);
+    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -95,6 +178,35 @@ export default function LiveSession({ params }: LiveSessionProps) {
     { sender: "user", text: "Am I deep enough?" },
     { sender: "assistant", text: "A bit lower, sink your hips back. You will feel a double haptic pulse on both thigh bands when you reach parallel." },
   ];
+
+  // If sessionId is missing, show fallback screen
+  if (!sessionId) {
+    return (
+      <PageWrapper id="live-session-no-id-wrapper">
+        <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
+          <span className="text-yellow-400 text-5xl mb-4" role="img" aria-label="Warning">⚠️</span>
+          <h2 className="text-xl font-bold text-white mb-2">Session ID Missing</h2>
+          <p className="text-sm text-slate-400 mb-6">
+            An active session is required to record your workout and view telemetry. Please configure your session first.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+            <Link
+              href={`/session/${params.videoId}/setup`}
+              className="px-5 py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+            >
+              Go to Session Setup
+            </Link>
+            <Link
+              href="/video-library"
+              className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+            >
+              Back to Video Library
+            </Link>
+          </div>
+        </div>
+      </PageWrapper>
+    );
+  }
 
   // Conditional screens for preprocessing job states
   if (isLoadingJob) {
@@ -166,7 +278,7 @@ export default function LiveSession({ params }: LiveSessionProps) {
         <div className="flex flex-wrap gap-3 sm:gap-4">
           {sleeveStatus.map((s) => (
             <div key={s.label} className="flex items-center gap-1.5" title={`${s.name}: Calibrating`}>
-              <span className="w-2 h-2 rounded-full bg-yellow-400" aria-hidden="true" />
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" aria-hidden="true" />
               <span className="text-[10px] uppercase font-bold text-slate-400">{s.label}</span>
             </div>
           ))}
@@ -316,16 +428,38 @@ export default function LiveSession({ params }: LiveSessionProps) {
           Skip to Next Section
         </button>
  
-        <Link
-          href={`/history`}
-          onClick={handleEndSession}
-          className="px-5 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-          id="end-session-btn"
-          aria-label="End this assisted workout session and view progress history"
-        >
-          End & Save Session
-        </Link>
+        <div className="flex flex-col items-center gap-1.5">
+          {endError && (
+            <span className="text-xs text-red-400 font-semibold animate-pulse" role="alert">
+              {endError}
+            </span>
+          )}
+          <button
+            onClick={handleEndSession}
+            disabled={isEnding}
+            className="px-5 py-3 bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:text-slate-300 text-white font-bold rounded-xl text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+            id="end-session-btn"
+            aria-label="End this assisted workout session and view progress history"
+          >
+            {isEnding ? "Ending..." : "End & Save Session"}
+          </button>
+        </div>
       </section>
     </PageWrapper>
+  );
+}
+
+export default function LiveSession({ params }: LiveSessionProps) {
+  return (
+    <Suspense fallback={
+      <PageWrapper id="live-session-suspense-wrapper">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Loading Player Page</h2>
+        </div>
+      </PageWrapper>
+    }>
+      <LiveSessionContent params={params} />
+    </Suspense>
   );
 }

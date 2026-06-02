@@ -208,7 +208,6 @@ export default function VideoLibraryPage() {
             <SampleVideoCard
               key={video.id}
               video={video}
-              handleStartSession={handleStartSession}
             />
           ))}
         </div>

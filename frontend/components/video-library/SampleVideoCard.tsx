@@ -1,5 +1,4 @@
 import React from "react";
-import Link from "next/link";
 
 interface SampleVideoCardProps {
   video: {
@@ -10,10 +9,9 @@ interface SampleVideoCardProps {
     lastSession: string;
     thumbnailBg: string;
   };
-  handleStartSession: (videoId: string) => void;
 }
 
-export default function SampleVideoCard({ video, handleStartSession }: SampleVideoCardProps) {
+export default function SampleVideoCard({ video }: SampleVideoCardProps) {
   return (
     <article
       className="flex flex-col bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl md:rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 group"
@@ -71,25 +69,14 @@ export default function SampleVideoCard({ video, handleStartSession }: SampleVid
         </div>
 
         {/* Start Session Action Button */}
-        <Link
-          href={`/session/${video.id}/setup`}
-          onClick={() => handleStartSession(video.id)}
-          className="w-full inline-flex items-center justify-center px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all"
-          aria-label={`Start assisted playback setup for ${video.title}`}
+        <button
+          disabled
+          className="w-full inline-flex items-center justify-center px-4 py-3 bg-slate-800/40 text-slate-500 font-bold rounded-xl text-sm border border-slate-800 cursor-not-allowed transition-all"
+          aria-label={`Playback Unavailable: Sample video "${video.title}" cannot start assisted playback`}
           id={`start-btn-${video.id}`}
         >
-          Start Assisted Playback
-          <svg
-            className="w-4 h-4 ml-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
-          </svg>
-        </Link>
+          Sample Only
+        </button>
       </div>
     </article>
   );

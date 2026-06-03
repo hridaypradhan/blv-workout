@@ -32,6 +32,16 @@ export default function PlaybackTimeline({ session }: PlaybackTimelineProps) {
               details = `Paused video playback`;
             } else if (evt.event_type === "ended") {
               details = `Video playback completed`;
+            } else if (evt.event_type === "assistant_cue_delivered") {
+              details = `Delivered assistant voice cue: "${evt.metadata?.text || ""}"`;
+            } else if (evt.event_type === "trainer_instruction_repeated") {
+              details = `Repeated trainer instruction: "${evt.metadata?.text || ""}"`;
+            } else if (evt.event_type === "section_skipped") {
+              details = `Skipped directly to workout section: "${evt.metadata?.section_name || ""}"`;
+            } else if (evt.event_type === "haptic_cue_requested") {
+              details = `Delivered haptic sleeve cue: "${evt.metadata?.text || ""}"`;
+            } else if (evt.event_type === "user_question_submitted") {
+              details = `User asked assistant: "${evt.metadata?.question || ""}"`;
             } else {
               details = evt.event_type;
             }
@@ -42,7 +52,9 @@ export default function PlaybackTimeline({ session }: PlaybackTimelineProps) {
                   {timeLabel}
                 </span>
                 <div className="flex-1 text-slate-300">
-                  <span className="font-semibold text-white capitalize mr-2">{evt.event_type}</span>
+                  <span className="font-semibold text-white capitalize mr-2">
+                    {evt.event_type.replace(/_/g, " ")}
+                  </span>
                   <span>{details}</span>
                 </div>
               </div>

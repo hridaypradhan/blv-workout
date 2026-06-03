@@ -16,7 +16,7 @@ export default function HistoryEmptyState() {
       </svg>
       <h2 className="text-xl font-bold text-white mb-2">No Completed Sessions</h2>
       <p className="text-sm text-slate-400 mb-6 max-w-sm">
-        You haven&apos;t completed any assisted playback sessions yet. Go to the Video Library to get started!
+        Completed sessions will appear here after you end and save an assisted playback session. Go to the Video Library to choose a workout video and get started!
       </p>
       <Link
         href="/video-library"

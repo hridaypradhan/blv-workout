@@ -10,10 +10,11 @@ import { ProcessingStage } from "@/types";
 import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
-import { endSession } from "@/lib/api";
+import { endSession, getUserProfile, recordPlaybackEvent } from "@/lib/api";
+import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings } from "@/types";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User } from "@/types";
 
 
 
@@ -43,6 +44,18 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const [announcement, setAnnouncement] = useState("");
   const [isEnding, setIsEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<User | null>(null);
+
+  useEffect(() => {
+    const userId = getActiveUserId();
+    getUserProfile(userId)
+      .then((profile) => {
+        setUserProfile(profile);
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch user settings for live session:", err);
+      });
+  }, []);
 
   // Hook into the YouTube IFrame player
   const {
@@ -100,10 +113,14 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   );
 
   const coexistenceSettings: AudioCoexistenceSettings = {
-    interruption_level: assistantMuted ? InterruptionLevel.HAPTIC_ONLY : InterruptionLevel.BRIEF_SPEECH,
-    assistant_verbosity: AssistantVerbosity.MODERATE,
-    pause_before_speaking: true,
-    correction_frequency: "medium",
+    interruption_level: assistantMuted
+      ? InterruptionLevel.HAPTIC_ONLY
+      : (userProfile?.audio_coexistence?.interruption_level || InterruptionLevel.BRIEF_SPEECH),
+    assistant_verbosity: userProfile?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
+    pause_before_speaking: userProfile?.audio_coexistence?.pause_before_speaking !== undefined
+      ? userProfile.audio_coexistence.pause_before_speaking
+      : true,
+    correction_frequency: userProfile?.audio_coexistence?.correction_frequency || "medium",
   };
 
   // Wire up the assistant cue queue
@@ -120,8 +137,13 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const [chatInput, setChatInput] = useState("");
 
   // Append new cues to the message feed as they trigger
+  const lastRecordedCueKey = useRef<string | null>(null);
   useEffect(() => {
     if (activeCue) {
+      const cueKey = `${activeCue.timestamp_ms}-${activeCue.text}`;
+      if (lastRecordedCueKey.current === cueKey) return;
+      lastRecordedCueKey.current = cueKey;
+
       setChatMessages((prev) => [
         ...prev,
         { sender: "assistant", text: activeCue.text }
@@ -130,8 +152,19 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       if (activeCue.modality === "audio") {
         setAnnouncement(`Assistant cue: ${activeCue.text}`);
       }
+
+      if (sessionId) {
+        const isHaptic = activeCue.modality === "haptic";
+        const eventType = isHaptic ? "haptic_cue_requested" : "assistant_cue_delivered";
+        recordPlaybackEvent(sessionId, eventType, activeCue.timestamp_ms, {
+          text: activeCue.text,
+          modality: activeCue.modality,
+          priority: activeCue.priority,
+          persona: activeCue.persona
+        }).catch((err) => console.warn(`Failed to log ${eventType} event:`, err));
+      }
     }
-  }, [activeCue]);
+  }, [activeCue, sessionId]);
 
   const handleRepeatTrainerInstruction = () => {
     if (!manifest || !manifest.trainer_instruction_events) return;
@@ -145,6 +178,12 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       if (latestEvent.start_ms !== null && latestEvent.start_ms !== undefined) {
         seek(latestEvent.start_ms / 1000);
         setAnnouncement(`Repeating trainer instruction: "${latestEvent.text}"`);
+        if (sessionId) {
+          recordPlaybackEvent(sessionId, "trainer_instruction_repeated", currentTimeMs, {
+            text: latestEvent.text,
+            timestamp_ms: latestEvent.start_ms
+          }).catch((err) => console.warn("Failed to log trainer instruction repeated event:", err));
+        }
       }
     } else {
       setAnnouncement("No prior trainer instructions found in this workout session.");
@@ -159,6 +198,12 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     if (nextAnchor) {
       seek(nextAnchor.start_time_seconds);
       setAnnouncement(`Skipped to section: ${nextAnchor.name}`);
+      if (sessionId) {
+        recordPlaybackEvent(sessionId, "section_skipped", currentTimeMs, {
+          section_name: nextAnchor.name,
+          start_time_seconds: nextAnchor.start_time_seconds
+        }).catch((err) => console.warn("Failed to log section skipped event:", err));
+      }
     } else {
       setAnnouncement("No more exercise sections found in this workout.");
     }
@@ -185,11 +230,18 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
+    const userMsg = chatInput;
     setChatMessages((prev) => [
       ...prev,
-      { sender: "user", text: chatInput }
+      { sender: "user", text: userMsg }
     ]);
     setChatInput("");
+
+    if (sessionId) {
+      recordPlaybackEvent(sessionId, "user_question_submitted", currentTimeMs, {
+        question: userMsg
+      }).catch((err) => console.warn("Failed to log user question event:", err));
+    }
   };
 
   const sleeveStatus = [

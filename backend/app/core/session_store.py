@@ -115,14 +115,68 @@ class SessionStore:
                 return True
 
             session.ended_at = datetime.now(timezone.utc)
-            # Generate a deterministic session summary
+
+            # Count the specific recorded events
             total_reps = len(session.reps)
             total_errors = len(session.form_errors)
-            total_playback_events = len(session.playback_events)
+
+            plays = 0
+            pauses = 0
+            seeks = 0
+            speed_changes = 0
+            assistant_cues = 0
+            haptic_cues = 0
+            repeats = 0
+            skips = 0
+            user_questions = 0
+
+            for event in session.playback_events:
+                t = event.event_type
+                if t == "play":
+                    plays += 1
+                elif t == "pause":
+                    pauses += 1
+                elif t == "seek":
+                    seeks += 1
+                elif t == "speed_change":
+                    speed_changes += 1
+                elif t == "assistant_cue_delivered":
+                    assistant_cues += 1
+                elif t == "trainer_instruction_repeated":
+                    repeats += 1
+                elif t == "section_skipped":
+                    skips += 1
+                elif t == "haptic_cue_requested":
+                    haptic_cues += 1
+                elif t == "user_question_submitted":
+                    user_questions += 1
+
+            summary_parts = []
+            if total_reps > 0:
+                summary_parts.append(f"{total_reps} tracked repetitions")
+            if total_errors > 0:
+                summary_parts.append(f"{total_errors} form corrections")
+            if assistant_cues > 0:
+                summary_parts.append(f"{assistant_cues} assistant cues")
+            if haptic_cues > 0:
+                summary_parts.append(f"{haptic_cues} haptic feedback cues")
+            if repeats > 0:
+                summary_parts.append(f"{repeats} trainer instructions repeated")
+            if skips > 0:
+                summary_parts.append(f"{skips} skipped sections")
+            if user_questions > 0:
+                summary_parts.append(f"{user_questions} assistant questions asked")
+
+            if not summary_parts:
+                events_desc = "no significant events recorded"
+            elif len(summary_parts) == 1:
+                events_desc = summary_parts[0]
+            else:
+                events_desc = ", ".join(summary_parts[:-1]) + f", and {summary_parts[-1]}"
+
             session.summary = (
-                f"Session completed! You performed {total_reps} tracked repetitions with "
-                f"{total_errors} form corrections. FitA11y delivered {total_playback_events} "
-                f"playback interactions during your assisted workout. Great effort!"
+                f"Assisted session completed! During this workout, we tracked: {events_desc}. "
+                f"Great job sticking with the trainer's workout!"
             )
             return True
 

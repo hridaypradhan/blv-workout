@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useLayout } from "./LayoutContext";
+import { getActiveUserId } from "@/lib/prototypeUser";
+import { getUserProfile } from "@/lib/api";
 
 interface HeaderProps {
   id?: string;
@@ -10,6 +13,34 @@ interface HeaderProps {
 export default function Header({ id = "main-header" }: HeaderProps) {
   const pathname = usePathname();
   const { setSidebarOpen } = useLayout();
+
+  const [userName, setUserName] = useState<string>("Profile");
+  const [avatarInitial, setAvatarInitial] = useState<string>("P");
+  const [ariaLabel, setAriaLabel] = useState<string>("User profile options");
+
+  useEffect(() => {
+    const activeUserId = getActiveUserId();
+    if (!activeUserId) return;
+
+    getUserProfile(activeUserId)
+      .then((profile) => {
+        if (profile && profile.name) {
+          setUserName(profile.name);
+          setAvatarInitial(profile.name.charAt(0).toUpperCase() || "P");
+          setAriaLabel(`Profile for ${profile.name}`);
+        } else {
+          setUserName("Profile");
+          setAvatarInitial("P");
+          setAriaLabel("User profile options");
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load user profile in header:", err);
+        setUserName("Profile");
+        setAvatarInitial("P");
+        setAriaLabel("User profile options");
+      });
+  }, []);
 
   const pageTitle =
     pathname === "/"
@@ -123,14 +154,14 @@ export default function Header({ id = "main-header" }: HeaderProps) {
           onClick={() => {
             // TODO: Open user profile options
           }}
-          className="flex items-center justify-center sm:justify-start gap-2 h-11 px-2.5 sm:pr-4 text-slate-350 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-          aria-label="User profile options"
+          className="flex items-center justify-center sm:justify-start gap-2 h-11 px-2.5 sm:pr-4 text-slate-350 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0"
+          aria-label={ariaLabel}
           id="user-profile-menu-btn"
         >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-900 font-bold flex items-center justify-center text-xs">
-            U
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-900 font-bold flex items-center justify-center text-xs shrink-0 select-none">
+            {avatarInitial}
           </div>
-          <span className="text-xs font-bold hidden sm:inline">Profile</span>
+          <span className="text-xs font-bold hidden sm:inline truncate max-w-[100px]">{userName}</span>
         </button>
       </div>
     </header>

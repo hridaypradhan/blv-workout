@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.job_store import job_store, JobRecord
 from app.models.schemas import AssistanceSidecarManifest, ProcessingStage, YouTubeURL
 from app.services.preprocessing_service import run_assistance_preparation
+from app.services.mock_manifest_service import build_deterministic_sidecar_manifest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -123,18 +124,12 @@ async def stream_events(video_id: UUID) -> StreamingResponse:
 
 @router.get("/manifest/{video_id}", response_model=AssistanceSidecarManifest)
 async def get_sidecar_manifest(video_id: UUID) -> AssistanceSidecarManifest:
-    """Return the assistance sidecar manifest for a prepared YouTube video.
-
-    At current maturity, returns an empty manifest — full sidecar generation
-    (exercise anchors, trainer events, movement windows) is not yet implemented.
-    """
+    """Return the assistance sidecar manifest for a prepared YouTube video."""
     job = job_store.get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
-    return AssistanceSidecarManifest(
-        video_id=UUID(job.video_id) if job.video_id else None,
-        youtube_id=job.youtube_id,
-    )
+    return build_deterministic_sidecar_manifest(job)
+
 
 
 @router.delete("/{video_id}")

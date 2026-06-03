@@ -24,14 +24,15 @@ def run_assistance_preparation(video_id: str, youtube_url: str) -> None:
     1. Validates the YouTube URL and extracts the video ID
     2. Fetches YouTube metadata (oEmbed first, with temporary yt-dlp duration lookup)
     3. Stores metadata in the job record
-    4. Marks the job as completed with an empty sidecar manifest
+    4. Marks the job completed after metadata/stub stages, and the manifest endpoint
+       returns deterministic prototype sidecar data.
 
-    Future stages (TODO):
+    Future stages (TODO - AI sidecar generation is still TODO):
     - Transcribe trainer audio (Whisper)
     - Anchor exercise timeline (Gemini)
     - Classify trainer instruction events (Gemini)
     - Analyze expected movement windows (MediaPipe)
-    - Generate full sidecar manifest
+    - Generate full sidecar manifest using AI models
     """
 
     try:

@@ -11,6 +11,11 @@ import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
 import { endSession } from "@/lib/api";
+import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
+import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings } from "@/types";
+
+
 
 
 interface LiveSessionProps {
@@ -88,12 +93,75 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   });
 
 
+  // Load assistance sidecar manifest
+  const { manifest, isLoading: isLoadingManifest, error: manifestError } = useSidecarManifest(
+    params.videoId,
+    jobStage === ProcessingStage.COMPLETED
+  );
+
+  const coexistenceSettings: AudioCoexistenceSettings = {
+    interruption_level: assistantMuted ? InterruptionLevel.HAPTIC_ONLY : InterruptionLevel.BRIEF_SPEECH,
+    assistant_verbosity: AssistantVerbosity.MODERATE,
+    pause_before_speaking: true,
+    correction_frequency: "medium",
+  };
+
+  // Wire up the assistant cue queue
+  const currentTimeMs = currentTime * 1000;
+  const { activeCue } = useAssistantCueQueue(
+    manifest,
+    currentTimeMs,
+    coexistenceSettings
+  );
+
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: "assistant" | "user"; text: string }>>([
+    { sender: "assistant", text: "Welcome! Stand 6 feet back. We are preparing to assist with your YouTube workout." }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+
+  // Append new cues to the message feed as they trigger
+  useEffect(() => {
+    if (activeCue) {
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: "assistant", text: activeCue.text }
+      ]);
+      // Expose as announcement for screen readers
+      if (activeCue.modality === "audio") {
+        setAnnouncement(`Assistant cue: ${activeCue.text}`);
+      }
+    }
+  }, [activeCue]);
+
   const handleRepeatTrainerInstruction = () => {
-    console.log("Seeking to latest trainer_instruction_event");
+    if (!manifest || !manifest.trainer_instruction_events) return;
+    const priorEvents = manifest.trainer_instruction_events.filter(
+      (evt) => evt.start_ms !== null && evt.start_ms !== undefined && evt.start_ms <= currentTimeMs
+    );
+    if (priorEvents.length > 0) {
+      // Sort descending by start_ms
+      priorEvents.sort((a, b) => (b.start_ms ?? 0) - (a.start_ms ?? 0));
+      const latestEvent = priorEvents[0];
+      if (latestEvent.start_ms !== null && latestEvent.start_ms !== undefined) {
+        seek(latestEvent.start_ms / 1000);
+        setAnnouncement(`Repeating trainer instruction: "${latestEvent.text}"`);
+      }
+    } else {
+      setAnnouncement("No prior trainer instructions found in this workout session.");
+    }
   };
 
   const handleSkipSection = () => {
-    console.log("Skipping to next exercise timeline anchor");
+    if (!manifest || !manifest.exercise_timeline_anchors) return;
+    const nextAnchor = manifest.exercise_timeline_anchors.find(
+      (anchor) => anchor.start_time_seconds > currentTime + 1.0
+    );
+    if (nextAnchor) {
+      seek(nextAnchor.start_time_seconds);
+      setAnnouncement(`Skipped to section: ${nextAnchor.name}`);
+    } else {
+      setAnnouncement("No more exercise sections found in this workout.");
+    }
   };
 
   const handleEndSession = async () => {
@@ -116,6 +184,12 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!chatInput.trim()) return;
+    setChatMessages((prev) => [
+      ...prev,
+      { sender: "user", text: chatInput }
+    ]);
+    setChatInput("");
   };
 
   const sleeveStatus = [
@@ -125,11 +199,10 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     { label: "RL", color: "bg-red-500", name: "Right Leg" },
   ];
 
-  const chatPlaceholder = [
-    { sender: "assistant", text: "Welcome! Stand 6 feet back. We are starting with Bodyweight Squats from the YouTube trainer." },
-    { sender: "user", text: "Am I deep enough?" },
-    { sender: "assistant", text: "A bit lower, sink your hips back. You will feel a double haptic pulse on both thigh bands when you reach parallel." },
-  ];
+  const currentExercise = manifest?.exercise_timeline_anchors.find(
+    (anchor) => currentTime >= anchor.start_time_seconds && currentTime <= anchor.end_time_seconds
+  ) || null;
+
 
   // If sessionId is missing, show fallback screen
   if (!sessionId) {
@@ -288,28 +361,46 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               <span className="text-xs uppercase font-extrabold text-yellow-400 tracking-wider block mb-1">
                 Active Exercise Section
               </span>
-              <h2 className="text-xl font-bold text-white mb-2">Bodyweight Squats</h2>
+              <h2 className="text-xl font-bold text-white mb-2">
+                {currentExercise ? currentExercise.name : "Break / Transition"}
+              </h2>
             </div>
-   
             <div className="my-4 py-4 px-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col justify-center">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">
-                Your Tracked Performance
+                {currentExercise ? "Supplementary Target Cues" : "Your Tracked Performance"}
               </span>
-              <span className="text-5xl font-extrabold text-yellow-400 tracking-tight block">
-                12
+              <span className={`font-extrabold text-yellow-400 tracking-tight block ${currentExercise ? "text-sm" : "text-5xl"}`}>
+                {currentExercise ? (
+                  currentExercise.description_accessible || "Follow YouTube instructions"
+                ) : (
+                  "Ready"
+                )}
               </span>
-              <span className="text-xs text-slate-400 mt-2 block">
-                Assistant Tracking Target: 15 reps
-              </span>
+              {currentExercise && (
+                <span className="text-xs text-slate-400 mt-2 block">
+                  Joint: <strong className="text-slate-200 capitalize">{currentExercise.counting_joint || "any"}</strong> | Target: 15 reps
+                </span>
+              )}
             </div>
 
             <div>
               <div className="flex justify-between items-center text-xs text-slate-400 px-1 mb-1.5">
                 <span>Section Progress</span>
-                <span>Set 2 of 3</span>
+                <span>
+                  {currentExercise
+                    ? `${formatTime(currentTime - currentExercise.start_time_seconds)} / ${formatTime(currentExercise.end_time_seconds - currentExercise.start_time_seconds)}`
+                    : "No active exercise"}
+                </span>
               </div>
               <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                <div className="bg-yellow-400 h-full rounded-full w-2/3" />
+                <div
+                  className="bg-yellow-400 h-full rounded-full transition-all"
+                  style={{
+                    width: currentExercise
+                      ? `${((currentTime - currentExercise.start_time_seconds) / (currentExercise.end_time_seconds - currentExercise.start_time_seconds)) * 100}%`
+                      : "0%"
+                  }}
+                />
               </div>
             </div>
           </section>
@@ -317,12 +408,32 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           {/* Assistant Cue Feed panel */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex-1 flex flex-col justify-between min-h-[300px]" aria-labelledby="assistant-feed-heading">
             <div>
-              <h2 id="assistant-feed-heading" className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">
-                Assistant Cue Feed
-              </h2>
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800/65">
+                <h2 id="assistant-feed-heading" className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+                  Assistant Cue Feed
+                </h2>
+                {isLoadingManifest && (
+                  <span className="text-[10px] text-yellow-400 animate-pulse flex items-center gap-1.5" id="manifest-loading-indicator">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                    Loading Manifest
+                  </span>
+                )}
+                {manifestError && (
+                  <span className="text-[10px] text-red-400 font-semibold flex items-center gap-1" id="manifest-error-indicator" title={manifestError}>
+                    ⚠️ Load Error
+                  </span>
+                )}
+              </div>
     
               <div className="space-y-4 mb-4 pr-1 max-h-[220px] lg:max-h-[320px] overflow-y-auto">
-                {chatPlaceholder.map((msg, index) => (
+                {manifestError && (
+                  <div className="p-3 bg-red-950/40 border border-red-500/20 text-red-200 rounded-2xl text-xs flex flex-col gap-1 mb-2" role="alert" id="manifest-error-alert">
+                    <span className="font-bold text-[10px] text-red-400 uppercase tracking-wider">⚠️ Manifest Loading Error</span>
+                    <p>Failed to load the sidecar assistance manifest. Voice cues and timeline anchors will be unavailable.</p>
+                    <p className="text-[10px] opacity-75">{manifestError}</p>
+                  </div>
+                )}
+                {chatMessages.map((msg, index) => (
                   <div
                     key={index}
                     className={`p-3 rounded-2xl text-xs leading-relaxed max-w-[90%] ${
@@ -347,6 +458,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 className="flex-1 px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
                 aria-label="Ask assistant for verbal clarification"
                 id="live-chat-input"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
               />
               <button
                 type="submit"

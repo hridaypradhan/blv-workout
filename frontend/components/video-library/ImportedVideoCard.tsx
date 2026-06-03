@@ -30,6 +30,7 @@ export default function ImportedVideoCard({
     >
       {/* Visual header (with thumbnail when available) */}
       <div className="h-32 relative overflow-hidden flex items-center justify-center bg-slate-950">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         {job.thumbnail_url && !failedImage ? (
           <img
             src={job.thumbnail_url}

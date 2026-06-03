@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { getSessionHistory } from "@/lib/api";
-import { PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
+import { getActiveUserId } from "@/lib/prototypeUser";
 import { Session } from "@/types";
 import HistoryLoadingState from "@/components/history/HistoryLoadingState";
 import HistoryErrorState from "@/components/history/HistoryErrorState";
@@ -19,7 +19,7 @@ export default function HistoryList() {
   const fetchHistory = () => {
     setIsLoading(true);
     setError(null);
-    getSessionHistory(PROTOTYPE_USER_ID)
+    getSessionHistory(getActiveUserId())
       .then((data) => {
         setSessions(data);
         setIsLoading(false);

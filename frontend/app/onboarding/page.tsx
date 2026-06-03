@@ -1,13 +1,85 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
+import { registerUser, getUserProfile } from "@/lib/api";
+import { getActiveUserId } from "@/lib/prototypeUser";
+import { AssistantPersona, FeedbackModality, InterruptionLevel, AssistantVerbosity } from "@/types";
 
 export default function Onboarding() {
-  const handleSubmitProfile = (e: React.FormEvent) => {
+  const [name, setName] = useState("");
+  const [visionLoss, setVisionLoss] = useState("vl-blind");
+  const [screenReader, setScreenReader] = useState("none");
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
+
+  useEffect(() => {
+    async function loadUser() {
+      const activeId = getActiveUserId();
+      try {
+        const user = await getUserProfile(activeId);
+        setName(user.name || "");
+        if (user.voice_settings) {
+          const vs = user.voice_settings as Record<string, string | number | boolean>;
+          if (typeof vs.vision_loss === "string") {
+            setVisionLoss(vs.vision_loss);
+          }
+          if (typeof vs.screen_reader === "string") {
+            setScreenReader(vs.screen_reader);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load existing profile, using defaults:", err);
+      }
+    }
+    loadUser();
+  }, []);
+
+  const handleSubmitProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save user profile configuration
+    setIsSaving(true);
+    setStatusMessage(null);
+    setIsError(false);
+
+    try {
+      const activeId = getActiveUserId();
+      const email = `${name.toLowerCase().replace(/\s+/g, ".")}@fita11y.local`;
+
+      const payload = {
+        id: activeId,
+        name: name,
+        email: email,
+        assistant_persona: AssistantPersona.SUPPORTIVE,
+        feedback_modalities: [FeedbackModality.AUDIO, FeedbackModality.HAPTIC],
+        voice_settings: {
+          vision_loss: visionLoss,
+          screen_reader: screenReader,
+          tts_rate: 1.0,
+          voice_id: "system",
+        },
+        audio_coexistence: {
+          interruption_level: InterruptionLevel.BRIEF_SPEECH,
+          assistant_verbosity: AssistantVerbosity.MODERATE,
+          pause_before_speaking: true,
+          correction_frequency: "medium",
+        },
+      };
+
+      const registered = await registerUser(payload);
+      if (registered.id) {
+        localStorage.setItem("fita11y_active_user_id", registered.id);
+      }
+      setIsError(false);
+      setStatusMessage("Profile settings saved successfully!");
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      setIsError(true);
+      setStatusMessage(err instanceof Error ? err.message : "Failed to save profile. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePairSleeve = (slot: string) => {
@@ -51,6 +123,8 @@ export default function Onboarding() {
                   id="user-name"
                   required
                   placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
                 />
               </div>
@@ -78,6 +152,8 @@ export default function Onboarding() {
                           id={level.id}
                           name="vision-loss"
                           value={level.id}
+                          checked={visionLoss === level.id}
+                          onChange={(e) => setVisionLoss(e.target.value)}
                           className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
                         />
                         <span className="text-sm font-bold text-white">{level.label}</span>
@@ -95,7 +171,8 @@ export default function Onboarding() {
                 </label>
                 <select
                   id="screen-reader-select"
-                  defaultValue="none"
+                  value={screenReader}
+                  onChange={(e) => setScreenReader(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all cursor-pointer"
                 >
                   <option value="none">None / Standard Audio Synthesis Only</option>
@@ -107,14 +184,25 @@ export default function Onboarding() {
                 </select>
               </div>
 
+              {statusMessage && (
+                <div
+                  className={`p-4 rounded-xl text-sm font-medium ${isError ? 'bg-red-500/10 border border-red-500/30 text-red-400' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {statusMessage}
+                </div>
+              )}
+
               {/* Submit button */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
+                  disabled={isSaving}
+                  className="w-full px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-800 disabled:text-slate-400 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
                   id="save-profile-btn"
                 >
-                  Save Profile Settings
+                  {isSaving ? "Saving..." : "Save Profile Settings"}
                 </button>
               </div>
             </form>

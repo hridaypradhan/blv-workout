@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { startSession } from "@/lib/api";
-import { PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
+import { startSession, getUserProfile, updateUserSettings } from "@/lib/api";
+import { getActiveUserId, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
+import { InterruptionLevel, AssistantVerbosity } from "@/types";
 
 interface SetupPageProps {
   params: {
@@ -16,6 +17,34 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const router = useRouter();
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeUserId, setActiveUserId] = useState(PROTOTYPE_USER_ID);
+  const [coexistence, setCoexistence] = useState("coexist-duck");
+  const [difficulty, setDifficulty] = useState("diff-norm");
+
+  useEffect(() => {
+    const activeId = getActiveUserId();
+    setActiveUserId(activeId);
+
+    async function fetchUserSettings() {
+      try {
+        const user = await getUserProfile(activeId);
+        if (user.audio_coexistence) {
+          const level = user.audio_coexistence.interruption_level;
+          const pause = user.audio_coexistence.pause_before_speaking;
+          if (level === "haptic_only") {
+            setCoexistence("coexist-haptic");
+          } else if (pause) {
+            setCoexistence("coexist-pause");
+          } else {
+            setCoexistence("coexist-duck");
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load user profile in setup, using default defaults:", err);
+      }
+    }
+    fetchUserSettings();
+  }, []);
 
   const handleAskQuestion = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +55,27 @@ export default function SessionSetup({ params }: SetupPageProps) {
     setIsStarting(true);
     setError(null);
     try {
-      const session = await startSession(params.videoId, PROTOTYPE_USER_ID);
+      // Map coexistence selection back to user settings schema
+      let level = "brief_speech";
+      let pause = false;
+      if (coexistence === "coexist-haptic") {
+        level = "haptic_only";
+      } else if (coexistence === "coexist-pause") {
+        pause = true;
+        level = "brief_speech";
+      }
+
+      // Update settings in backend before starting session
+      await updateUserSettings(activeUserId, {
+        audio_coexistence: {
+          interruption_level: level as InterruptionLevel,
+          pause_before_speaking: pause,
+          assistant_verbosity: AssistantVerbosity.MODERATE,
+          correction_frequency: "medium",
+        }
+      });
+
+      const session = await startSession(params.videoId, activeUserId);
       if (!session.id) {
         throw new Error("Backend response did not contain a valid session ID.");
       }
@@ -139,14 +188,19 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 <label
                   key={diff.id}
                   htmlFor={diff.id}
-                  className="relative flex flex-col p-4 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 text-center"
+                  className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 text-center ${
+                    difficulty === diff.id
+                      ? "bg-slate-950 border-2 border-yellow-400"
+                      : "bg-slate-950 border border-slate-800 hover:border-slate-700"
+                  }`}
                 >
                   <input
                     type="radio"
                     id={diff.id}
                     name="difficulty"
                     value={diff.id}
-                    defaultChecked={diff.id === "diff-norm"}
+                    checked={difficulty === diff.id}
+                    onChange={(e) => setDifficulty(e.target.value)}
                     className="sr-only"
                   />
                   <span className="text-sm font-bold text-white mb-1">{diff.label}</span>
@@ -173,14 +227,19 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 <label
                   key={opt.id}
                   htmlFor={opt.id}
-                  className="relative flex flex-col p-4 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 text-center"
+                  className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 text-center ${
+                    coexistence === opt.id
+                      ? "bg-slate-950 border-2 border-yellow-400"
+                      : "bg-slate-950 border border-slate-800 hover:border-slate-700"
+                  }`}
                 >
                   <input
                     type="radio"
                     id={opt.id}
                     name="coexistence"
                     value={opt.id}
-                    defaultChecked={opt.id === "coexist-duck"}
+                    checked={coexistence === opt.id}
+                    onChange={(e) => setCoexistence(e.target.value)}
                     className="sr-only"
                   />
                   <span className="text-sm font-bold text-white mb-1">{opt.label}</span>

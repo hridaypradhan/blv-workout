@@ -1,19 +1,124 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import PageWrapper from "@/components/layout/PageWrapper";
+import { getActiveUserId } from "@/lib/prototypeUser";
+import { getUserProfile, updateUserSettings } from "@/lib/api";
+import { AssistantPersona, InterruptionLevel, AssistantVerbosity } from "@/types";
 
 export default function Settings() {
-  const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeUserId, setActiveUserId] = useState("");
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  // Settings state variables
+  const [assistantPersona, setAssistantPersona] = useState("supportive");
+  const [ttsSpeed, setTtsSpeed] = useState(1.0);
+  const [voiceSelect, setVoiceSelect] = useState("system");
+  const [spatialAudio, setSpatialAudio] = useState(true);
+  const [pauseBeforeSpeaking, setPauseBeforeSpeaking] = useState(true);
+  const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
+  const [hapticFirst, setHapticFirst] = useState(true);
+  const [assistantVerbosity, setAssistantVerbosity] = useState("moderate");
+
+  // Status feedback state
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    async function loadSettings() {
+      const activeId = getActiveUserId();
+      setActiveUserId(activeId);
+      try {
+        const user = await getUserProfile(activeId);
+        if (user.assistant_persona) {
+          setAssistantPersona(user.assistant_persona);
+        }
+        if (user.voice_settings) {
+          const vs = user.voice_settings as Record<string, string | number | boolean>;
+          if (typeof vs.tts_rate === "number") {
+            setTtsSpeed(vs.tts_rate);
+          }
+          if (typeof vs.voice_id === "string") {
+            setVoiceSelect(vs.voice_id);
+          }
+          if (typeof vs.spatial_audio === "boolean") {
+            setSpatialAudio(vs.spatial_audio);
+          }
+          if (typeof vs.haptic_first === "boolean") {
+            setHapticFirst(vs.haptic_first);
+          }
+        }
+        if (user.audio_coexistence) {
+          setInterruptionLevel(user.audio_coexistence.interruption_level ?? "brief_speech");
+          setAssistantVerbosity(user.audio_coexistence.assistant_verbosity ?? "moderate");
+          setPauseBeforeSpeaking(user.audio_coexistence.pause_before_speaking !== false);
+        }
+      } catch (err) {
+        console.error("Failed to load user profile in settings:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Persist configuration parameters to local storage / API backend
+    setIsSaving(true);
+    setStatusMessage(null);
+    setIsError(false);
+
+    try {
+      const settingsPayload = {
+        assistant_persona: assistantPersona as AssistantPersona,
+        voice_settings: {
+          tts_rate: ttsSpeed,
+          voice_id: voiceSelect,
+          spatial_audio: spatialAudio,
+          haptic_first: hapticFirst,
+        },
+        audio_coexistence: {
+          interruption_level: interruptionLevel as InterruptionLevel,
+          assistant_verbosity: assistantVerbosity as AssistantVerbosity,
+          pause_before_speaking: pauseBeforeSpeaking,
+          correction_frequency: "medium",
+        },
+      };
+
+      await updateUserSettings(activeUserId, settingsPayload);
+      setIsError(false);
+      setStatusMessage("Configuration settings saved successfully!");
+    } catch (err) {
+      console.error("Failed to save settings:", err);
+      setIsError(true);
+      setStatusMessage(err instanceof Error ? err.message : "Failed to save settings. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleTestVoice = () => {
-    // TODO: Speak a short test sentence using browser SpeechSynthesis
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const text = `This is a test of the ${assistantPersona} assistant voice at rate ${ttsSpeed}.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = ttsSpeed;
+      window.speechSynthesis.speak(utterance);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <PageWrapper id="settings-loading-wrapper">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Loading Settings</h2>
+          <p className="text-sm text-slate-400">Loading your accessibility preferences...</p>
+        </div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper id="settings-page-wrapper">
@@ -38,10 +143,10 @@ export default function Settings() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" role="radiogroup" aria-labelledby="persona-heading">
               {[
-                { id: "p-supportive", label: "Supportive", desc: "Encouraging, reassuring, focuses on steady progress." },
-                { id: "p-direct", label: "Direct", desc: "Concise corrections, anatomical landmarks, clear verbal cues." },
-                { id: "p-energetic", label: "Energetic", desc: "High energy, enthusiastic, pushes pace targets." },
-                { id: "p-calm", label: "Calm", desc: "Gentle tones, quiet cues, low-stimulation pacing." },
+                { id: "supportive", label: "Supportive", desc: "Encouraging, reassuring, focuses on steady progress." },
+                { id: "direct", label: "Direct", desc: "Concise corrections, anatomical landmarks, clear verbal cues." },
+                { id: "energetic", label: "Energetic", desc: "High energy, enthusiastic, pushes pace targets." },
+                { id: "calm", label: "Calm", desc: "Gentle tones, quiet cues, low-stimulation pacing." },
               ].map((p) => (
                 <label
                   key={p.id}
@@ -54,7 +159,8 @@ export default function Settings() {
                       id={p.id}
                       name="assistant-persona"
                       value={p.id}
-                      defaultChecked={p.id === "p-supportive"}
+                      checked={assistantPersona === p.id}
+                      onChange={(e) => setAssistantPersona(e.target.value)}
                       className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
                     />
                     <span className="text-sm font-bold text-white">{p.label}</span>
@@ -78,7 +184,7 @@ export default function Settings() {
                   <label htmlFor="tts-speed" className="text-sm font-semibold text-slate-200">
                     Text-To-Speech Speed (Rate)
                   </label>
-                  <span className="text-xs font-bold text-yellow-400">1.0x (Normal)</span>
+                  <span className="text-xs font-bold text-yellow-400">{ttsSpeed.toFixed(1)}x</span>
                 </div>
                 <input
                   type="range"
@@ -86,7 +192,8 @@ export default function Settings() {
                   min="0.5"
                   max="2.5"
                   step="0.1"
-                  defaultValue="1.0"
+                  value={ttsSpeed}
+                  onChange={(e) => setTtsSpeed(parseFloat(e.target.value))}
                   className="w-full accent-yellow-400 bg-slate-950 h-2 rounded-lg cursor-pointer"
                 />
               </div>
@@ -99,7 +206,8 @@ export default function Settings() {
                 <div className="flex gap-3">
                   <select
                     id="voice-select"
-                    defaultValue="system"
+                    value={voiceSelect}
+                    onChange={(e) => setVoiceSelect(e.target.value)}
                     className="flex-1 px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all cursor-pointer"
                   >
                     <option value="system">Default System Voice</option>
@@ -110,7 +218,7 @@ export default function Settings() {
                   <button
                     type="button"
                     onClick={handleTestVoice}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold rounded-xl text-xs border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 hover:text-white font-bold rounded-xl text-xs border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
                     id="test-voice-btn"
                   >
                     Test Voice
@@ -129,7 +237,8 @@ export default function Settings() {
                 <input
                   type="checkbox"
                   id="spatial-audio-toggle"
-                  defaultChecked
+                  checked={spatialAudio}
+                  onChange={(e) => setSpatialAudio(e.target.checked)}
                   className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
                 />
               </div>
@@ -145,6 +254,8 @@ export default function Settings() {
                 <input
                   type="checkbox"
                   id="pause-before-speaking"
+                  checked={pauseBeforeSpeaking}
+                  onChange={(e) => setPauseBeforeSpeaking(e.target.checked)}
                   className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
                 />
               </div>
@@ -200,7 +311,8 @@ export default function Settings() {
               <input
                 type="checkbox"
                 id="haptic-first-toggle"
-                defaultChecked
+                checked={hapticFirst}
+                onChange={(e) => setHapticFirst(e.target.checked)}
                 className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
               />
             </div>
@@ -217,9 +329,9 @@ export default function Settings() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4" role="radiogroup" aria-labelledby="verbosity-heading">
               {[
-                { id: "v-minimal", label: "Minimal", desc: "Short keywords: e.g., 'lower hip' or 'slow down'." },
-                { id: "v-moderate", label: "Moderate", desc: "Default cue phrasing: e.g., 'Sink your hips lower' or 'Decrease your pacing speed'." },
-                { id: "v-detailed", label: "Detailed", desc: "Full corrections referencing joints, risks, and movement suggestions." },
+                { id: "minimal", label: "Minimal", desc: "Short keywords: e.g., 'lower hip' or 'slow down'." },
+                { id: "moderate", label: "Moderate", desc: "Default cue phrasing: e.g., 'Sink your hips lower' or 'Decrease your pacing speed'." },
+                { id: "detailed", label: "Detailed", desc: "Full corrections referencing joints, risks, and movement suggestions." },
               ].map((verb) => (
                 <label
                   key={verb.id}
@@ -232,7 +344,8 @@ export default function Settings() {
                       id={verb.id}
                       name="assistant-verbosity"
                       value={verb.id}
-                      defaultChecked={verb.id === "v-moderate"}
+                      checked={assistantVerbosity === verb.id}
+                      onChange={(e) => setAssistantVerbosity(e.target.value)}
                       className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400"
                     />
                     <span className="text-sm font-bold text-white">{verb.label}</span>
@@ -243,14 +356,25 @@ export default function Settings() {
             </div>
           </section>
 
+          {statusMessage && (
+            <div
+              className={`p-4 rounded-xl text-sm font-medium ${isError ? 'bg-red-500/10 border border-red-500/30 text-red-400' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'}`}
+              role="status"
+              aria-live="polite"
+            >
+              {statusMessage}
+            </div>
+          )}
+
           {/* Save Button */}
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full px-6 py-4 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-base transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10"
+              disabled={isSaving}
+              className="w-full px-6 py-4 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-800 disabled:text-slate-400 text-slate-950 font-bold rounded-xl text-base transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10"
               id="save-settings-btn"
             >
-              Save Configuration Settings
+              {isSaving ? "Saving..." : "Save Configuration Settings"}
             </button>
           </div>
         </form>

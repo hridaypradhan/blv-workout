@@ -1,12 +1,38 @@
-import { User } from "../../types";
-import { plannedApiStub } from "./client";
+import { User, Session } from "../../types";
+import { API_BASE_URL, checkResponse } from "./client";
 
 // ============================================================================
-// Planned API Surface - User Settings and Preferences (Not wired to backend yet)
+// Wired API Surface - User Settings and Preferences
 // ============================================================================
 
-/** Update user configuration profile preferences. */
-export async function updateUserSettings(settings: Partial<User>): Promise<User> {
-  console.log("Updating user settings:", settings);
-  return plannedApiStub("updateUserSettings");
+/** Register a new user profile with accessibility and assistant preferences. */
+export async function registerUser(payload: Partial<User>): Promise<User> {
+  const res = await fetch(`${API_BASE_URL}/api/user/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return checkResponse<User>(res, "Register user profile failed");
+}
+
+/** Retrieve user profile details by ID. */
+export async function getUserProfile(userId: string): Promise<User> {
+  const res = await fetch(`${API_BASE_URL}/api/user/${userId}`);
+  return checkResponse<User>(res, "Retrieve user profile failed");
+}
+
+/** Update assistant persona, voice settings, audio coexistence, and feedback preferences. */
+export async function updateUserSettings(userId: string, settings: Partial<User>): Promise<User> {
+  const res = await fetch(`${API_BASE_URL}/api/user/${userId}/settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  return checkResponse<User>(res, "Update user settings failed");
+}
+
+/** Retrieve session history for a specific user. */
+export async function getUserHistory(userId: string): Promise<Session[]> {
+  const res = await fetch(`${API_BASE_URL}/api/user/${userId}/history`);
+  return checkResponse<Session[]>(res, "Retrieve user history failed");
 }

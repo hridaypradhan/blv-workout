@@ -1,11 +1,52 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
+import { getUserProfile } from "@/lib/api";
+import { getActiveUserId, USER_UPDATED_EVENT } from "@/lib/prototypeUser";
 
 export default function Home() {
   const router = useRouter();
+  const [hasProfile, setHasProfile] = useState<boolean>(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(true);
+
+  useEffect(() => {
+    const checkProfile = () => {
+      const activeUserId = getActiveUserId();
+      if (!activeUserId) {
+        setHasProfile(false);
+        setIsLoadingProfile(false);
+        return;
+      }
+      setIsLoadingProfile(true);
+      getUserProfile(activeUserId)
+        .then((profile) => {
+          if (profile && profile.name && profile.name !== "Prototype User") {
+            setHasProfile(true);
+          } else {
+            setHasProfile(false);
+          }
+        })
+        .catch((err) => {
+          console.warn("Failed to check active user profile on home mount:", err);
+          setHasProfile(false);
+        })
+        .finally(() => {
+          setIsLoadingProfile(false);
+        });
+    };
+
+    checkProfile();
+
+    if (typeof window !== "undefined") {
+      window.addEventListener(USER_UPDATED_EVENT, checkProfile);
+      return () => {
+        window.removeEventListener(USER_UPDATED_EVENT, checkProfile);
+      };
+    }
+  }, []);
 
   const handleQuickConnect = () => {
     // TODO: Quick haptic sleeve connection trigger
@@ -55,37 +96,77 @@ export default function Home() {
           </p>
 
           <div className="flex flex-wrap gap-4">
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center justify-center px-6 py-3.5 text-base font-bold bg-yellow-400 text-slate-950 hover:bg-yellow-300 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10"
-              id="get-started-btn"
-            >
-              Get Started
-              <svg
-                className="w-5 h-5 ml-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M14 5l7 7m0 0l-7 7m7-7H3"
-                />
-              </svg>
-            </Link>
+            {isLoadingProfile ? (
+              <div className="inline-flex items-center justify-center px-6 py-3.5 text-base font-bold bg-slate-800/50 text-slate-400 rounded-xl border border-slate-800 w-48 h-[54px] animate-pulse" />
+            ) : hasProfile ? (
+              <>
+                <Link
+                  href="/video-library"
+                  className="inline-flex items-center justify-center px-6 py-3.5 text-base font-bold bg-yellow-400 text-slate-950 hover:bg-yellow-300 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10"
+                  id="continue-library-btn"
+                >
+                  Continue to Video Library
+                  <svg
+                    className="w-5 h-5 ml-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    />
+                  </svg>
+                </Link>
 
-            <button
-              onClick={handleQuickConnect}
-              className="inline-flex items-center justify-center px-6 py-3.5 text-base font-semibold bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
-              aria-label="Quick Connect Haptic Device"
-              id="hero-quick-connect-btn"
-            >
-              Pair Haptic Sleeve
-            </button>
+                <Link
+                  href="/settings"
+                  className="inline-flex items-center justify-center px-6 py-3.5 text-base font-semibold bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
+                  id="edit-preferences-btn"
+                  aria-label="Edit user preferences and settings"
+                >
+                  Edit Preferences
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center justify-center px-6 py-3.5 text-base font-bold bg-yellow-400 text-slate-950 hover:bg-yellow-300 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 shadow-lg shadow-yellow-400/10"
+                  id="get-started-btn"
+                >
+                  Get Started
+                  <svg
+                    className="w-5 h-5 ml-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    />
+                  </svg>
+                </Link>
+
+                <button
+                  onClick={handleQuickConnect}
+                  className="inline-flex items-center justify-center px-6 py-3.5 text-base font-semibold bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
+                  aria-label="Quick Connect Haptic Device"
+                  id="hero-quick-connect-btn"
+                >
+                  Pair Haptic Sleeve
+                </button>
+              </>
+            )}
           </div>
         </div>
       </section>

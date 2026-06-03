@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { getActiveUserId } from "@/lib/prototypeUser";
+import { getActiveUserId, notifyActiveUserUpdated } from "@/lib/prototypeUser";
 import { getUserProfile, updateUserSettings } from "@/lib/api";
+import { mergeUserPreferences } from "@/lib/userPreferences";
 import { AssistantPersona, InterruptionLevel, AssistantVerbosity } from "@/types";
 
 export default function Settings() {
@@ -11,6 +12,9 @@ export default function Settings() {
   const [activeUserId, setActiveUserId] = useState("");
 
   // Settings state variables
+  const [name, setName] = useState("");
+  const [visionLoss, setVisionLoss] = useState("vl-blind");
+  const [screenReader, setScreenReader] = useState("none");
   const [assistantPersona, setAssistantPersona] = useState("supportive");
   const [ttsSpeed, setTtsSpeed] = useState(1.0);
   const [voiceSelect, setVoiceSelect] = useState("system");
@@ -31,11 +35,13 @@ export default function Settings() {
       setActiveUserId(activeId);
       try {
         const user = await getUserProfile(activeId);
-        if (user.assistant_persona) {
-          setAssistantPersona(user.assistant_persona);
+        const prefs = mergeUserPreferences(user);
+        setName(prefs.name || "");
+        if (prefs.assistant_persona) {
+          setAssistantPersona(prefs.assistant_persona);
         }
-        if (user.voice_settings) {
-          const vs = user.voice_settings as Record<string, string | number | boolean>;
+        if (prefs.voice_settings) {
+          const vs = prefs.voice_settings as Record<string, string | number | boolean>;
           if (typeof vs.tts_rate === "number") {
             setTtsSpeed(vs.tts_rate);
           }
@@ -48,11 +54,17 @@ export default function Settings() {
           if (typeof vs.haptic_first === "boolean") {
             setHapticFirst(vs.haptic_first);
           }
+          if (typeof vs.vision_loss === "string") {
+            setVisionLoss(vs.vision_loss);
+          }
+          if (typeof vs.screen_reader === "string") {
+            setScreenReader(vs.screen_reader);
+          }
         }
-        if (user.audio_coexistence) {
-          setInterruptionLevel(user.audio_coexistence.interruption_level ?? "brief_speech");
-          setAssistantVerbosity(user.audio_coexistence.assistant_verbosity ?? "moderate");
-          setPauseBeforeSpeaking(user.audio_coexistence.pause_before_speaking !== false);
+        if (prefs.audio_coexistence) {
+          setInterruptionLevel(prefs.audio_coexistence.interruption_level ?? "brief_speech");
+          setAssistantVerbosity(prefs.audio_coexistence.assistant_verbosity ?? "moderate");
+          setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking !== false);
         }
       } catch (err) {
         console.error("Failed to load user profile in settings:", err);
@@ -71,12 +83,15 @@ export default function Settings() {
 
     try {
       const settingsPayload = {
+        name: name,
         assistant_persona: assistantPersona as AssistantPersona,
         voice_settings: {
           tts_rate: ttsSpeed,
           voice_id: voiceSelect,
           spatial_audio: spatialAudio,
           haptic_first: hapticFirst,
+          vision_loss: visionLoss,
+          screen_reader: screenReader,
         },
         audio_coexistence: {
           interruption_level: interruptionLevel as InterruptionLevel,
@@ -89,6 +104,7 @@ export default function Settings() {
       await updateUserSettings(activeUserId, settingsPayload);
       setIsError(false);
       setStatusMessage("Configuration settings saved successfully!");
+      notifyActiveUserUpdated();
     } catch (err) {
       console.error("Failed to save settings:", err);
       setIsError(true);
@@ -132,6 +148,93 @@ export default function Settings() {
         </div>
 
         <form onSubmit={handleSaveSettings} className="space-y-8">
+          {/* Section 0: Profile & Accessibility Basics */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="profile-basics-heading">
+            <h2 id="profile-basics-heading" className="text-xl font-bold text-white mb-2">
+              Profile & Accessibility Basics
+            </h2>
+            <p className="text-xs text-slate-400 mb-6">
+              Update your name, degree of vision loss, and screen reader preferences.
+            </p>
+
+            <div className="space-y-6">
+              {/* Name Input */}
+              <div className="space-y-2">
+                <label htmlFor="user-name" className="block text-sm font-semibold text-slate-200">
+                  Full Name / Preferred Name
+                </label>
+                <input
+                  type="text"
+                  id="user-name"
+                  required
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
+                />
+              </div>
+
+              {/* Degree of Vision Loss */}
+              <div className="space-y-3">
+                <span className="block text-sm font-semibold text-slate-200" id="vision-loss-label">
+                  Degree of Vision Loss
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-labelledby="vision-loss-label">
+                  {[
+                    { id: "vl-blind", label: "Totally Blind", desc: "Primarily relies on Speech & Haptic responses" },
+                    { id: "vl-legal", label: "Legally Blind", desc: "High-contrast guides & Audio descriptions" },
+                    { id: "vl-low", label: "Moderate Low Vision", desc: "Large fonts, scaling, & outline guidance" },
+                    { id: "vl-mild", label: "Mild Low Vision", desc: "Slight text adjustments & voice cues" },
+                  ].map((level) => (
+                    <label
+                      key={level.id}
+                      htmlFor={level.id}
+                      className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all duration-200 focus-within:ring-2 focus-within:ring-yellow-400 ${
+                        visionLoss === level.id
+                          ? "bg-slate-950 border-2 border-yellow-400"
+                          : "bg-slate-950 border border-slate-800 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          id={level.id}
+                          name="vision-loss"
+                          value={level.id}
+                          checked={visionLoss === level.id}
+                          onChange={(e) => setVisionLoss(e.target.value)}
+                          className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
+                        />
+                        <span className="text-sm font-bold text-white">{level.label}</span>
+                      </div>
+                      <span className="text-xs text-slate-400 mt-1 pl-7">{level.desc}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Screen Reader Dropdown */}
+              <div className="space-y-2">
+                <label htmlFor="screen-reader-select" className="block text-sm font-semibold text-slate-200">
+                  Primary Screen Reader Helper
+                </label>
+                <select
+                  id="screen-reader-select"
+                  value={screenReader}
+                  onChange={(e) => setScreenReader(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all cursor-pointer"
+                >
+                  <option value="none">None / Standard Audio Synthesis Only</option>
+                  <option value="voiceover">Apple VoiceOver</option>
+                  <option value="nvda">NVDA (NonVisual Desktop Access)</option>
+                  <option value="jaws">JAWS (Job Access With Speech)</option>
+                  <option value="talkback">Android TalkBack</option>
+                  <option value="other">Other Screen Reader</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
           {/* Section 1: Assistant Persona */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="persona-heading">
             <h2 id="persona-heading" className="text-xl font-bold text-white mb-2">

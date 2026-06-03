@@ -112,14 +112,19 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     jobStage === ProcessingStage.COMPLETED
   );
 
+  const searchLevel = searchParams.get("overrideLevel");
+  const searchPause = searchParams.get("overridePause");
+
   const coexistenceSettings: AudioCoexistenceSettings = {
     interruption_level: assistantMuted
       ? InterruptionLevel.HAPTIC_ONLY
-      : (userProfile?.audio_coexistence?.interruption_level || InterruptionLevel.BRIEF_SPEECH),
+      : ((searchLevel as InterruptionLevel) || userProfile?.audio_coexistence?.interruption_level || InterruptionLevel.BRIEF_SPEECH),
     assistant_verbosity: userProfile?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
-    pause_before_speaking: userProfile?.audio_coexistence?.pause_before_speaking !== undefined
-      ? userProfile.audio_coexistence.pause_before_speaking
-      : true,
+    pause_before_speaking: searchPause !== null
+      ? searchPause === "true"
+      : (userProfile?.audio_coexistence?.pause_before_speaking !== undefined
+        ? userProfile.audio_coexistence.pause_before_speaking
+        : true),
     correction_frequency: userProfile?.audio_coexistence?.correction_frequency || "medium",
   };
 

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { useLayout } from "./LayoutContext";
-import { getActiveUserId } from "@/lib/prototypeUser";
+import { getActiveUserId, USER_UPDATED_EVENT } from "@/lib/prototypeUser";
 import { getUserProfile } from "@/lib/api";
 
 interface HeaderProps {
@@ -16,30 +17,41 @@ export default function Header({ id = "main-header" }: HeaderProps) {
 
   const [userName, setUserName] = useState<string>("Profile");
   const [avatarInitial, setAvatarInitial] = useState<string>("P");
-  const [ariaLabel, setAriaLabel] = useState<string>("User profile options");
+  const [ariaLabel, setAriaLabel] = useState<string>("Profile options. Open settings.");
 
   useEffect(() => {
-    const activeUserId = getActiveUserId();
-    if (!activeUserId) return;
+    const fetchProfile = () => {
+      const activeUserId = getActiveUserId();
+      if (!activeUserId) return;
 
-    getUserProfile(activeUserId)
-      .then((profile) => {
-        if (profile && profile.name) {
-          setUserName(profile.name);
-          setAvatarInitial(profile.name.charAt(0).toUpperCase() || "P");
-          setAriaLabel(`Profile for ${profile.name}`);
-        } else {
+      getUserProfile(activeUserId)
+        .then((profile) => {
+          if (profile && profile.name) {
+            setUserName(profile.name);
+            setAvatarInitial(profile.name.charAt(0).toUpperCase() || "P");
+            setAriaLabel(`Profile for ${profile.name}. Open settings.`);
+          } else {
+            setUserName("Profile");
+            setAvatarInitial("P");
+            setAriaLabel("Profile options. Open settings.");
+          }
+        })
+        .catch((err) => {
+          console.warn("Failed to load user profile in header:", err);
           setUserName("Profile");
           setAvatarInitial("P");
-          setAriaLabel("User profile options");
-        }
-      })
-      .catch((err) => {
-        console.warn("Failed to load user profile in header:", err);
-        setUserName("Profile");
-        setAvatarInitial("P");
-        setAriaLabel("User profile options");
-      });
+          setAriaLabel("Profile options. Open settings.");
+        });
+    };
+
+    fetchProfile();
+
+    if (typeof window !== "undefined") {
+      window.addEventListener(USER_UPDATED_EVENT, fetchProfile);
+      return () => {
+        window.removeEventListener(USER_UPDATED_EVENT, fetchProfile);
+      };
+    }
   }, []);
 
   const pageTitle =
@@ -150,10 +162,8 @@ export default function Header({ id = "main-header" }: HeaderProps) {
         </button>
 
         {/* User Account / Profile Button */}
-        <button
-          onClick={() => {
-            // TODO: Open user profile options
-          }}
+        <Link
+          href="/settings"
           className="flex items-center justify-center sm:justify-start gap-2 h-11 px-2.5 sm:pr-4 text-slate-350 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0"
           aria-label={ariaLabel}
           id="user-profile-menu-btn"
@@ -162,7 +172,7 @@ export default function Header({ id = "main-header" }: HeaderProps) {
             {avatarInitial}
           </div>
           <span className="text-xs font-bold hidden sm:inline truncate max-w-[100px]">{userName}</span>
-        </button>
+        </Link>
       </div>
     </header>
   );

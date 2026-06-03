@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { startSession, getUserProfile, updateUserSettings } from "@/lib/api";
+import { startSession, getUserProfile } from "@/lib/api";
 import { getActiveUserId, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
-import { InterruptionLevel, AssistantVerbosity } from "@/types";
+import { mergeUserPreferences } from "@/lib/userPreferences";
 
 interface SetupPageProps {
   params: {
@@ -18,7 +18,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeUserId, setActiveUserId] = useState(PROTOTYPE_USER_ID);
-  const [coexistence, setCoexistence] = useState("coexist-duck");
+  const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
+  const [pauseBeforeSpeaking, setPauseBeforeSpeaking] = useState(true);
   const [difficulty, setDifficulty] = useState("diff-norm");
 
   useEffect(() => {
@@ -28,15 +29,13 @@ export default function SessionSetup({ params }: SetupPageProps) {
     async function fetchUserSettings() {
       try {
         const user = await getUserProfile(activeId);
-        if (user.audio_coexistence) {
-          const level = user.audio_coexistence.interruption_level;
-          const pause = user.audio_coexistence.pause_before_speaking;
-          if (level === "haptic_only") {
-            setCoexistence("coexist-haptic");
-          } else if (pause) {
-            setCoexistence("coexist-pause");
-          } else {
-            setCoexistence("coexist-duck");
+        const prefs = mergeUserPreferences(user);
+        if (prefs.audio_coexistence) {
+          if (prefs.audio_coexistence.interruption_level) {
+            setInterruptionLevel(prefs.audio_coexistence.interruption_level);
+          }
+          if (prefs.audio_coexistence.pause_before_speaking !== undefined) {
+            setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking);
           }
         }
       } catch (err) {
@@ -55,31 +54,19 @@ export default function SessionSetup({ params }: SetupPageProps) {
     setIsStarting(true);
     setError(null);
     try {
-      // Map coexistence selection back to user settings schema
-      let level = "brief_speech";
-      let pause = false;
-      if (coexistence === "coexist-haptic") {
-        level = "haptic_only";
-      } else if (coexistence === "coexist-pause") {
-        pause = true;
-        level = "brief_speech";
-      }
-
-      // Update settings in backend before starting session
-      await updateUserSettings(activeUserId, {
-        audio_coexistence: {
-          interruption_level: level as InterruptionLevel,
-          pause_before_speaking: pause,
-          assistant_verbosity: AssistantVerbosity.MODERATE,
-          correction_frequency: "medium",
-        }
-      });
-
       const session = await startSession(params.videoId, activeUserId);
       if (!session.id) {
         throw new Error("Backend response did not contain a valid session ID.");
       }
-      router.push(`/session/${params.videoId}?sessionId=${session.id}`);
+
+      // Do NOT patch user settings from pre-session setup. Pass overrides via query params instead.
+      const queryParams = new URLSearchParams();
+      queryParams.set("sessionId", session.id);
+      queryParams.set("overrideLevel", interruptionLevel);
+      queryParams.set("overridePause", String(pauseBeforeSpeaking));
+      queryParams.set("overrideDifficulty", difficulty);
+
+      router.push(`/session/${params.videoId}?${queryParams.toString()}`);
     } catch (err) {
       console.error("Failed to start session:", err);
       const message = err instanceof Error ? err.message : "Failed to start assisted playback session. Please check if the backend is running.";
@@ -176,7 +163,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
               How are you feeling today?
             </h2>
             <p className="text-xs text-slate-400 mb-4">
-              The assistant adjusts its interruption level and haptic tolerances based on your current state.
+              The assistant adjusts its interruption level and haptic tolerances based on your current state (applicable for this session only).
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="radiogroup" aria-labelledby="difficulty-heading">
@@ -213,39 +200,60 @@ export default function SessionSetup({ params }: SetupPageProps) {
           {/* Audio Coexistence Preferences */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="audio-coexistence-heading">
             <h2 id="audio-coexistence-heading" className="text-lg font-bold text-white mb-2">
-              Audio Coexistence Preferences
+              Audio Coexistence (Session Overrides)
             </h2>
             <p className="text-xs text-slate-400 mb-4">
-              Control how the assistant&apos;s voice coexists with the trainer&apos;s YouTube audio.
+              Configure how the assistant coexists with the trainer&apos;s audio. (These selections will override your saved defaults for this session only).
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6" role="radiogroup" aria-labelledby="audio-coexistence-heading">
               {[
-                { id: "coexist-haptic", label: "Haptic Only", desc: "No speech interruptions. Tactile cues only." },
-                { id: "coexist-duck", label: "Duck & Speak", desc: "Lower YouTube volume when assistant speaks." },
-                { id: "coexist-pause", label: "Pause & Speak", desc: "Briefly pause YouTube video when assistant speaks." },
-              ].map((opt) => (
+                { id: "setup-int-silent", value: "silent", label: "Silent", desc: "No voice feedback. Playback is entirely uninterrupted." },
+                { id: "setup-int-haptic", value: "haptic_only", label: "Haptic Only", desc: "Vibration cues on sleeves. Speech is fully silenced." },
+                { id: "setup-int-brief", value: "brief_speech", label: "Brief Speech", desc: "Short correction words only during clear speech gaps." },
+                { id: "setup-int-full", value: "full_speech", label: "Full Speech", desc: "Ducks YouTube audio to deliver complete form guidance." },
+              ].map((lvl) => (
                 <label
-                  key={opt.id}
-                  htmlFor={opt.id}
-                  className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 text-center ${
-                    coexistence === opt.id
+                  key={lvl.id}
+                  htmlFor={lvl.id}
+                  className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 ${
+                    interruptionLevel === lvl.value
                       ? "bg-slate-950 border-2 border-yellow-400"
                       : "bg-slate-950 border border-slate-800 hover:border-slate-700"
                   }`}
                 >
-                  <input
-                    type="radio"
-                    id={opt.id}
-                    name="coexistence"
-                    value={opt.id}
-                    checked={coexistence === opt.id}
-                    onChange={(e) => setCoexistence(e.target.value)}
-                    className="sr-only"
-                  />
-                  <span className="text-sm font-bold text-white mb-1">{opt.label}</span>
-                  <span className="text-[10px] text-slate-500 leading-normal">{opt.desc}</span>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id={lvl.id}
+                      name="interruption-level"
+                      value={lvl.value}
+                      checked={interruptionLevel === lvl.value}
+                      onChange={(e) => setInterruptionLevel(e.target.value)}
+                      className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400"
+                    />
+                    <span className="text-sm font-bold text-white">{lvl.label}</span>
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1.5">{lvl.desc}</span>
                 </label>
               ))}
+            </div>
+
+            {/* Pause Before Speaking Toggle */}
+            <div className="flex items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+              <div className="flex flex-col gap-0.5">
+                <label htmlFor="pause-before-speaking" className="text-sm font-bold text-slate-200 cursor-pointer">
+                  Pause Before Speaking
+                </label>
+                <span className="text-xs text-slate-400">Briefly pauses the YouTube video when the assistant speaks a correction.</span>
+              </div>
+              <input
+                type="checkbox"
+                id="pause-before-speaking"
+                checked={pauseBeforeSpeaking}
+                onChange={(e) => setPauseBeforeSpeaking(e.target.checked)}
+                className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
+              />
             </div>
           </section>
 

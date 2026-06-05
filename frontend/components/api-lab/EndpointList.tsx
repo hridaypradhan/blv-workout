@@ -96,7 +96,7 @@ export default function EndpointList({
                     aria-current={isSelected ? "true" : undefined}
                   >
                     <span
-                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wide shrink-0 ${getMethodBadgeClass(
+                      className={`text-xs font-extrabold px-2 py-0.5 rounded border uppercase tracking-wide shrink-0 ${getMethodBadgeClass(
                         e.method
                       )}`}
                     >
@@ -105,7 +105,7 @@ export default function EndpointList({
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-slate-100 break-all whitespace-normal" title={e.path}>{e.path}</p>
                       {e.summary && (
-                        <p className="text-xs text-slate-500 truncate mt-0.5">{e.summary}</p>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">{e.summary}</p>
                       )}
                     </div>
                   </button>
@@ -116,7 +116,7 @@ export default function EndpointList({
         ))}
 
         {Object.keys(groups).length === 0 && (
-          <div className="text-center py-8 text-slate-500">
+          <div className="text-center py-8 text-slate-400">
             <p className="text-sm">No endpoints found matching search.</p>
           </div>
         )}

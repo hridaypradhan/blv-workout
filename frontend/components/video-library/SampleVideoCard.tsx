@@ -58,11 +58,11 @@ export default function SampleVideoCard({ video }: SampleVideoCardProps) {
 
           <div className="grid grid-cols-2 gap-4 text-xs text-slate-400 mb-6" role="list">
             <div className="flex flex-col gap-0.5" role="listitem">
-              <span className="font-semibold text-slate-500 uppercase tracking-wider">Trainer</span>
+              <span className="font-bold text-slate-400 uppercase tracking-wider">Trainer</span>
               <span className="text-slate-300 text-sm font-semibold">{video.channelName}</span>
             </div>
             <div className="flex flex-col gap-0.5" role="listitem">
-              <span className="font-semibold text-slate-500 uppercase tracking-wider">Last Playback</span>
+              <span className="font-bold text-slate-400 uppercase tracking-wider">Last Playback</span>
               <span className="text-slate-300 text-sm font-semibold">{video.lastSession}</span>
             </div>
           </div>
@@ -71,7 +71,7 @@ export default function SampleVideoCard({ video }: SampleVideoCardProps) {
         {/* Start Session Action Button */}
         <button
           disabled
-          className="w-full inline-flex items-center justify-center px-4 py-3 bg-slate-800/40 text-slate-500 font-bold rounded-xl text-sm border border-slate-800 cursor-not-allowed transition-all"
+          className="w-full inline-flex items-center justify-center px-4 py-3 bg-slate-800/40 text-slate-400 font-bold rounded-xl text-sm border border-slate-700 cursor-not-allowed transition-all"
           aria-label={`Playback Unavailable: Sample video "${video.title}" cannot start assisted playback`}
           id={`start-btn-${video.id}`}
         >

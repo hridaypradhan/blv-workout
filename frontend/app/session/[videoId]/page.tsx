@@ -14,10 +14,8 @@ import { endSession, getUserProfile, recordPlaybackEvent } from "@/lib/api";
 import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
+import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
 import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User } from "@/types";
-
-
-
 
 interface LiveSessionProps {
   params: {
@@ -46,6 +44,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const [endError, setEndError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<User | null>(null);
 
+  const { hapticState } = usePrototypeHapticConnection();
+
   useEffect(() => {
     const userId = getActiveUserId();
     getUserProfile(userId)
@@ -56,6 +56,10 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         console.warn("Failed to fetch user settings for live session:", err);
       });
   }, []);
+
+  const announce = (msg: string) => {
+    setAnnouncement(msg);
+  };
 
   // Hook into the YouTube IFrame player
   const {
@@ -78,19 +82,19 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const prevIsPlayingAnnouncement = useRef(false);
   useEffect(() => {
     if (playerError) {
-      setAnnouncement(`Trainer player error: ${playerError}`);
+      announce(`Trainer player error: ${playerError}`);
     } else if (hasEnded) {
-      setAnnouncement("Trainer video playback ended.");
+      announce("Trainer video playback ended.");
     } else if (isBuffering) {
-      setAnnouncement("Trainer video is buffering.");
+      announce("Trainer video is buffering.");
     } else if (isPlaying) {
-      setAnnouncement("Trainer video playback started.");
+      announce("Trainer video playback started.");
     } else if (!isPlaying && prevIsPlayingAnnouncement.current) {
-      setAnnouncement("Trainer video playback paused.");
+      announce("Trainer video playback paused.");
     } else if (isReady) {
-      setAnnouncement((prev) => prev.includes("ready") ? prev : "Trainer video player is ready.");
+      announce("Trainer video player is ready.");
     } else if (!isReady && youtubeId) {
-      setAnnouncement("Loading trainer video player.");
+      announce("Loading trainer video player.");
     }
     prevIsPlayingAnnouncement.current = isPlaying;
   }, [isReady, isPlaying, isBuffering, hasEnded, playerError, youtubeId]);
@@ -105,12 +109,28 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     playbackRate,
   });
 
-
   // Load assistance sidecar manifest
   const { manifest, isLoading: isLoadingManifest, error: manifestError } = useSidecarManifest(
     params.videoId,
     jobStage === ProcessingStage.COMPLETED
   );
+
+  // Monitor manifest loading updates
+  const prevIsLoadingManifest = useRef(false);
+  const prevManifestError = useRef<string | null>(null);
+  useEffect(() => {
+    if (isLoadingManifest && !prevIsLoadingManifest.current) {
+      announce("Assisted playback manifest is loading.");
+    }
+    if (!isLoadingManifest && prevIsLoadingManifest.current && manifest) {
+      announce("Assisted playback manifest loaded successfully.");
+    }
+    if (manifestError && manifestError !== prevManifestError.current) {
+      announce(`Failed to load assisted playback manifest: ${manifestError}`);
+    }
+    prevIsLoadingManifest.current = isLoadingManifest;
+    prevManifestError.current = manifestError;
+  }, [isLoadingManifest, manifest, manifestError]);
 
   const searchLevel = searchParams.get("overrideLevel");
   const searchPause = searchParams.get("overridePause");
@@ -153,9 +173,12 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         ...prev,
         { sender: "assistant", text: activeCue.text }
       ]);
+      
       // Expose as announcement for screen readers
       if (activeCue.modality === "audio") {
-        setAnnouncement(`Assistant cue: ${activeCue.text}`);
+        announce(`Assistant cue: ${activeCue.text}`);
+      } else if (activeCue.modality === "haptic") {
+        announce(`Haptic cue requested: ${activeCue.text}`);
       }
 
       if (sessionId) {
@@ -177,12 +200,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       (evt) => evt.start_ms !== null && evt.start_ms !== undefined && evt.start_ms <= currentTimeMs
     );
     if (priorEvents.length > 0) {
-      // Sort descending by start_ms
       priorEvents.sort((a, b) => (b.start_ms ?? 0) - (a.start_ms ?? 0));
       const latestEvent = priorEvents[0];
       if (latestEvent.start_ms !== null && latestEvent.start_ms !== undefined) {
         seek(latestEvent.start_ms / 1000);
-        setAnnouncement(`Repeating trainer instruction: "${latestEvent.text}"`);
+        announce(`Repeating trainer instruction: "${latestEvent.text}"`);
         if (sessionId) {
           recordPlaybackEvent(sessionId, "trainer_instruction_repeated", currentTimeMs, {
             text: latestEvent.text,
@@ -191,7 +213,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         }
       }
     } else {
-      setAnnouncement("No prior trainer instructions found in this workout session.");
+      announce("No prior trainer instructions found in this workout session.");
     }
   };
 
@@ -202,7 +224,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     );
     if (nextAnchor) {
       seek(nextAnchor.start_time_seconds);
-      setAnnouncement(`Skipped to section: ${nextAnchor.name}`);
+      announce(`Skipped to section: ${nextAnchor.name}`);
       if (sessionId) {
         recordPlaybackEvent(sessionId, "section_skipped", currentTimeMs, {
           section_name: nextAnchor.name,
@@ -210,7 +232,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         }).catch((err) => console.warn("Failed to log section skipped event:", err));
       }
     } else {
-      setAnnouncement("No more exercise sections found in this workout.");
+      announce("No more exercise sections found in this workout.");
     }
   };
 
@@ -229,39 +251,40 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       const message = err instanceof Error ? err.message : "Failed to end session. Please try again.";
       setEndError(message);
       setIsEnding(false);
+      announce(`Failed to end session: ${message}`);
     }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
-    const userMsg = chatInput;
+    const query = chatInput.trim();
+    if (!query) return;
+
     setChatMessages((prev) => [
       ...prev,
-      { sender: "user", text: userMsg }
+      { sender: "user", text: query }
     ]);
     setChatInput("");
+    announce(`User question submitted: "${query}"`);
 
     if (sessionId) {
       recordPlaybackEvent(sessionId, "user_question_submitted", currentTimeMs, {
-        question: userMsg
+        question: query
       }).catch((err) => console.warn("Failed to log user question event:", err));
     }
   };
 
-  const sleeveStatus = [
-    { label: "LA", color: "bg-red-500", name: "Left Arm" },
-    { label: "RA", color: "bg-red-500", name: "Right Arm" },
-    { label: "LL", color: "bg-red-500", name: "Left Leg" },
-    { label: "RL", color: "bg-red-500", name: "Right Leg" },
-  ];
+  const handleToggleMute = (muted: boolean) => {
+    setAssistantMuted(muted);
+    announce(muted ? "Assistant voice muted." : "Assistant voice unmuted.");
+  };
+
+  const sleeveStatus = getPrototypeSleeveStatuses(hapticState);
 
   const currentExercise = manifest?.exercise_timeline_anchors.find(
     (anchor) => currentTime >= anchor.start_time_seconds && currentTime <= anchor.end_time_seconds
   ) || null;
 
-
-  // If sessionId is missing, show fallback screen
   if (!sessionId) {
     return (
       <PageWrapper id="live-session-no-id-wrapper">
@@ -290,7 +313,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     );
   }
 
-  // Conditional screens for preprocessing job states
   if (isLoadingJob) {
     return (
       <PageWrapper id="live-session-loading-wrapper">
@@ -330,7 +352,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           <p className="text-sm text-slate-400 mb-2">
             Workout assistance preparation is not complete yet.
           </p>
-          <p className="text-xs text-yellow-400 font-semibold bg-yellow-400/10 border border-yellow-400/20 px-3 py-1 rounded-full mb-6">
+          <p className="text-sm text-yellow-400 font-semibold bg-yellow-400/10 border border-yellow-400/20 px-3 py-1.5 rounded-full mb-6">
             Current Stage: {jobStage ? jobStage.replace(/_/g, " ") : "unknown"}
           </p>
           <Link
@@ -354,16 +376,37 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       {/* Top Bar: Sleeve Calibration & Device Strip */}
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-6 shadow-md" aria-label="Device Status Bar">
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-          <span className="text-xs font-semibold text-slate-300">Live Device Calibration & Tracking Connected</span>
+          <span className={`w-2.5 h-2.5 rounded-full ${hapticState === "connected" ? "bg-emerald-500 animate-ping" : hapticState === "connecting" ? "bg-yellow-500 animate-pulse" : "bg-red-500"}`} />
+          <span className="text-sm font-semibold text-slate-300">
+            {hapticState === "connected" 
+              ? "Live Device Tracking Connected (Prototype)" 
+              : hapticState === "connecting" 
+              ? "Live Device Tracking Connecting..." 
+              : "Live Device Tracking Disconnected (Use Setup to Connect)"}
+          </span>
         </div>
-        <div className="flex flex-wrap gap-3 sm:gap-4">
-          {sleeveStatus.map((s) => (
-            <div key={s.label} className="flex items-center gap-1.5" title={`${s.name}: Calibrating`}>
-              <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" aria-hidden="true" />
-              <span className="text-[10px] uppercase font-bold text-slate-400">{s.label}</span>
-            </div>
-          ))}
+        <div className="flex flex-wrap gap-3 sm:gap-4" aria-label="Individual Limb Calibration Statuses">
+          {sleeveStatus.map((s) => {
+            const limbStatusText = s.styleState === "connected" 
+              ? "Calibrating" 
+              : s.styleState === "connecting" 
+              ? "Connecting..." 
+              : "Offline";
+            const dotColor = s.styleState === "connected" 
+              ? "bg-yellow-400 animate-pulse" 
+              : s.styleState === "connecting" 
+              ? "bg-yellow-500 animate-pulse" 
+              : "bg-red-500";
+            return (
+              <div key={s.label} className="flex items-center gap-1.5" aria-label={`${s.name}: ${limbStatusText}`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} aria-hidden="true" />
+                <span className="text-sm font-bold text-slate-300">
+                  <span className="sr-only">{s.name} </span>
+                  <span>{s.label}</span> ({limbStatusText})
+                </span>
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -387,7 +430,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               assistantMuted={assistantMuted}
               seek={seek}
               setPlaybackRate={setPlaybackRate}
-              setAssistantMuted={setAssistantMuted}
+              setAssistantMuted={handleToggleMute}
               handleRepeatTrainerInstruction={handleRepeatTrainerInstruction}
             />
           </YouTubePlayerPanel>
@@ -401,11 +444,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 </svg>
               </div>
               <div>
-                <h3 className="text-xs font-bold text-white">Live Pose Tracker Active</h3>
-                <p className="text-[10px] text-slate-500">Camera feed tracks body joint angles to trigger supplementary haptics.</p>
+                <h3 className="text-sm font-bold text-white">Live Pose Tracker Active</h3>
+                <p className="text-sm text-slate-300">Camera feed tracks body joint angles to trigger supplementary haptics.</p>
               </div>
             </div>
-            <div className="text-xs text-emerald-400 font-semibold px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20">
+            <div className="text-sm text-emerald-400 font-semibold px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 whitespace-nowrap shrink-0">
               Tracking Body
             </div>
           </section>
@@ -434,14 +477,14 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 )}
               </span>
               {currentExercise && (
-                <span className="text-xs text-slate-400 mt-2 block">
+                <span className="text-sm text-slate-400 mt-2 block">
                   Joint: <strong className="text-slate-200 capitalize">{currentExercise.counting_joint || "any"}</strong> | Target: 15 reps
                 </span>
               )}
             </div>
 
             <div>
-              <div className="flex justify-between items-center text-xs text-slate-400 px-1 mb-1.5">
+              <div className="flex justify-between items-center text-sm text-slate-400 px-1 mb-1.5">
                 <span>Section Progress</span>
                 <span>
                   {currentExercise
@@ -470,36 +513,41 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                   Assistant Cue Feed
                 </h2>
                 {isLoadingManifest && (
-                  <span className="text-[10px] text-yellow-400 animate-pulse flex items-center gap-1.5" id="manifest-loading-indicator">
+                  <span className="text-sm text-yellow-400 animate-pulse flex items-center gap-1.5" id="manifest-loading-indicator">
                     <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
                     Loading Manifest
                   </span>
                 )}
                 {manifestError && (
-                  <span className="text-[10px] text-red-400 font-semibold flex items-center gap-1" id="manifest-error-indicator" title={manifestError}>
+                  <span className="text-sm text-red-400 font-semibold flex items-center gap-1" id="manifest-error-indicator" title={manifestError}>
                     ⚠️ Load Error
                   </span>
                 )}
               </div>
     
-              <div className="space-y-4 mb-4 pr-1 max-h-[220px] lg:max-h-[320px] overflow-y-auto">
+              <div 
+                className="space-y-4 mb-4 pr-1 max-h-[220px] lg:max-h-[320px] overflow-y-auto"
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions text"
+              >
                 {manifestError && (
-                  <div className="p-3 bg-red-950/40 border border-red-500/20 text-red-200 rounded-2xl text-xs flex flex-col gap-1 mb-2" role="alert" id="manifest-error-alert">
-                    <span className="font-bold text-[10px] text-red-400 uppercase tracking-wider">⚠️ Manifest Loading Error</span>
+                  <div className="p-3 bg-red-950/40 border border-red-500/20 text-red-200 rounded-2xl text-sm flex flex-col gap-1 mb-2" role="alert" id="manifest-error-alert">
+                    <span className="font-bold text-sm text-red-400 uppercase tracking-wider">⚠️ Manifest Loading Error</span>
                     <p>Failed to load the sidecar assistance manifest. Voice cues and timeline anchors will be unavailable.</p>
-                    <p className="text-[10px] opacity-75">{manifestError}</p>
+                    <p className="text-sm opacity-75">{manifestError}</p>
                   </div>
                 )}
                 {chatMessages.map((msg, index) => (
                   <div
                     key={index}
-                    className={`p-3 rounded-2xl text-xs leading-relaxed max-w-[90%] ${
+                    className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[90%] ${
                       msg.sender === "assistant"
                         ? "bg-slate-950 border border-slate-800 text-slate-300 self-start"
                         : "bg-yellow-400 text-slate-950 font-medium ml-auto"
                     }`}
                   >
-                    <p className="font-bold text-[10px] mb-1 opacity-70">
+                    <p className="font-bold text-xs mb-1 opacity-70">
                       {msg.sender === "assistant" ? "ASSISTANT" : "YOU"}
                     </p>
                     <p>{msg.text}</p>
@@ -508,11 +556,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               </div>
             </div>
 
-            <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-slate-800/80 pt-4">
+            <form onSubmit={handleSendMessage} className="w-full flex items-center gap-2 border-t border-slate-800/80 pt-4">
               <input
                 type="text"
                 placeholder="Ask assistant about movement setup..."
-                className="flex-1 px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
+                className="flex-1 min-w-0 px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
                 aria-label="Ask assistant for verbal clarification"
                 id="live-chat-input"
                 value={chatInput}
@@ -520,7 +568,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               />
               <button
                 type="submit"
-                className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-xs border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0"
                 id="live-chat-btn"
               >
                 Send
@@ -552,7 +600,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
  
         <div className="flex flex-col items-center gap-1.5">
           {endError && (
-            <span className="text-xs text-red-400 font-semibold animate-pulse" role="alert">
+            <span className="text-sm text-red-400 font-semibold animate-pulse" role="alert">
               {endError}
             </span>
           )}

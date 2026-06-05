@@ -56,7 +56,7 @@ export default function ImportedVideoCard({
               Duration unavailable
             </div>
           )}
-          <div className={`px-2.5 py-1 rounded-md text-xs font-semibold border ${badge.classes}`}>
+          <div className={`px-2.5 py-1 rounded-md text-sm font-semibold border ${badge.classes}`}>
             {badge.text}
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function ImportedVideoCard({
             </p>
           )}
           {job.error && (
-            <p className="text-xs text-red-400 mb-3 font-medium">Error: {job.error}</p>
+            <p className="text-sm text-red-400 mb-3 font-medium">Error: {job.error}</p>
           )}
         </div>
 
@@ -132,7 +132,7 @@ export default function ImportedVideoCard({
             Retry Preparation
           </Link>
         ) : (
-          <div className="w-full flex items-center justify-center px-4 py-2.5 bg-slate-800/50 text-slate-500 font-semibold rounded-xl text-sm border border-slate-800">
+          <div className="w-full flex items-center justify-center px-4 py-2.5 bg-slate-800/50 text-slate-400 font-bold rounded-xl text-sm border border-slate-700">
             Preparing...
           </div>
         )}

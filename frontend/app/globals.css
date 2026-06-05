@@ -73,3 +73,227 @@ body {
 .animate-pulse-ring {
   animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* High Contrast Refined Override Theme */
+.high-contrast {
+  --background: #050505; /* Near black background */
+  --foreground: #ffffff; /* Primary white text */
+  --primary: #ffea00;    /* Vivid yellow action/focus/accent */
+  --primary-hover: #fff176; /* Warm yellow hover */
+
+  /* High Contrast Semantic Custom Properties */
+  --hc-bg: #050505;
+  --hc-surface: #000000;
+  --hc-surface-elevated: #111111;
+  --hc-text: #ffffff;
+  --hc-text-secondary: #f5f5f5;
+  --hc-accent: #ffea00;
+  --hc-accent-hover: #fff176;
+  --hc-border: #ffffff;
+  --hc-border-active: #ffea00;
+  --hc-error: #ff4d4d;
+  --hc-success: #40ff80;
+  --hc-warning: #ffd54f;
+}
+
+/* Page backgrounds - Document and Body elements */
+.high-contrast body,
+.high-contrast #session-setup-wrapper,
+.high-contrast #live-session-wrapper,
+.high-contrast #onboarding-page-wrapper,
+.high-contrast #home-wrapper,
+.high-contrast #video-library-wrapper,
+.high-contrast #settings-wrapper,
+.high-contrast #history-wrapper,
+.high-contrast #api-lab-wrapper {
+  background-color: var(--hc-bg) !important; /* Force near-black background theme */
+  color: var(--hc-text) !important; /* Force primary white text */
+}
+
+/* Header & Sidebar Main surfaces */
+.high-contrast header,
+.high-contrast aside,
+.high-contrast .bg-slate-900,
+.high-contrast .bg-slate-950 {
+  background-color: var(--hc-surface) !important; /* Force main layout background to solid black */
+}
+
+/* Cards, sections, list items, dialog panels (Elevated surfaces) */
+.high-contrast .bg-slate-800,
+.high-contrast .bg-slate-800\/50,
+.high-contrast .bg-slate-900\/60,
+.high-contrast .bg-slate-950\/40,
+.high-contrast .bg-slate-950\/75,
+.high-contrast [role="dialog"],
+.high-contrast .bg-slate-900\/85 {
+  background-color: var(--hc-surface-elevated) !important; /* Set standard panels to dark charcoal */
+}
+
+/* Common text sizes primary & muted colors */
+.high-contrast .text-white,
+.high-contrast .text-slate-100,
+.high-contrast .text-slate-200,
+.high-contrast .text-slate-300 {
+  color: var(--hc-text) !important; /* Force primary white text */
+}
+
+.high-contrast .text-slate-400,
+.high-contrast .text-slate-500,
+.high-contrast .text-slate-600 {
+  color: var(--hc-text-secondary) !important; /* Force secondary soft white text */
+}
+
+/* Semantic Accent Color (Primary Actions & Primary Active/Focus Cues) */
+.high-contrast .text-yellow-400,
+.high-contrast .text-yellow-300,
+.high-contrast .text-primary {
+  color: var(--hc-accent) !important;
+}
+
+.high-contrast .bg-yellow-400 {
+  background-color: var(--hc-accent) !important; /* Force vivid yellow action buttons */
+  color: #000000 !important; /* Force readable black text on vivid yellow button */
+}
+
+.high-contrast .bg-yellow-400:hover,
+.high-contrast .hover\:bg-yellow-300:hover {
+  background-color: var(--hc-accent-hover) !important; /* Force warm yellow hover */
+}
+
+/* Semantic Red (Errors & Destructive Cues) */
+.high-contrast .text-red-400,
+.high-contrast .text-red-500,
+.high-contrast .text-red-300 {
+  color: var(--hc-error) !important; /* Vivid bright red text warnings/errors */
+}
+
+.high-contrast .bg-red-600 {
+  background-color: var(--hc-error) !important; /* Solid bright red action button background */
+  color: #ffffff !important;
+}
+
+.high-contrast .bg-red-600:hover,
+.high-contrast .hover\:bg-red-500:hover {
+  background-color: #ff3333 !important; /* Bright red hover state */
+}
+
+/* Semantic Green (Success & Connection Active Cues) */
+.high-contrast .text-emerald-400,
+.high-contrast .text-emerald-300,
+.high-contrast .bg-emerald-500 {
+  color: var(--hc-success) !important; /* Bright green text success/calibration indicators */
+}
+
+.high-contrast .bg-emerald-500 {
+  background-color: var(--hc-success) !important; /* Solid green success background */
+  color: #000000 !important;
+}
+
+/* Semantic Warning (Amber & Preparation Cues) */
+.high-contrast .text-amber-400,
+.high-contrast .text-amber-500,
+.high-contrast .bg-amber-400 {
+  color: var(--hc-warning) !important; /* Amber warning text */
+}
+
+/* Preserving and adapting Brand / Profile avatar gradients */
+.high-contrast .bg-gradient-to-tr {
+  background-image: linear-gradient(to top right, var(--hc-accent), var(--hc-warning)) !important;
+  color: #000000 !important; /* Dark text on brand background to remain readable */
+}
+
+/* High Contrast Semantic Overrides for backgrounds & borders */
+
+/* Green / Success / Emerald */
+.high-contrast .border-emerald-500,
+.high-contrast .border-emerald-500\/20,
+.high-contrast .border-emerald-500\/30,
+.high-contrast .border-emerald-900 {
+  border-color: var(--hc-success) !important;
+}
+.high-contrast .bg-emerald-500\/10,
+.high-contrast .bg-emerald-950\/60 {
+  background-color: rgba(64, 255, 128, 0.15) !important;
+}
+
+/* Red / Error / Rose */
+.high-contrast .border-red-500,
+.high-contrast .border-red-500\/30,
+.high-contrast .border-red-500\/20,
+.high-contrast .border-red-900,
+.high-contrast .border-rose-900,
+.high-contrast .border-rose-800 {
+  border-color: var(--hc-error) !important;
+}
+.high-contrast .bg-red-500\/10,
+.high-contrast .bg-red-950\/20,
+.high-contrast .bg-red-950\/40,
+.high-contrast .bg-red-950\/60,
+.high-contrast .bg-rose-900\/60 {
+  background-color: rgba(255, 77, 77, 0.15) !important;
+}
+
+/* Yellow / Warning / Amber */
+.high-contrast .border-yellow-400,
+.high-contrast .border-yellow-400\/20,
+.high-contrast .border-yellow-400\/30,
+.high-contrast .border-amber-400,
+.high-contrast .border-amber-900,
+.high-contrast .border-amber-800 {
+  border-color: var(--hc-warning) !important;
+}
+.high-contrast .bg-yellow-400\/10,
+.high-contrast .bg-amber-950\/20,
+.high-contrast .bg-amber-950\/60,
+.high-contrast .bg-amber-900\/60 {
+  background-color: rgba(255, 213, 79, 0.15) !important;
+}
+
+/* Blue / Info / GET Method */
+.high-contrast .text-blue-400,
+.high-contrast .text-blue-300 {
+  color: #80c0ff !important; /* High contrast readable blue */
+}
+.high-contrast .border-blue-900,
+.high-contrast .border-blue-800 {
+  border-color: #80c0ff !important;
+}
+.high-contrast .bg-blue-950\/60,
+.high-contrast .bg-blue-900\/60 {
+  background-color: rgba(128, 192, 255, 0.15) !important;
+}
+
+/* Form inputs, selections, and textareas */
+.high-contrast input,
+.high-contrast select,
+.high-contrast textarea {
+  background-color: var(--hc-surface) !important;
+  color: var(--hc-text) !important;
+  border-color: var(--hc-border) !important;
+}
+
+/* Disabled controls visibility */
+.high-contrast button:disabled,
+.high-contrast input:disabled,
+.high-contrast select:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  background-color: var(--hc-surface) !important;
+  color: var(--hc-text-secondary) !important;
+  border-color: var(--hc-border) !important;
+}
+
+/* Solid high-visibility borders */
+.high-contrast .border,
+.high-contrast .border-slate-800,
+.high-contrast .border-slate-700,
+.high-contrast .border-slate-800\/80,
+.high-contrast .border-slate-800\/65 {
+  border-color: var(--hc-border) !important; /* Set borders to high-visibility solid white */
+}
+
+/* High contrast active focus ring */
+.high-contrast *:focus-visible {
+  outline: 4px solid var(--hc-accent) !important;
+  outline-offset: 4px !important;
+}

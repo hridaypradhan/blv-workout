@@ -37,19 +37,19 @@ export default function SessionHistoryTable({ sessions }: SessionHistoryTablePro
                 <td className="p-4 md:p-5 text-sm text-slate-400">
                   {formatSessionDuration(s.started_at, s.ended_at)}
                 </td>
-                <td className="p-4 md:p-5 text-sm text-slate-350 text-center font-semibold">
+                <td className="p-4 md:p-5 text-sm text-slate-200 text-center font-semibold">
                   {s.reps?.length || 0}
                 </td>
                 <td className="p-4 md:p-5 text-sm text-amber-400 text-center font-bold">
                   {s.form_errors?.length || 0}
                 </td>
-                <td className="p-4 md:p-5 text-sm text-slate-350 text-center">
+                <td className="p-4 md:p-5 text-sm text-slate-200 text-center">
                   {s.playback_events?.length || 0}
                 </td>
                 <td className="p-4 md:p-5 text-sm text-right whitespace-nowrap">
                   <Link
                     href={`/history/${s.id}`}
-                    className="inline-flex items-center text-xs font-bold text-yellow-400 hover:text-yellow-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5"
+                    className="inline-flex items-center text-sm font-bold text-yellow-400 hover:text-yellow-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5"
                     aria-label={`View detailed report for session on ${dateFormatted}`}
                     id={`details-link-${s.id}`}
                   >

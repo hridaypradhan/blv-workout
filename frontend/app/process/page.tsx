@@ -354,7 +354,7 @@ export default function ProcessVideo() {
                   ? "bg-yellow-400 border-yellow-300 text-slate-900 animate-pulse"
                   : state === "failed"
                   ? "bg-red-500 border-red-400 text-white"
-                  : "bg-slate-950 border-slate-800 text-slate-600";
+                  : "bg-slate-950 border-slate-700 text-slate-400";
               const titleClasses =
                 state === "completed"
                   ? "text-emerald-400"
@@ -362,9 +362,9 @@ export default function ProcessVideo() {
                   ? "text-yellow-400"
                   : state === "failed"
                   ? "text-red-400"
-                  : "text-slate-500";
+                  : "text-slate-400";
               const descClasses =
-                state === "idle" ? "text-slate-600" : "text-slate-400";
+                state === "idle" ? "text-slate-500" : "text-slate-300";
               const statusLabel =
                 state === "completed"
                   ? " — Done"
@@ -382,7 +382,7 @@ export default function ProcessVideo() {
                 >
                   {/* Step dot */}
                   <span
-                    className={`absolute -left-[33px] top-0 flex items-center justify-center w-5 h-5 rounded-full border-2 font-bold text-[10px] transition-all duration-300 ${dotClasses}`}
+                    className={`absolute -left-[33px] top-0 flex items-center justify-center w-5 h-5 rounded-full border-2 font-bold text-xs transition-all duration-300 ${dotClasses}`}
                     aria-hidden="true"
                   >
                     {state === "completed" ? (

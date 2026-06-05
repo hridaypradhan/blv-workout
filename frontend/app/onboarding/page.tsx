@@ -285,7 +285,7 @@ export default function Onboarding() {
                       <span className="text-sm font-bold text-slate-200">{slot.name}</span>
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`w-2.5 h-2.5 rounded-full ${isPaired ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} aria-hidden="true" />
-                        <span className="text-xs text-slate-400 font-medium">
+                        <span className="text-xs text-slate-300 font-semibold">
                           {isPaired ? "Prototype Connected (Simulated)" : "Prototype pairing not connected yet"}
                         </span>
                       </div>
@@ -295,7 +295,7 @@ export default function Onboarding() {
                       onClick={() => handlePairSleeve(slot.key, slot.name)}
                       className={`px-4 py-2 font-semibold rounded-xl text-xs border transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 ${
                         isPaired
-                          ? "bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-700"
+                          ? "bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700"
                           : "bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 border-slate-700"
                       }`}
                       aria-label={`${isPaired ? "Disconnect" : "Pair (Simulate)"} device for ${slot.name}`}
@@ -342,7 +342,7 @@ export default function Onboarding() {
 
             <Link
               href="/video-library"
-              className="px-6 py-4 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white font-semibold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 text-center flex items-center justify-center"
+              className="px-6 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 text-center flex items-center justify-center"
               id="skip-onboarding-btn"
             >
               Skip Onboarding

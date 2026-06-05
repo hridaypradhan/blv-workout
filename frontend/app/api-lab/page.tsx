@@ -160,7 +160,7 @@ export default function ApiLab() {
           {/* Configurable Base URL */}
           <div className="flex items-end gap-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-md w-full md:w-auto">
             <div className="flex-1 md:w-64 space-y-1.5">
-              <label htmlFor="backend-base-url" className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              <label htmlFor="backend-base-url" className="block text-xs font-extrabold uppercase tracking-wider text-slate-400">
                 Backend Base URL
               </label>
               <input
@@ -174,7 +174,7 @@ export default function ApiLab() {
             <button
               onClick={handleRefreshSchema}
               disabled={schemaLoading}
-              className="bg-slate-800 hover:bg-slate-700 disabled:bg-slate-850 text-slate-200 border border-slate-700 hover:border-slate-600 font-bold text-sm px-4 py-2.5 rounded-xl transition-all h-[38px] flex items-center justify-center cursor-pointer"
+              className="bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 text-slate-200 border border-slate-700 hover:border-slate-600 font-bold text-sm px-4 py-2.5 rounded-xl transition-all h-[38px] flex items-center justify-center cursor-pointer"
               aria-label="Refresh endpoints schema"
             >
               {schemaLoading ? "Loading..." : "Load"}
@@ -189,7 +189,7 @@ export default function ApiLab() {
             <p className="text-xs text-red-300 leading-relaxed">
               Could not retrieve the schema file from: <code className="bg-red-950 px-1.5 py-0.5 rounded font-mono break-all">{backendUrl}/openapi.json</code>.
             </p>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="text-xs text-slate-400 leading-relaxed">
               Please check that the FastAPI server is running and the Backend Base URL is configured correctly.
             </p>
           </div>
@@ -202,7 +202,7 @@ export default function ApiLab() {
             {schemaLoading ? (
               <div className="flex flex-col items-center justify-center bg-slate-900 border border-slate-800 rounded-2xl h-full shadow-xl">
                 <div className="w-8 h-8 border-4 border-yellow-400/20 border-t-yellow-400 rounded-full animate-spin mb-3" />
-                <p className="text-xs text-slate-450">Retrieving API catalog...</p>
+                <p className="text-xs text-slate-400">Retrieving API catalog...</p>
               </div>
             ) : (
               <EndpointList
@@ -228,7 +228,7 @@ export default function ApiLab() {
                 <ResponseViewer responseState={responseState} />
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-500 h-96 shadow-xl">
+              <div className="flex flex-col items-center justify-center bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 h-96 shadow-xl">
                 <svg
                   className="w-16 h-16 text-slate-800 mb-4"
                   fill="none"
@@ -245,7 +245,7 @@ export default function ApiLab() {
                   />
                 </svg>
                 <p className="text-sm font-semibold">No endpoints are currently available.</p>
-                <p className="text-xs text-slate-650 mt-1">Configure your Backend Base URL and load the schema to get started.</p>
+                <p className="text-xs text-slate-400 mt-1">Configure your Backend Base URL and load the schema to get started.</p>
               </div>
             )}
           </div>

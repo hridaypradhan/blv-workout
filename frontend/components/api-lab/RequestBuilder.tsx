@@ -131,7 +131,7 @@ export default function RequestBuilder({
             <p className="text-slate-400 text-sm mt-1">{endpoint.summary}</p>
           )}
           {endpoint.description && (
-            <p className="text-slate-500 text-xs mt-2 italic leading-relaxed">
+            <p className="text-slate-400 text-xs mt-2 italic leading-relaxed">
               {endpoint.description}
             </p>
           )}
@@ -230,7 +230,7 @@ export default function RequestBuilder({
               Request JSON Body
             </label>
             {jsonError && (
-              <span className="text-[10px] bg-red-950 border border-red-800 text-red-400 font-semibold px-2 py-0.5 rounded">
+              <span className="text-sm bg-red-950 border border-red-800 text-red-400 font-semibold px-2 py-0.5 rounded">
                 Invalid JSON
               </span>
             )}
@@ -246,7 +246,7 @@ export default function RequestBuilder({
             onChange={(e) => handleBodyChange(e.target.value)}
           />
           {jsonError && (
-            <p className="text-red-400 text-xs leading-relaxed">{jsonError}</p>
+            <p className="text-red-400 text-sm leading-relaxed">{jsonError}</p>
           )}
         </div>
       )}
@@ -268,13 +268,13 @@ export default function RequestBuilder({
           </div>
           {showExpected && (
             <div className="relative group">
-              <pre className="font-mono text-[11px] bg-slate-950 border border-slate-800/80 rounded-xl p-4 text-emerald-400 overflow-x-auto max-h-64 leading-relaxed shadow-inner">
+              <pre className="font-mono text-xs bg-slate-950 border border-slate-800/80 rounded-xl p-4 text-emerald-400 overflow-x-auto max-h-64 leading-relaxed shadow-inner">
                 <code>{sample.response}</code>
               </pre>
               <button
                 type="button"
                 onClick={handleCopyExpected}
-                className="absolute top-3 right-3 text-[10px] font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg px-2.5 py-1.5 transition-all shadow-md active:scale-95"
+                className="absolute top-3 right-3 text-xs font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg px-2.5 py-1.5 transition-all shadow-md active:scale-95"
               >
                 {copied ? "Copied!" : "Copy"}
               </button>

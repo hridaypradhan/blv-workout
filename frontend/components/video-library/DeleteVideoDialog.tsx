@@ -120,7 +120,7 @@ export default function DeleteVideoDialog({
                 Are you sure you want to delete{" "}
                 <strong className="text-yellow-400 font-semibold">{job.title || "this video"}</strong>?
               </p>
-              <p className="text-xs text-slate-400">
+              <p className="text-sm text-slate-400">
                 This will permanently remove the prepared video and its assistance data from the Video Library and server memory.
               </p>
             </div>
@@ -129,7 +129,7 @@ export default function DeleteVideoDialog({
 
         {error && (
           <div
-            className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 font-medium flex items-center gap-2"
+            className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 font-medium flex items-center gap-2"
             role="alert"
           >
             <svg

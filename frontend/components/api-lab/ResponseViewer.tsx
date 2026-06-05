@@ -10,7 +10,7 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
 
   if (!responseState) {
     return (
-      <div className="flex flex-col items-center justify-center bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 h-64 shadow-xl">
+      <div className="flex flex-col items-center justify-center bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 h-64 shadow-xl">
         <svg
           className="w-12 h-12 text-slate-700 mb-3"
           fill="none"
@@ -52,10 +52,10 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
           </h3>
         </div>
         <div className="bg-red-950/20 border border-red-900/40 p-4 rounded-xl space-y-2">
-          <p className="text-xs font-semibold text-red-300 leading-relaxed">
+          <p className="text-sm font-semibold text-red-300 leading-relaxed">
             {error}
           </p>
-          <p className="text-[10px] text-slate-500 leading-relaxed">
+          <p className="text-sm text-slate-400 leading-relaxed">
             Ensure the FastAPI backend is running locally and CORS settings allow requests from your browser context.
           </p>
         </div>
@@ -89,7 +89,7 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">
           <span
-            className={`text-xs font-extrabold px-2.5 py-1 rounded border uppercase tracking-wider ${getStatusColor()}`}
+            className={`text-sm font-extrabold px-2.5 py-1 rounded border uppercase tracking-wider ${getStatusColor()}`}
             aria-live="polite"
           >
             {status} {statusText}
@@ -106,7 +106,7 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
           <button
             onClick={() => setActiveTab("body")}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-              activeTab === "body" ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+              activeTab === "body" ? "bg-slate-800 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Response Body
@@ -114,7 +114,7 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
           <button
             onClick={() => setActiveTab("headers")}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-              activeTab === "headers" ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+              activeTab === "headers" ? "bg-slate-800 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Headers
@@ -125,7 +125,7 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
       {/* Warnings block for server issues */}
       {!isSuccess && status !== null && (
         <div className="bg-amber-950/20 border border-amber-900/40 p-3.5 rounded-xl">
-          <p className="text-xs text-amber-300 leading-relaxed font-semibold">
+          <p className="text-sm text-amber-300 leading-relaxed font-semibold">
             {isServerCrash
               ? "⚠️ Backend returned a server error. The endpoint code might be raising a NotImplementedError or experiencing a traceback."
               : `⚠️ Request failed with status code ${status}. Check validation logs or request parameters.`}
@@ -138,7 +138,7 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
         {activeTab === "body" ? (
           <pre
             id="response-body-pre"
-            className="w-full font-mono text-[11px] bg-slate-950 border border-slate-800/80 rounded-xl p-4 text-slate-300 overflow-x-auto max-h-[400px] leading-relaxed"
+            className="w-full font-mono text-xs bg-slate-950 border border-slate-800/80 rounded-xl p-4 text-slate-300 overflow-x-auto max-h-[400px] leading-relaxed"
           >
             <code>{renderFormattedBody()}</code>
           </pre>
@@ -148,8 +148,8 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800/80">
-                    <th className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 pb-2">Header Name</th>
-                    <th className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 pb-2 pl-4">Value</th>
+                    <th className="text-xs font-extrabold uppercase tracking-wider text-slate-400 pb-2">Header Name</th>
+                    <th className="text-xs font-extrabold uppercase tracking-wider text-slate-400 pb-2 pl-4">Value</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -162,7 +162,7 @@ export default function ResponseViewer({ responseState }: ResponseViewerProps) {
                 </tbody>
               </table>
             ) : (
-              <p className="text-xs text-slate-500 italic py-2">No headers recorded</p>
+              <p className="text-sm text-slate-400 italic py-2">No headers recorded</p>
             )}
           </div>
         )}

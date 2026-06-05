@@ -24,7 +24,7 @@ export default function SessionControls({
       <div className="flex items-center gap-2">
         <button
           onClick={() => seek(Math.max(currentTime - 10, 0))}
-          className="px-3.5 py-2 bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition-all flex items-center gap-1.5"
+          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-sm font-semibold border border-slate-700 transition-all flex items-center gap-1.5"
           title="Rewind 10 seconds"
           aria-label="Rewind trainer video by 10 seconds"
         >
@@ -47,11 +47,12 @@ export default function SessionControls({
 
         <button
           onClick={() => setPlaybackRate(playbackRate === 1.0 ? 0.75 : 1.0)}
-          className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
+          className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-all ${
             playbackRate === 0.75
               ? "bg-yellow-400 text-slate-950 border-yellow-400"
-              : "bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-800"
+              : "bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
           }`}
+          aria-pressed={playbackRate === 0.75}
           aria-label={playbackRate === 0.75 ? "Set video speed to normal" : "Slow down video speed to 0.75x"}
         >
           {playbackRate === 0.75 ? "Normal Speed (1.0x)" : "Slow Down (0.75x)"}
@@ -61,7 +62,7 @@ export default function SessionControls({
       <div className="flex items-center gap-2">
         <button
           onClick={handleRepeatTrainerInstruction}
-          className="px-3.5 py-2 bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition-all flex items-center gap-1.5"
+          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-sm font-semibold border border-slate-700 transition-all flex items-center gap-1.5"
           aria-label="Repeat last trainer instruction cue"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -77,11 +78,12 @@ export default function SessionControls({
 
         <button
           onClick={() => setAssistantMuted(!assistantMuted)}
-          className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
+          className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-all ${
             assistantMuted
               ? "bg-red-500/10 text-red-400 border-red-500/30"
-              : "bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-800"
+              : "bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
           }`}
+          aria-pressed={assistantMuted}
           aria-label={assistantMuted ? "Unmute assistant voice" : "Mute assistant voice"}
         >
           {assistantMuted ? "Unmute Assistant" : "Mute Assistant"}

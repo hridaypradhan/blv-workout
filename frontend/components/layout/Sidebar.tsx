@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLayout } from "./LayoutContext";
+import { usePrototypeHapticConnection } from "@/lib/hooks/usePrototypeHapticConnection";
+import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 interface SidebarProps {
   id?: string;
@@ -11,6 +13,14 @@ interface SidebarProps {
 export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
   const pathname = usePathname();
   const { sidebarOpen, setSidebarOpen } = useLayout();
+
+  const {
+    statusText,
+    announcement,
+    toggleConnection,
+    isConnecting,
+    isConnected,
+  } = usePrototypeHapticConnection();
 
   const navItems: Array<{
     name: string;
@@ -81,7 +91,6 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
         </svg>
       ),
     },
-
     {
       name: "History",
       href: "/history",
@@ -153,9 +162,11 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
     },
   ];
 
-
   return (
     <>
+      {/* Hidden announcer region for haptic status */}
+      <ScreenReaderStatus content={announcement} />
+
       {/* Drawer Overlay for Mobile */}
       {sidebarOpen && (
         <button
@@ -230,7 +241,7 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
                 </span>
                 <span>{item.name}</span>
                 {item.isPlaceholder && (
-                  <span className="ml-auto text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-450 border border-slate-700">
+                  <span className="ml-auto text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
                     Placeholder
                   </span>
                 )}
@@ -242,20 +253,28 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
         {/* Quick Access / Haptic Sleeve Status Info (Useful for BLV Users) */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/40">
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-800 bg-slate-900/60">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
+            <div className={`w-2.5 h-2.5 rounded-full ${
+              isConnected ? "bg-emerald-500" : isConnecting ? "bg-yellow-500 animate-pulse" : "bg-red-500 animate-pulse"
+            }`} aria-hidden="true" />
             <div className="flex-1 text-xs">
-              <p className="font-semibold text-slate-300">Haptic Sleeve</p>
-              <p className="text-slate-500">Disconnected</p>
+              <p className="font-semibold text-slate-200">Haptic Sleeve</p>
+              <p className="text-slate-300 font-medium">{statusText}</p>
             </div>
             <button
-              onClick={() => {
-                // TODO: Connection logic will go here
-              }}
-              className="text-[11px] font-bold text-yellow-400 hover:text-yellow-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5"
-              aria-label="Connect Haptic Sleeve"
+              onClick={toggleConnection}
+              disabled={isConnecting}
+              className="text-xs font-bold text-yellow-400 hover:text-yellow-300 disabled:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5"
+              aria-pressed={isConnected}
+              aria-label={
+                isConnected
+                  ? "Disconnect Haptic Sleeve (Prototype)"
+                  : isConnecting
+                  ? "Connecting Haptic Sleeve (Prototype)"
+                  : "Connect Haptic Sleeve (Prototype)"
+              }
               id="sleeve-connect-btn"
             >
-              Connect
+              {isConnected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
             </button>
           </div>
         </div>

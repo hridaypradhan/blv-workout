@@ -6,6 +6,8 @@ import PageWrapper from "@/components/layout/PageWrapper";
 import { startSession, getUserProfile } from "@/lib/api";
 import { getActiveUserId, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
 import { mergeUserPreferences } from "@/lib/userPreferences";
+import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
+import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 interface SetupPageProps {
   params: {
@@ -21,6 +23,13 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
   const [pauseBeforeSpeaking, setPauseBeforeSpeaking] = useState(true);
   const [difficulty, setDifficulty] = useState("diff-norm");
+
+  // Ask Assistant states
+  const [askInput, setAskInput] = useState("");
+  const [assistantResponse, setAssistantResponse] = useState<string | null>(null);
+  const [askAnnouncement, setAskAnnouncement] = useState("");
+
+  const { hapticState } = usePrototypeHapticConnection();
 
   useEffect(() => {
     const activeId = getActiveUserId();
@@ -47,7 +56,13 @@ export default function SessionSetup({ params }: SetupPageProps) {
 
   const handleAskQuestion = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Send query to LLM Assistant for vocal response about the exercises
+    const query = askInput.trim();
+    if (!query) return;
+
+    const response = `Prototype assistant noted your question: "${query}". Live guidance will be available during assisted playback.`;
+    setAssistantResponse(response);
+    setAskAnnouncement(response);
+    setAskInput("");
   };
 
   const handleStartWorkout = async () => {
@@ -75,15 +90,13 @@ export default function SessionSetup({ params }: SetupPageProps) {
     }
   };
 
-  const sleeveStatus = [
-    { key: "la", name: "Left Arm Sleeve", paired: false },
-    { key: "ra", name: "Right Arm Sleeve", paired: false },
-    { key: "ll", name: "Left Leg Band", paired: false },
-    { key: "rl", name: "Right Leg Band", paired: false },
-  ];
+  const sleeveStatus = getPrototypeSleeveStatuses(hapticState);
 
   return (
     <PageWrapper id="session-setup-wrapper">
+      {/* Hidden announcer region for Ask Assistant */}
+      <ScreenReaderStatus content={askAnnouncement} />
+
       <div className="max-w-3xl mx-auto py-4">
         {/* Page Title */}
         <div className="mb-8">
@@ -105,7 +118,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 <h2 id="camera-heading" className="text-lg font-bold text-white mb-2">
                   Camera Check
                 </h2>
-                <p className="text-xs text-slate-400 mb-4">
+                <p className="text-sm text-slate-300 mb-4">
                   Position your camera 5-8 feet away to capture your full body outline for form analysis.
                 </p>
               </div>
@@ -127,8 +140,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
                     d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                   />
                 </svg>
-                <p className="text-xs text-slate-400 font-bold mb-1">Camera Feed Disabled</p>
-                <p className="text-[10px] text-slate-500">We do not store or transmit your video stream.</p>
+                <p className="text-sm text-slate-200 font-bold mb-1">Camera Feed Disabled</p>
+                <p className="text-sm text-slate-400">We do not store or transmit your video stream.</p>
               </div>
             </section>
 
@@ -138,7 +151,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 <h2 id="sleeve-heading" className="text-lg font-bold text-white mb-2">
                   Sleeve Status
                 </h2>
-                <p className="text-xs text-slate-400 mb-4">
+                <p className="text-sm text-slate-300 mb-4">
                   Verify bluetooth pairing status for all limbs.
                 </p>
               </div>
@@ -146,10 +159,10 @@ export default function SessionSetup({ params }: SetupPageProps) {
               <div className="space-y-3">
                 {sleeveStatus.map((sleeve) => (
                   <div key={sleeve.key} className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                    <span className="text-xs font-semibold text-slate-300">{sleeve.name}</span>
+                    <span className="text-sm font-semibold text-slate-200">{sleeve.name}</span>
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500" aria-hidden="true" />
-                      <span className="text-[10px] uppercase font-bold text-slate-500">Disconnected</span>
+                      <span className={`w-2.5 h-2.5 rounded-full ${sleeve.colorClass}`} aria-hidden="true" />
+                      <span className="text-sm font-semibold text-slate-300">{sleeve.statusText}</span>
                     </div>
                   </div>
                 ))}
@@ -162,7 +175,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
             <h2 id="difficulty-heading" className="text-lg font-bold text-white mb-2">
               How are you feeling today?
             </h2>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-sm text-slate-300 mb-4">
               The assistant adjusts its interruption level and haptic tolerances based on your current state (applicable for this session only).
             </p>
 
@@ -191,7 +204,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                     className="sr-only"
                   />
                   <span className="text-sm font-bold text-white mb-1">{diff.label}</span>
-                  <span className="text-[10px] text-slate-500 leading-normal">{diff.desc}</span>
+                  <span className="text-sm text-slate-300 leading-normal">{diff.desc}</span>
                 </label>
               ))}
             </div>
@@ -202,7 +215,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
             <h2 id="audio-coexistence-heading" className="text-lg font-bold text-white mb-2">
               Audio Coexistence (Session Overrides)
             </h2>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-sm text-slate-300 mb-4">
               Configure how the assistant coexists with the trainer&apos;s audio. (These selections will override your saved defaults for this session only).
             </p>
 
@@ -234,7 +247,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                     />
                     <span className="text-sm font-bold text-white">{lvl.label}</span>
                   </div>
-                  <span className="text-xs text-slate-400 mt-1.5">{lvl.desc}</span>
+                  <span className="text-sm text-slate-300 mt-1.5">{lvl.desc}</span>
                 </label>
               ))}
             </div>
@@ -245,7 +258,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 <label htmlFor="pause-before-speaking" className="text-sm font-bold text-slate-200 cursor-pointer">
                   Pause Before Speaking
                 </label>
-                <span className="text-xs text-slate-400">Briefly pauses the YouTube video when the assistant speaks a correction.</span>
+                <span className="text-sm text-slate-300">Briefly pauses the YouTube video when the assistant speaks a correction.</span>
               </div>
               <input
                 type="checkbox"
@@ -262,7 +275,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
             <h2 id="ask-heading" className="text-lg font-bold text-white mb-1">
               Ask Assistant
             </h2>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-sm text-slate-300 mb-4">
               Have questions about the moves? Ask the assistant for supplementary tips before starting.
             </p>
 
@@ -270,6 +283,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
               <input
                 type="text"
                 placeholder="Ask e.g. 'How do I align my feet for a squats setup?'"
+                value={askInput}
+                onChange={(e) => setAskInput(e.target.value)}
                 className="flex-1 px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
                 aria-label="Ask about today's exercises before starting"
                 id="setup-ask-input"
@@ -282,6 +297,13 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 Send
               </button>
             </form>
+
+            {assistantResponse && (
+              <div className="mt-4 p-4 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200">
+                <span className="font-bold text-yellow-400 block mb-1">Assistant Response (Prototype):</span>
+                <p>{assistantResponse}</p>
+              </div>
+            )}
           </section>
 
           {/* Start Assisted Playback Button */}

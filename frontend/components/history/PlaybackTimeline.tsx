@@ -62,8 +62,7 @@ export default function PlaybackTimeline({ session }: PlaybackTimelineProps) {
           })}
         </div>
       ) : (
-        <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-slate-500">
-
+        <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center text-sm text-slate-400">
           No playback interactions were recorded during this session.
         </div>
       )}

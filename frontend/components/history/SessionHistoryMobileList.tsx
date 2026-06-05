@@ -27,23 +27,23 @@ export default function SessionHistoryMobileList({ sessions }: SessionHistoryMob
 
             <div className="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
               <div className="flex flex-col">
-                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Reps</span>
-                <span className="text-xs font-bold text-slate-350 mt-0.5">{s.reps?.length || 0}</span>
+                <span className="text-xs text-slate-400 uppercase font-extrabold tracking-wider">Reps</span>
+                <span className="text-sm font-bold text-slate-200 mt-0.5">{s.reps?.length || 0}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Corrections</span>
-                <span className="text-xs font-bold text-amber-400 mt-0.5">{s.form_errors?.length || 0}</span>
+                <span className="text-xs text-slate-400 uppercase font-extrabold tracking-wider">Corrections</span>
+                <span className="text-sm font-bold text-amber-400 mt-0.5">{s.form_errors?.length || 0}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Events</span>
-                <span className="text-xs font-bold text-slate-350 mt-0.5">{s.playback_events?.length || 0}</span>
+                <span className="text-xs text-slate-400 uppercase font-extrabold tracking-wider">Events</span>
+                <span className="text-sm font-bold text-slate-200 mt-0.5">{s.playback_events?.length || 0}</span>
               </div>
             </div>
 
             <div className="pt-1">
               <Link
                 href={`/history/${s.id}`}
-                className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-200 font-bold rounded-xl text-xs border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+                className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-200 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
                 aria-label={`View detailed report for session on ${sessionDate}`}
                 id={`details-link-mobile-${s.id}`}
               >

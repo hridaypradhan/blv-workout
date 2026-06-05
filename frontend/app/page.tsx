@@ -6,11 +6,20 @@ import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { getUserProfile } from "@/lib/api";
 import { getActiveUserId, USER_UPDATED_EVENT } from "@/lib/prototypeUser";
+import { usePrototypeHapticConnection } from "@/lib/hooks/usePrototypeHapticConnection";
+import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 export default function Home() {
   const router = useRouter();
   const [hasProfile, setHasProfile] = useState<boolean>(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(true);
+
+  const {
+    isConnected,
+    isConnecting,
+    toggleConnection,
+    announcement: hapticAnnouncement,
+  } = usePrototypeHapticConnection();
 
   useEffect(() => {
     const checkProfile = () => {
@@ -48,10 +57,6 @@ export default function Home() {
     }
   }, []);
 
-  const handleQuickConnect = () => {
-    // TODO: Quick haptic sleeve connection trigger
-  };
-
   const handleQuickSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const input = document.getElementById("quick-submit-input") as HTMLInputElement;
@@ -62,6 +67,9 @@ export default function Home() {
 
   return (
     <PageWrapper id="home-wrapper">
+      {/* Hidden announcer region for haptic status updates */}
+      <ScreenReaderStatus content={hapticAnnouncement} />
+
       {/* Hero Section */}
       <section className="relative overflow-hidden rounded-2xl md:rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 md:p-12 mb-6 md:mb-8 shadow-2xl">
         {/* Glow effect */}
@@ -158,12 +166,24 @@ export default function Home() {
                 </Link>
 
                 <button
-                  onClick={handleQuickConnect}
+                  onClick={toggleConnection}
+                  disabled={isConnecting}
                   className="inline-flex items-center justify-center px-6 py-3.5 text-base font-semibold bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2"
-                  aria-label="Quick Connect Haptic Device"
+                  aria-pressed={isConnected}
+                  aria-label={
+                    isConnected
+                      ? "Disconnect Haptic Sleeve (Prototype)"
+                      : isConnecting
+                      ? "Connecting Haptic Sleeve (Prototype)"
+                      : "Connect Haptic Sleeve (Prototype)"
+                  }
                   id="hero-quick-connect-btn"
                 >
-                  Pair Haptic Sleeve
+                  {isConnected
+                    ? "Disconnect Haptic Sleeve"
+                    : isConnecting
+                    ? "Connecting..."
+                    : "Pair Haptic Sleeve"}
                 </button>
               </>
             )}

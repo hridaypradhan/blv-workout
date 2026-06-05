@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useLayout } from "./LayoutContext";
 import { getActiveUserId, USER_UPDATED_EVENT } from "@/lib/prototypeUser";
 import { getUserProfile } from "@/lib/api";
+import { useAccessibilityPreferences } from "@/lib/hooks/useAccessibilityPreferences";
+import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 interface HeaderProps {
   id?: string;
@@ -18,6 +20,14 @@ export default function Header({ id = "main-header" }: HeaderProps) {
   const [userName, setUserName] = useState<string>("Profile");
   const [avatarInitial, setAvatarInitial] = useState<string>("P");
   const [ariaLabel, setAriaLabel] = useState<string>("Profile options. Open settings.");
+
+  const {
+    voiceGuidance,
+    highContrast,
+    announcement,
+    toggleVoiceGuidance,
+    toggleHighContrast,
+  } = useAccessibilityPreferences();
 
   useEffect(() => {
     const fetchProfile = () => {
@@ -79,6 +89,9 @@ export default function Header({ id = "main-header" }: HeaderProps) {
       className="sticky top-0 z-20 flex items-center justify-between h-16 px-4 sm:px-6 bg-slate-900/85 backdrop-blur-md border-b border-slate-800 text-slate-100"
       aria-label="Header Controls"
     >
+      {/* Hidden announcer region for accessibility setting updates */}
+      <ScreenReaderStatus content={announcement} />
+
       {/* Context Title & Mobile Menu Trigger */}
       <div className="flex items-center gap-3">
         {/* Mobile Sidebar Hamburger Toggle */}
@@ -109,12 +122,15 @@ export default function Header({ id = "main-header" }: HeaderProps) {
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Voice Feedback Control Button (Touch Target: 44px by 44px) */}
         <button
-          onClick={() => {
-            // TODO: Mute/unmute voice guidance
-          }}
-          className="flex items-center justify-center w-11 h-11 text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+          onClick={toggleVoiceGuidance}
+          className={`flex items-center justify-center w-11 h-11 border rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 ${
+            voiceGuidance
+              ? "text-yellow-400 border-yellow-400/50 bg-slate-800"
+              : "text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border-slate-800"
+          }`}
           title="Toggle Voice Guidance"
-          aria-label="Toggle Voice Guidance"
+          aria-pressed={voiceGuidance}
+          aria-label={`Voice guidance is ${voiceGuidance ? "on" : "off"}. Toggle voice guidance ${voiceGuidance ? "off" : "on"}.`}
           id="toggle-voice-btn"
         >
           <svg
@@ -136,12 +152,15 @@ export default function Header({ id = "main-header" }: HeaderProps) {
 
         {/* Contrast Toggle Button (Touch Target: 44px by 44px) */}
         <button
-          onClick={() => {
-            // TODO: Toggle high-contrast theme (yellow/black)
-          }}
-          className="flex items-center justify-center w-11 h-11 text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+          onClick={toggleHighContrast}
+          className={`flex items-center justify-center w-11 h-11 border rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 ${
+            highContrast
+              ? "bg-yellow-400 text-slate-950 border-yellow-400"
+              : "text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border-slate-800"
+          }`}
           title="Toggle High Contrast Mode"
-          aria-label="Toggle High Contrast Mode"
+          aria-pressed={highContrast}
+          aria-label={`High contrast mode is ${highContrast ? "on" : "off"}. Toggle high contrast mode ${highContrast ? "off" : "on"}.`}
           id="toggle-contrast-btn"
         >
           <svg
@@ -164,7 +183,7 @@ export default function Header({ id = "main-header" }: HeaderProps) {
         {/* User Account / Profile Button */}
         <Link
           href="/settings"
-          className="flex items-center justify-center sm:justify-start gap-2 h-11 px-2.5 sm:pr-4 text-slate-350 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0"
+          className="flex items-center justify-center sm:justify-start gap-2 h-11 px-2.5 sm:pr-4 text-slate-300 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0"
           aria-label={ariaLabel}
           id="user-profile-menu-btn"
         >

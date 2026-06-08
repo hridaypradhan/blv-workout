@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { AssistanceJob, ProcessingStage } from "@/types";
 
 interface ImportedVideoCardProps {
@@ -30,13 +31,15 @@ export default function ImportedVideoCard({
     >
       {/* Visual header (with thumbnail when available) */}
       <div className="h-32 relative overflow-hidden flex items-center justify-center bg-slate-950">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         {job.thumbnail_url && !failedImage ? (
-          <img
+          <Image
             src={job.thumbnail_url}
             alt={`Thumbnail for ${job.title || "video"}`}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            unoptimized
             onError={() => handleImageError(job.video_id)}
-            className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500"
+            className="object-cover opacity-80 group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
           <div className={`absolute inset-0 bg-gradient-to-tr ${gradient}`} />

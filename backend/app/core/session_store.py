@@ -10,6 +10,25 @@ from app.models.schemas import Session, RepEvent, FormError, PlaybackEvent
 from app.core.prototype_persistence import load_json_store, save_json_store
 
 
+class SessionEventNames:
+    PLAY = "play"
+    PAUSE = "pause"
+    SEEK = "seek"
+    SPEED_CHANGE = "speed_change"
+    ASSISTANT_CUE_DELIVERED = "assistant_cue_delivered"
+    ASSISTANT_CORRECTION_DELIVERED = "assistant_correction_delivered"
+    ASSISTANT_ANSWER_DELIVERED = "assistant_answer_delivered"
+    ASSISTANT_ANSWER_FAILED = "assistant_answer_failed"
+    HAPTIC_CUE_REQUESTED = "haptic_cue_requested"
+    HAPTIC_CUE_TRIGGERED = "haptic_cue_triggered"
+    HAPTIC_CUE_FAILED = "haptic_cue_failed"
+    TRAINER_INSTRUCTION_REPEATED = "trainer_instruction_repeated"
+    SECTION_SKIPPED = "section_skipped"
+    USER_QUESTION_SUBMITTED = "user_question_submitted"
+    PROTOTYPE_REP_DETECTED = "prototype_rep_detected"
+    PROTOTYPE_FORM_ERROR_DETECTED = "prototype_form_error_detected"
+
+
 class SessionStore:
     """Thread-safe in-memory store for assisted playback sessions."""
 
@@ -164,33 +183,33 @@ class SessionStore:
 
             for event in session.playback_events:
                 t = event.event_type
-                if t == "play":
+                if t == SessionEventNames.PLAY:
                     plays += 1
-                elif t == "pause":
+                elif t == SessionEventNames.PAUSE:
                     pauses += 1
-                elif t == "seek":
+                elif t == SessionEventNames.SEEK:
                     seeks += 1
-                elif t == "speed_change":
+                elif t == SessionEventNames.SPEED_CHANGE:
                     speed_changes += 1
-                elif t == "assistant_cue_delivered":
+                elif t == SessionEventNames.ASSISTANT_CUE_DELIVERED:
                     assistant_cues += 1
-                elif t == "assistant_correction_delivered":
+                elif t == SessionEventNames.ASSISTANT_CORRECTION_DELIVERED:
                     assistant_corrections += 1
-                elif t == "assistant_answer_delivered":
+                elif t == SessionEventNames.ASSISTANT_ANSWER_DELIVERED:
                     assistant_qa_answers += 1
-                elif t == "assistant_answer_failed":
+                elif t == SessionEventNames.ASSISTANT_ANSWER_FAILED:
                     failed_qa_answers += 1
-                elif t == "haptic_cue_requested":
+                elif t == SessionEventNames.HAPTIC_CUE_REQUESTED:
                     haptic_cue_requests += 1
-                elif t == "haptic_cue_triggered":
+                elif t == SessionEventNames.HAPTIC_CUE_TRIGGERED:
                     haptic_cue_triggers += 1
-                elif t == "haptic_cue_failed":
+                elif t == SessionEventNames.HAPTIC_CUE_FAILED:
                     haptic_cue_failures += 1
-                elif t == "trainer_instruction_repeated":
+                elif t == SessionEventNames.TRAINER_INSTRUCTION_REPEATED:
                     repeats += 1
-                elif t == "section_skipped":
+                elif t == SessionEventNames.SECTION_SKIPPED:
                     skips += 1
-                elif t == "user_question_submitted":
+                elif t == SessionEventNames.USER_QUESTION_SUBMITTED:
                     user_questions += 1
 
             # Build summary
@@ -208,8 +227,8 @@ class SessionStore:
                 supplement_parts.append(f"{haptic_count} haptic cue{'s' if haptic_count != 1 else ''}")
             
             # Reps and form warnings
-            reps_count = total_reps if total_reps > 0 else sum(1 for e in session.playback_events if e.event_type == "prototype_rep_detected")
-            errors_count = total_errors if total_errors > 0 else sum(1 for e in session.playback_events if e.event_type == "prototype_form_error_detected")
+            reps_count = total_reps if total_reps > 0 else sum(1 for e in session.playback_events if e.event_type == SessionEventNames.PROTOTYPE_REP_DETECTED)
+            errors_count = total_errors if total_errors > 0 else sum(1 for e in session.playback_events if e.event_type == SessionEventNames.PROTOTYPE_FORM_ERROR_DETECTED)
 
             if reps_count > 0:
                 supplement_parts.append(f"{reps_count} tracked rep{'s' if reps_count != 1 else ''}")

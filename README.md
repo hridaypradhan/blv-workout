@@ -1,6 +1,6 @@
 # FitA11y
 
-FitA11y is an **assistive playback companion** application designed specifically for **Blind and Low Vision (BLV)** users. Rather than replacing the trainer or hosting standalone AI-led workouts, FitA11y operates alongside original YouTube fitness videos. It provides supplementary, non-intrusive voice cues (for form correction and pacing) and spatial haptic feedback, keeping the YouTube creator as the trainer of record.
+FitA11y is an **assistive playback companion** prototype designed specifically for **Blind and Low Vision (BLV)** users. Rather than replacing the trainer or hosting standalone AI-led workouts, FitA11y operates alongside original YouTube fitness videos. It provides supplementary, non-intrusive voice cues (for form correction and pacing) and simulated haptic feedback, keeping the YouTube creator as the trainer of record.
 
 ---
 
@@ -12,8 +12,8 @@ FitA11y is an **assistive playback companion** application designed specifically
    A JSON sidecar generated during preprocessing that maps exercise anchors, speaking opportunities, expected movement windows, and haptic cues to the original video's timeline.
 3. **Audio Coexistence & Interruption Levels**
    Intelligent speech ducking and interruption rules (Silent, Haptic Only, Brief Speech, Full Speech, Pause Before Speaking) ensuring the assistant never talks over the trainer unless preferred.
-4. **Haptic & Spatial Feedback**
-   Sends tactile vibration cues to Bluetooth haptic sleeves (for pacing adjustments, joint extension limits, or movement corrections) to augment voice guidance.
+4. **Simulated Haptic & Spatial Cues**
+   Generates tactile vibration sequence instructions (for pacing adjustments, joint extension limits, or movement corrections) to supplement voice guidance, designed to connect with future Bluetooth haptic sleeve hardware.
 5. **Tracked User Performance**
    Maintains structured, screen-reader-accessible session records, tracking reps, form logs, and duration trends separately from the trainer's workout benchmark.
 6. **Interactive API Lab Playground**
@@ -23,16 +23,30 @@ FitA11y is an **assistive playback companion** application designed specifically
 
 ## Tech Stack
 
-- **Backend (Prototype Level):** FastAPI (Python), with built-in mock modules simulating MediaPipe (Pose/Motion Analysis), SQLAlchemy/PostgreSQL, Google Generative AI (Gemini), Google Cloud Text-to-Speech, `yt-dlp` (for transient audio/metadata analysis only; never stored for playback), and `librosa` (Rhythm Analysis).
+- **Backend (Prototype Level):** FastAPI (Python) running a simulated engine with local JSON-based persistence instead of a live database server.
 - **Frontend:** Next.js (React), TypeScript, Tailwind CSS.
 
-> [!IMPORTANT]
-> **Prototype Implementation & Simulation Boundaries**:
-> FitA11y is currently implemented as an end-to-end runnable **prototype** to showcase assistive playback companion capabilities:
-> - **Deterministic Haptics**: Sleeve haptic feedback and limb status checks are simulated using deterministic prototype haptic responses; they do not communicate with physical Bluetooth hardware sleeves.
-> - **Camera-Free Pose Tracking**: Joint angles and rep/error telemetry are generated mathematically relative to playback speed and timeline anchors; no camera permission, video stream processing, or real MediaPipe model inference is active.
-> - **JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory; there is no SQL database or PostgreSQL migration layer.
-> - **Replaceable Modules**: Real integrations for Gemini, MediaPipe, BLE haptic sleeves, TTS speech services, and production databases remain future replaceable provider integration layers.
+---
+
+## Prototype Implementation & Simulation Boundaries
+
+FitA11y is currently implemented as an end-to-end runnable **prototype** to showcase assistive playback companion capabilities and validate the architecture:
+
+### Current Prototype State:
+- **Embedded YouTube Player**: Real YouTube player integration where playback events (play/pause/seek/speed changes) drive session timing.
+- **Deterministic Sidecars**: Pre-processing generates structured sidecar manifests mapping events to the video timeline.
+- **Simulated Assistant Q&A**: Answers to user questions are provided via deterministic mock responses rather than live LLM API calls.
+- **Simulated Haptic Cues**: Haptic cues (vibration patterns) are delivered via API responses, structured to trigger simulated sleeve feedback rather than communicating with physical Bluetooth hardware sleeves.
+- **Camera-Free Pose & Rep Tracking**: Joint status, repetitions, and form warnings are simulated mathematically based on elapsed video time and sidecar anchors; no camera permission or video stream model inference is active.
+- **JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory; no SQL database or PostgreSQL migration layer is active.
+
+### Intended Future System State:
+- **Real AI/Gemini Integration**: Connect the Assistant Q&A to Gemini (or another LLM) for dynamic workout reasoning and custom instruction synthesis.
+- **Real Pose Detection**: Integrate Google MediaPipe on the client or server side using device camera feeds to evaluate form errors and track reps in real-time.
+- **Real Haptic Sleeve Communication**: Use Web Bluetooth API or a native BLE integration layer to transmit physical vibration sequences to wearable hardware sleeves.
+- **Real TTS & Audio Coexistence**: Integrate a production Text-to-Speech API and OS-level audio ducking APIs to smoothly overlay speech over YouTube trainer audio.
+- **Production Database**: Replace the JSON filesystem persistence with a SQL database (e.g., PostgreSQL/SQLAlchemy) with user authentication, secure sessions, and migratable schema tables.
+- **Comprehensive Accessibility & Safety Validation**: Screen-reader flow audits and clinical biomechanics validation for movement tracking limits before deployment to actual users.
 
 > [!TIP]
 > **Prototype Persistence**: For local developer and demo convenience, prepared jobs, session history, and user settings are persisted locally in the `backend/.prototype_data` directory. To reset the application back to its default clean state, simply delete the `backend/.prototype_data` directory.
@@ -44,7 +58,6 @@ FitA11y is an **assistive playback companion** application designed specifically
 ### 1. Prerequisites
 - **Python**: Version 3.10 or higher.
 - **Node.js**: Version 18 or higher, along with `npm`.
-- **Database**: PostgreSQL (if implementing database-driven features).
 
 ---
 
@@ -80,11 +93,11 @@ pip install -r requirements.txt
 ```
 
 #### Step C: Configure Environment Variables
-Copy `.env.example` to `.env` and fill in your API credentials:
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Ensure you provide a valid `GEMINI_API_KEY`, `DATABASE_URL` (if configured), and `YOUTUBE_API_KEY`.
+*(Note: While `.env.example` lists variables like `GEMINI_API_KEY`, `DATABASE_URL`, and `YOUTUBE_API_KEY`, the core prototype runs in offline-capable mock mode and does not require active external services or a running PostgreSQL database.)*
 
 #### Step D: Run the Backend
 Start the FastAPI server:

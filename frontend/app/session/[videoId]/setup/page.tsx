@@ -9,6 +9,7 @@ import { mergeUserPreferences } from "@/lib/userPreferences";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 import { SleeveSide } from "@/types";
+import { SESSION_EVENTS } from "@/lib/sessionEvents";
 
 interface SetupPageProps {
   params: {
@@ -81,7 +82,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
     setSleeveAnnouncement(`Testing ${name} haptic cue...`);
 
     if (sessionId) {
-      recordPlaybackEvent(sessionId, "haptic_test_requested", null, {
+      recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_TEST_REQUESTED, null, {
         sleeve_side: side,
         sleeve_key: sleeveKey,
         sleeve_name: name

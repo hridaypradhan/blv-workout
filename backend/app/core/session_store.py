@@ -216,6 +216,20 @@ class SessionStore:
             if errors_count > 0:
                 supplement_parts.append(f"{errors_count} form warning{'s' if errors_count != 1 else ''}")
 
+            # Include failures if they occurred
+            failure_parts = []
+            if failed_qa_answers > 0:
+                failure_parts.append(f"{failed_qa_answers} assistant answer failure{'s' if failed_qa_answers != 1 else ''}")
+            if haptic_cue_failures > 0:
+                failure_parts.append(f"{haptic_cue_failures} haptic cue failure{'s' if haptic_cue_failures != 1 else ''}")
+            
+            if failure_parts:
+                if len(failure_parts) == 1:
+                    fail_text = failure_parts[0]
+                else:
+                    fail_text = ", ".join(failure_parts[:-1]) + f", and {failure_parts[-1]}"
+                supplement_parts.append(f"encountered {fail_text}")
+
             if supplement_parts:
                 if len(supplement_parts) == 1:
                     supp_text = supplement_parts[0]
@@ -225,7 +239,7 @@ class SessionStore:
             else:
                 supp_sentence = "FitA11y supplemented your session with real-time feedback."
 
-            # User actions: repeats, skips, and questions asked
+            # User actions: repeats, skips, questions asked, and playback changes
             user_parts = []
             if repeats > 0:
                 user_parts.append(f"repeated {repeats} trainer instruction{'s' if repeats != 1 else ''}")
@@ -233,6 +247,10 @@ class SessionStore:
                 user_parts.append(f"skipped {skips} section{'s' if skips != 1 else ''}")
             if user_questions > 0:
                 user_parts.append(f"asked {user_questions} question{'s' if user_questions != 1 else ''}")
+            
+            playback_changes = plays + pauses + seeks + speed_changes
+            if playback_changes > 0:
+                user_parts.append(f"made {playback_changes} playback adjustment{'s' if playback_changes != 1 else ''}")
 
             if user_parts:
                 if len(user_parts) == 1:

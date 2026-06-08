@@ -89,7 +89,7 @@ def test_sleeve(sleeve_side: SleeveSide) -> HapticTestResponse:
         message=f"Prototype calibration test pulse fired successfully on the {sleeve_side.value} sleeve.",
         source="prototype",
         provider="prototype_haptic",
-        replace_with="haptic_service",
+        replace_with="haptic_hardware_provider",
     )
 
 
@@ -106,5 +106,5 @@ def trigger_pattern(
         intensity=intensity,
         source="prototype",
         provider="prototype_haptic",
-        replace_with="haptic_service",
+        replace_with="haptic_hardware_provider",
     )

@@ -479,7 +479,7 @@ class HapticTestResponse(BaseModel):
     message: str
     source: str = "prototype"
     provider: str = "prototype_haptic"
-    replace_with: str = "haptic_service"
+    replace_with: str = "haptic_hardware_provider"
 
 
 class HapticTriggerResponse(BaseModel):
@@ -491,7 +491,7 @@ class HapticTriggerResponse(BaseModel):
     intensity: float
     source: str = "prototype"
     provider: str = "prototype_haptic"
-    replace_with: str = "haptic_service"
+    replace_with: str = "haptic_hardware_provider"
 
 
 # ---------------------------------------------------------------------------

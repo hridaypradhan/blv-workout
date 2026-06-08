@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * useMediaPipe React hook
+ * 
+ * NOTE: This hook is a frontend-centric prototype pose simulation runtime.
+ * It is the frontend counterpart of backend/app/prototype/pose_provider.py.
+ * It generates mathematical time-varying joint angle oscillations aligned with playback 
+ * to simulate physical movements and evaluate them against sidecar manifest limits.
+ * It is completely camera-free and requires no device camera permissions.
+ */
+
 import { useState, useEffect, useRef } from "react";
 import { ExerciseTimelineAnchor, FormError, RepEvent } from "../../types";
 

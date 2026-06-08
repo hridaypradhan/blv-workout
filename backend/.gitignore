@@ -12,3 +12,7 @@ venv/
 
 # F1.1: Downloaded video/audio imports
 storage/
+
+# Prototype Data (Demo Persistence)
+.prototype_data/
+

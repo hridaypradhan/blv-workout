@@ -26,6 +26,7 @@ import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
 import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, SleeveSide, AssistantPersona } from "@/types";
 import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
+import { SESSION_EVENTS } from "@/lib/sessionEvents";
 
 interface LiveSessionProps {
   params: {
@@ -39,6 +40,29 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s < 10 ? "0" : ""}${s}`;
+}
+
+/** Returns the appropriate haptic pattern and intensity for a given feedback purpose. */
+function getHapticPatternForPurpose(purpose: "success" | "correction", joint?: string) {
+  if (purpose === "success") {
+    return {
+      patternName: "short_success_pulse",
+      intensity: 0.6,
+      sleeveSides: ["both"] as SleeveSide[],
+    };
+  } else {
+    const jointLower = joint?.toLowerCase() || "";
+    const sleeveSides: SleeveSide[] = jointLower.includes("left")
+      ? ["left"]
+      : jointLower.includes("right")
+      ? ["right"]
+      : ["both"];
+    return {
+      patternName: "single_long_pulse",
+      intensity: 0.8,
+      sleeveSides,
+    };
+  }
 }
 
 function LiveSessionContent({ params }: LiveSessionProps) {
@@ -173,19 +197,17 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           exercise_name: exerciseName,
         }).catch((err) => console.warn("Failed to log rep completion telemetry:", err));
 
-        recordPlaybackEvent(sessionId, "prototype_rep_detected", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.PROTOTYPE_REP_DETECTED, currentTimeMs, {
           rep_count: repCount,
           exercise_name: exerciseName,
         }).catch((err) => console.warn("Failed to log rep event to timeline:", err));
       }
 
-      // Trigger a success haptic feedback pulse
-      const sleeveSides: SleeveSide[] = ["both"];
-      const patternName = "short_success_pulse";
-      const intensity = 0.6;
+      // Trigger a success haptic feedback pulse using helper
+      const { sleeveSides, patternName, intensity } = getHapticPatternForPurpose("success");
 
       if (sessionId) {
-        recordPlaybackEvent(sessionId, "haptic_cue_requested", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_REQUESTED, currentTimeMs, {
           pattern_name: patternName,
           sleeve_sides: sleeveSides,
           intensity,
@@ -197,7 +219,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         .then((res) => {
           announce(`Prototype haptic rep cue triggered.`);
           if (sessionId) {
-            recordPlaybackEvent(sessionId, "haptic_cue_triggered", currentTimeMs, {
+            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
               pattern_name: patternName,
               sleeve_sides: sleeveSides,
               intensity,
@@ -209,7 +231,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         .catch((err) => {
           console.error("Failed to trigger rep haptic cue:", err);
           if (sessionId) {
-            recordPlaybackEvent(sessionId, "haptic_cue_failed", currentTimeMs, {
+            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
               pattern_name: patternName,
               sleeve_sides: sleeveSides,
               intensity,
@@ -242,7 +264,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           message: latestFormError.message,
         }).catch((err) => console.warn("Failed to log form error telemetry:", err));
 
-        recordPlaybackEvent(sessionId, "prototype_form_error_detected", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED, currentTimeMs, {
           joint: latestFormError.joint,
           observed_angle: latestFormError.observed_angle,
           expected_range: latestFormError.expected_range,
@@ -262,7 +284,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       };
 
       if (sessionId) {
-        recordPlaybackEvent(sessionId, "assistant_correction_requested", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_CORRECTION_REQUESTED, currentTimeMs, {
           joint: latestFormError.joint,
           observed_angle: latestFormError.observed_angle,
         }).catch((err) => console.warn("Failed to log correction request telemetry:", err));
@@ -277,7 +299,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           announce(`Assistant correction: ${response.text}`);
 
           if (sessionId) {
-            recordPlaybackEvent(sessionId, "assistant_correction_delivered", currentTimeMs, {
+            recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_CORRECTION_DELIVERED, currentTimeMs, {
               text: response.text,
               joint: latestFormError.joint,
               modality: response.modality,
@@ -292,18 +314,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           console.error("Failed to generate correction cue:", err);
         });
 
-      // 2. Trigger corrective haptic feedback on target sleeve side
-      const jointLower = latestFormError.joint.toLowerCase();
-      const sleeveSides: SleeveSide[] = jointLower.includes("left")
-        ? ["left"]
-        : jointLower.includes("right")
-        ? ["right"]
-        : ["both"];
-      const patternName = "single_long_pulse";
-      const intensity = 0.8;
+      // 2. Trigger corrective haptic feedback on target sleeve side using helper
+      const { sleeveSides, patternName, intensity } = getHapticPatternForPurpose("correction", latestFormError.joint);
 
       if (sessionId) {
-        recordPlaybackEvent(sessionId, "haptic_cue_requested", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_REQUESTED, currentTimeMs, {
           pattern_name: patternName,
           sleeve_sides: sleeveSides,
           intensity,
@@ -315,7 +330,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         .then((res) => {
           announce(`Prototype corrective haptic cue triggered.`);
           if (sessionId) {
-            recordPlaybackEvent(sessionId, "haptic_cue_triggered", currentTimeMs, {
+            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
               pattern_name: patternName,
               sleeve_sides: sleeveSides,
               intensity,
@@ -327,7 +342,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         .catch((err) => {
           console.error("Failed to trigger corrective haptic cue:", err);
           if (sessionId) {
-            recordPlaybackEvent(sessionId, "haptic_cue_failed", currentTimeMs, {
+            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
               pattern_name: patternName,
               sleeve_sides: sleeveSides,
               intensity,
@@ -408,7 +423,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       const isHaptic = activeCue.modality === "haptic";
 
       if (sessionId) {
-        const eventType = isHaptic ? "haptic_cue_requested" : "assistant_cue_delivered";
+        const eventType = isHaptic ? SESSION_EVENTS.HAPTIC_CUE_REQUESTED : SESSION_EVENTS.ASSISTANT_CUE_DELIVERED;
         recordPlaybackEvent(sessionId, eventType, activeCue.timestamp_ms, {
           text: activeCue.text,
           modality: activeCue.modality,
@@ -427,7 +442,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           .then((res) => {
             announce(`Prototype haptic cue triggered: ${patternName} at intensity ${intensity}`);
             if (sessionId) {
-              recordPlaybackEvent(sessionId, "haptic_cue_triggered", activeCue.timestamp_ms, {
+              recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, activeCue.timestamp_ms, {
                 pattern_name: patternName,
                 sleeve_sides: sleeveSides,
                 intensity: intensity,
@@ -444,7 +459,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
             const errMsg = err instanceof Error ? err.message : "Unknown error";
             announce(`Prototype haptic cue failed: ${errMsg}`);
             if (sessionId) {
-              recordPlaybackEvent(sessionId, "haptic_cue_failed", activeCue.timestamp_ms, {
+              recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, activeCue.timestamp_ms, {
                 pattern_name: patternName,
                 sleeve_sides: sleeveSides,
                 intensity: intensity,
@@ -470,7 +485,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         seek(latestEvent.start_ms / 1000);
         announce(`Repeating trainer instruction: "${latestEvent.text}"`);
         if (sessionId) {
-          recordPlaybackEvent(sessionId, "trainer_instruction_repeated", currentTimeMs, {
+          recordPlaybackEvent(sessionId, SESSION_EVENTS.TRAINER_INSTRUCTION_REPEATED, currentTimeMs, {
             text: latestEvent.text,
             timestamp_ms: latestEvent.start_ms
           }).catch((err) => console.warn("Failed to log trainer instruction repeated event:", err));
@@ -490,7 +505,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       seek(nextAnchor.start_time_seconds);
       announce(`Skipped to section: ${nextAnchor.name}`);
       if (sessionId) {
-        recordPlaybackEvent(sessionId, "section_skipped", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.SECTION_SKIPPED, currentTimeMs, {
           section_name: nextAnchor.name,
           start_time_seconds: nextAnchor.start_time_seconds
         }).catch((err) => console.warn("Failed to log section skipped event:", err));
@@ -549,7 +564,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     }
 
     if (sessionId) {
-      recordPlaybackEvent(sessionId, "user_question_submitted", currentTimeMs, {
+      recordPlaybackEvent(sessionId, SESSION_EVENTS.USER_QUESTION_SUBMITTED, currentTimeMs, {
         question: query,
         active_exercise: activeExerciseName,
         latest_trainer_instruction: latestInstructionText
@@ -583,7 +598,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       announce(`Assistant response received: "${response.text}"`);
 
       if (sessionId) {
-        recordPlaybackEvent(sessionId, "assistant_answer_delivered", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_ANSWER_DELIVERED, currentTimeMs, {
           question: query,
           answer: response.text,
           current_timestamp_ms: currentTimeMs,
@@ -605,7 +620,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       announce(`Assistant response failed: ${errMsg}`);
 
       if (sessionId) {
-        recordPlaybackEvent(sessionId, "assistant_answer_failed", currentTimeMs, {
+        recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_ANSWER_FAILED, currentTimeMs, {
           question: query,
           error: errMsg,
           current_timestamp_ms: currentTimeMs,
@@ -843,7 +858,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               </span>
               {currentExercise && (
                 <span className="text-sm text-slate-400 mt-2 block">
-                  Joint: <strong className="text-slate-200 capitalize">{currentExercise.counting_joint || "any"}</strong> | Target: 15 reps
+                  Joint: <strong className="text-slate-200 capitalize">{currentExercise.counting_joint || "any"}</strong> | Target: Follow trainer
                   {lastHandledRepRef.current >= 0 && (
                     <span className="block text-yellow-400 font-bold mt-1 text-sm" id="rep-completion-telemetry-badge">
                       Completed: {lastHandledRepRef.current} reps

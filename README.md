@@ -23,14 +23,19 @@ FitA11y is an **assistive playback companion** application designed specifically
 
 ## Tech Stack
 
-- **Backend (Prototype Level):** FastAPI (Python), MediaPipe (Pose/Motion Analysis), SQL Alchemy / PostgreSQL, Google Generative AI (Gemini), Google Cloud Text-to-Speech, `yt-dlp` (for transient audio/metadata analysis only; never stored for playback), `librosa` (Rhythm Analysis).
+- **Backend (Prototype Level):** FastAPI (Python), with built-in mock modules simulating MediaPipe (Pose/Motion Analysis), SQLAlchemy/PostgreSQL, Google Generative AI (Gemini), Google Cloud Text-to-Speech, `yt-dlp` (for transient audio/metadata analysis only; never stored for playback), and `librosa` (Rhythm Analysis).
 - **Frontend:** Next.js (React), TypeScript, Tailwind CSS.
 
-> [!NOTE]
-> **Prototype Maturity Status**: The backend preprocessing and pose analysis pipelines are current prototype stubs. MediaPipe and Gemini integration functions simulate manifest anchoring and analysis, returning deterministic mock sidecar manifests and cue lists.
+> [!IMPORTANT]
+> **Prototype Implementation & Simulation Boundaries**:
+> FitA11y is currently implemented as an end-to-end runnable **prototype** to showcase assistive playback companion capabilities:
+> - **Deterministic Haptics**: Sleeve haptic feedback and limb status checks are simulated using deterministic prototype haptic responses; they do not communicate with physical Bluetooth hardware sleeves.
+> - **Camera-Free Pose Tracking**: Joint angles and rep/error telemetry are generated mathematically relative to playback speed and timeline anchors; no camera permission, video stream processing, or real MediaPipe model inference is active.
+> - **JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory; there is no SQL database or PostgreSQL migration layer.
+> - **Replaceable Modules**: Real integrations for Gemini, MediaPipe, BLE haptic sleeves, TTS speech services, and production databases remain future replaceable provider integration layers.
 
 > [!TIP]
-> **Prototype Persistence**: For local developer and demo convenience, prepared jobs, session history, and user settings are persisted locally in the `backend/.prototype_data` directory. This is not a production database layer. To reset the application back to its default clean state, simply delete the `backend/.prototype_data` directory.
+> **Prototype Persistence**: For local developer and demo convenience, prepared jobs, session history, and user settings are persisted locally in the `backend/.prototype_data` directory. To reset the application back to its default clean state, simply delete the `backend/.prototype_data` directory.
 
 ---
 

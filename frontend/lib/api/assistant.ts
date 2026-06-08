@@ -1,4 +1,4 @@
-import { API_BASE_URL, checkResponse, plannedApiStub } from "./client";
+import { API_BASE_URL, checkResponse } from "./client";
 import { AssistantCue, QARequest, CorrectionRequest } from "../../types";
 
 // ============================================================================
@@ -18,11 +18,7 @@ export async function askAssistant(payload: QARequest): Promise<AssistantCue> {
   return checkResponse<AssistantCue>(res, "Failed to ask assistant");
 }
 
-/** Send active joint sensor telemetry to the assistant for real-time form checks. */
-export async function sendCorrection(sessionId: string, jointData: object): Promise<void> {
-  console.log("Sending joint pose data for session correction:", sessionId, jointData);
-  return plannedApiStub("sendCorrection");
-}
+
 
 /** Fetch a form correction cue from the assistant based on observed joint angles. */
 export async function generateCorrection(payload: CorrectionRequest): Promise<AssistantCue> {

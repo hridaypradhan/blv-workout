@@ -508,6 +508,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     setIsEnding(true);
     setEndError(null);
     try {
+      announce("Workout session ended. Saving report and opening history...");
       await endSession(sessionId);
       router.push("/history");
     } catch (err) {
@@ -718,19 +719,19 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           <span className={`w-2.5 h-2.5 rounded-full ${hapticState === "connected" ? "bg-emerald-500 animate-ping" : hapticState === "connecting" ? "bg-yellow-500 animate-pulse" : "bg-red-500"}`} />
           <span className="text-sm font-semibold text-slate-300">
             {hapticState === "connected" 
-              ? "Live Device Tracking Connected (Prototype)" 
+              ? "Prototype Sleeve Calibration Mode (Simulated)" 
               : hapticState === "connecting" 
-              ? "Live Device Tracking Connecting..." 
-              : "Live Device Tracking Disconnected (Use Setup to Connect)"}
+              ? "Prototype Sleeve Connecting..." 
+              : "Prototype Sleeves Disconnected (Simulated)"}
           </span>
         </div>
         <div className="flex flex-wrap gap-3 sm:gap-4" aria-label="Individual Limb Calibration Statuses">
           {sleeveStatus.map((s) => {
             const limbStatusText = s.styleState === "connected" 
-              ? "Calibrating" 
+              ? "Prototype Cue Ready" 
               : s.styleState === "connecting" 
-              ? "Connecting..." 
-              : "Offline";
+              ? "Prototype Connecting..." 
+              : "Offline (Simulated)";
             const dotColor = s.styleState === "connected" 
               ? "bg-yellow-400 animate-pulse" 
               : s.styleState === "connecting" 
@@ -752,7 +753,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Left/Center Column: YouTube Embedded Player & Playback Controls */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
+        <div className="lg:col-span-8 flex flex-col gap-6 order-2 lg:order-1">
           <YouTubePlayerPanel
             containerRef={containerRef}
             isReady={isReady}
@@ -819,7 +820,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         </div>
 
         {/* Right Column: Tracked Performance & Assistant Cue Feed */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
+        <div className="lg:col-span-4 flex flex-col gap-6 order-1 lg:order-2">
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between text-center" aria-label="Tracked Performance Summary">
             <div>
               <span className="text-xs uppercase font-extrabold text-yellow-400 tracking-wider block mb-1">
@@ -833,7 +834,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">
                 {currentExercise ? "Supplementary Target Cues" : "Your Tracked Performance"}
               </span>
-              <span className={`font-extrabold text-yellow-400 tracking-tight block ${currentExercise ? "text-sm" : "text-5xl"}`}>
+              <span className={`font-extrabold text-yellow-400 tracking-tight block ${currentExercise ? "text-xl font-bold leading-relaxed" : "text-5xl"}`}>
                 {currentExercise ? (
                   currentExercise.description_accessible || "Follow YouTube instructions"
                 ) : (

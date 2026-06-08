@@ -154,10 +154,10 @@ export default function SessionSetup({ params }: SetupPageProps) {
             <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between" aria-labelledby="camera-heading">
               <div>
                 <h2 id="camera-heading" className="text-lg font-bold text-white mb-2">
-                  Camera Check
+                  Prototype Pose Tracking (Camera-Free)
                 </h2>
                 <p className="text-sm text-slate-300 mb-4">
-                  Position your camera 5-8 feet away to capture your full body outline for form analysis.
+                  In this prototype, joint angles are simulated mathematically based on playback timestamps. No camera permission or video stream processing is requested.
                 </p>
               </div>
 
@@ -178,8 +178,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
                     d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                   />
                 </svg>
-                <p className="text-sm text-slate-200 font-bold mb-1">Camera Feed Disabled</p>
-                <p className="text-sm text-slate-400">We do not store or transmit your video stream.</p>
+                <p className="text-sm text-slate-200 font-bold mb-1">Camera Feed Disabled in Prototype</p>
+                <p className="text-sm text-slate-400">Workout tracking is mathematically simulated. Camera access is not requested.</p>
               </div>
             </section>
 
@@ -190,7 +190,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
                   Prototype Sleeve Status
                 </h2>
                 <p className="text-sm text-slate-300 mb-4">
-                  Verify prototype haptic readiness for all limbs.
+                  Verify prototype haptic readiness (mathematically simulated). No physical sleeve hardware is required in this prototype.
                 </p>
               </div>
 

@@ -10,24 +10,34 @@ import HistoryErrorState from "@/components/history/HistoryErrorState";
 import HistoryEmptyState from "@/components/history/HistoryEmptyState";
 import SessionHistoryTable from "@/components/history/SessionHistoryTable";
 import SessionHistoryMobileList from "@/components/history/SessionHistoryMobileList";
+import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 export default function HistoryList() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
 
   const fetchHistory = () => {
     setIsLoading(true);
     setError(null);
+    setAnnouncement("Loading session history...");
     getSessionHistory(getActiveUserId())
       .then((data) => {
         setSessions(data);
         setIsLoading(false);
+        if (data.length === 0) {
+          setAnnouncement("Session history loaded. No completed sessions found.");
+        } else {
+          setAnnouncement(`Session history loaded. Found ${data.length} completed sessions.`);
+        }
       })
       .catch((err) => {
         console.error("Failed to fetch session history:", err);
-        setError(err.message || "Failed to load session history.");
+        const errMsg = err.message || "Failed to load session history.";
+        setError(errMsg);
         setIsLoading(false);
+        setAnnouncement(`Failed to load session history: ${errMsg}`);
       });
   };
 
@@ -38,6 +48,7 @@ export default function HistoryList() {
   if (isLoading) {
     return (
       <PageWrapper id="history-list-wrapper">
+        <ScreenReaderStatus content={announcement} />
         <div className="max-w-4xl mx-auto py-4">
           <h1 className="text-3xl font-extrabold text-white mb-8">Session History</h1>
           <HistoryLoadingState />
@@ -49,6 +60,7 @@ export default function HistoryList() {
   if (error) {
     return (
       <PageWrapper id="history-list-wrapper">
+        <ScreenReaderStatus content={announcement} />
         <div className="max-w-4xl mx-auto py-4">
           <h1 className="text-3xl font-extrabold text-white mb-8">Session History</h1>
           <HistoryErrorState error={error} onRetry={fetchHistory} />
@@ -60,6 +72,7 @@ export default function HistoryList() {
   if (sessions.length === 0) {
     return (
       <PageWrapper id="history-list-wrapper">
+        <ScreenReaderStatus content={announcement} />
         <div className="max-w-4xl mx-auto py-4">
           <h1 className="text-3xl font-extrabold text-white mb-8">Session History</h1>
           <HistoryEmptyState />
@@ -70,6 +83,7 @@ export default function HistoryList() {
 
   return (
     <PageWrapper id="history-list-wrapper">
+      <ScreenReaderStatus content={announcement} />
       <div className="max-w-4xl mx-auto py-4">
         {/* Title */}
         <div className="mb-8">

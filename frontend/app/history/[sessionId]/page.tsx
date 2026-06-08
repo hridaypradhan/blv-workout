@@ -12,6 +12,7 @@ import SessionStatsGrid from "@/components/history/SessionStatsGrid";
 import MovementCorrectionLog from "@/components/history/MovementCorrectionLog";
 import PlaybackTimeline from "@/components/history/PlaybackTimeline";
 import AssistantSummaryPanel from "@/components/history/AssistantSummaryPanel";
+import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 interface HistoryDetailPageProps {
   params: {
@@ -23,19 +24,25 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
 
   const fetchSessionData = useCallback(() => {
     setIsLoading(true);
     setError(null);
+    setAnnouncement("Loading session report details...");
     getSession(params.sessionId)
       .then((data) => {
         setSession(data);
         setIsLoading(false);
+        const titleText = data.video_title || `Video ${data.video_id ? data.video_id.substring(0, 8) : ""}`;
+        setAnnouncement(`Session report loaded successfully for ${titleText}.`);
       })
       .catch((err) => {
         console.error("Failed to fetch session detail:", err);
-        setError(err.message || "Failed to load session details.");
+        const errMsg = err.message || "Failed to load session details.";
+        setError(errMsg);
         setIsLoading(false);
+        setAnnouncement(`Failed to load session report: ${errMsg}`);
       });
   }, [params.sessionId]);
 
@@ -55,6 +62,7 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
   if (isLoading) {
     return (
       <PageWrapper id="history-detail-wrapper">
+        <ScreenReaderStatus content={announcement} />
         <div className="max-w-4xl mx-auto py-4">
           <div className="mb-6">
             <Link
@@ -73,6 +81,7 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
   if (error || !session) {
     return (
       <PageWrapper id="history-detail-wrapper">
+        <ScreenReaderStatus content={announcement} />
         <div className="max-w-4xl mx-auto py-4">
           <div className="mb-6">
             <Link
@@ -94,6 +103,7 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
 
   return (
     <PageWrapper id="history-detail-wrapper">
+      <ScreenReaderStatus content={announcement} />
       <div className="max-w-4xl mx-auto py-4">
         {/* Navigation link back to list */}
         <div className="mb-6">

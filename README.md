@@ -29,6 +29,9 @@ FitA11y is an **assistive playback companion** application designed specifically
 > [!NOTE]
 > **Prototype Maturity Status**: The backend preprocessing and pose analysis pipelines are current prototype stubs. MediaPipe and Gemini integration functions simulate manifest anchoring and analysis, returning deterministic mock sidecar manifests and cue lists.
 
+> [!TIP]
+> **Prototype Persistence**: For local developer and demo convenience, prepared jobs, session history, and user settings are persisted locally in the `backend/.prototype_data` directory. This is not a production database layer. To reset the application back to its default clean state, simply delete the `backend/.prototype_data` directory.
+
 ---
 
 ## Setup & Running the Application

@@ -16,7 +16,12 @@ class Settings(BaseSettings):
     # user watches the original YouTube video via the embedded IFrame player.
     TRANSIENT_ANALYSIS_DIR: str = "storage/transient_analysis"
 
+    # Local JSON-backed persistence settings for the prototype
+    PROTOTYPE_PERSISTENCE_ENABLED: bool = True
+    PROTOTYPE_DATA_DIR: str = ".prototype_data"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 settings = Settings()
+

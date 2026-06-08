@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.models.schemas import ProcessingStage
+from app.core.prototype_persistence import load_json_store, save_json_store
+
 
 
 @dataclass
@@ -53,6 +55,34 @@ class JobStore:
     def __init__(self) -> None:
         self._jobs: dict[str, JobRecord] = {}
         self._lock = threading.Lock()
+        self._load_from_disk()
+
+    def _load_from_disk(self) -> None:
+        """Load job records from local JSON store if enabled."""
+        data = load_json_store("jobs.json")
+        if data and isinstance(data, dict):
+            with self._lock:
+                for k, v in data.items():
+                    try:
+                        self._jobs[k] = JobRecord(
+                            video_id=v["video_id"],
+                            youtube_url=v["youtube_url"],
+                            stage=ProcessingStage(v["stage"]),
+                            error=v.get("error"),
+                            youtube_id=v.get("youtube_id"),
+                            title=v.get("title"),
+                            channel_name=v.get("channel_name"),
+                            thumbnail_url=v.get("thumbnail_url"),
+                            duration=v.get("duration"),
+                            created_at=v.get("created_at"),
+                        )
+                    except Exception:
+                        pass
+
+    def _save_to_disk(self) -> None:
+        """Save job records to local JSON store if enabled. Assumes lock is held."""
+        data = {k: v.to_dict() for k, v in self._jobs.items()}
+        save_json_store("jobs.json", data)
 
     def create_job(self, youtube_url: str) -> JobRecord:
         """Create a new job with a fresh UUID and SUBMITTED stage."""
@@ -60,6 +90,7 @@ class JobStore:
         job = JobRecord(video_id=video_id, youtube_url=youtube_url)
         with self._lock:
             self._jobs[video_id] = job
+            self._save_to_disk()
         return job
 
     def get_job(self, video_id: str) -> Optional[JobRecord]:
@@ -97,11 +128,14 @@ class JobStore:
                 job.thumbnail_url = thumbnail_url
             if duration is not None:
                 job.duration = duration
+            self._save_to_disk()
 
     def delete_job(self, video_id: str) -> bool:
         """Remove a job record. Returns True if found and deleted."""
         with self._lock:
             job = self._jobs.pop(video_id, None)
+            if job is not None:
+                self._save_to_disk()
         return job is not None
 
     def list_jobs(self) -> list[JobRecord]:

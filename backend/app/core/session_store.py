@@ -1,11 +1,13 @@
 """Thread-safe in-memory store for assisted playback sessions."""
 
+import json
 import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 from app.models.schemas import Session, RepEvent, FormError, PlaybackEvent
+from app.core.prototype_persistence import load_json_store, save_json_store
 
 
 class SessionStore:
@@ -14,6 +16,27 @@ class SessionStore:
     def __init__(self) -> None:
         self._sessions: dict[uuid.UUID, Session] = {}
         self._lock = threading.Lock()
+        self._load_from_disk()
+
+    def _load_from_disk(self) -> None:
+        """Load sessions from local JSON store if enabled."""
+        data = load_json_store("sessions.json")
+        if data and isinstance(data, dict):
+            with self._lock:
+                for k, v in data.items():
+                    try:
+                        session_id = uuid.UUID(k)
+                        session = Session.model_validate(v)
+                        self._sessions[session_id] = session
+                    except Exception:
+                        pass
+
+    def _save_to_disk(self) -> None:
+        """Save sessions to local JSON store if enabled. Assumes lock is held."""
+        serialized_sessions = {}
+        for k, v in self._sessions.items():
+            serialized_sessions[str(k)] = json.loads(v.model_dump_json())
+        save_json_store("sessions.json", serialized_sessions)
 
     def create_session(
         self,
@@ -37,6 +60,7 @@ class SessionStore:
         )
         with self._lock:
             self._sessions[session_id] = session
+            self._save_to_disk()
         return session
 
     def get_session(self, session_id: uuid.UUID) -> Optional[Session]:
@@ -67,6 +91,7 @@ class SessionStore:
                 metadata=metadata or {}
             )
             session.reps.append(rep_event)
+            self._save_to_disk()
             return True
 
     def add_form_error(
@@ -82,6 +107,7 @@ class SessionStore:
 
             # Add to the session form errors list
             session.form_errors.append(form_error)
+            self._save_to_disk()
             return True
 
     def add_playback_event(
@@ -103,6 +129,7 @@ class SessionStore:
                 metadata=metadata or {}
             )
             session.playback_events.append(event)
+            self._save_to_disk()
             return True
 
     def end_session(self, session_id: uuid.UUID) -> bool:
@@ -217,6 +244,7 @@ class SessionStore:
                 user_sentence = ""
 
             session.summary = f"Assisted playback session completed. {supp_sentence}{user_sentence}"
+            self._save_to_disk()
             return True
 
     def list_sessions(self, user_id: uuid.UUID, include_active: bool = False) -> list[Session]:

@@ -125,7 +125,12 @@ class SessionStore:
             seeks = 0
             speed_changes = 0
             assistant_cues = 0
-            haptic_cues = 0
+            assistant_qa_answers = 0
+            assistant_corrections = 0
+            failed_qa_answers = 0
+            haptic_cue_requests = 0
+            haptic_cue_triggers = 0
+            haptic_cue_failures = 0
             repeats = 0
             skips = 0
             user_questions = 0
@@ -142,42 +147,76 @@ class SessionStore:
                     speed_changes += 1
                 elif t == "assistant_cue_delivered":
                     assistant_cues += 1
+                elif t == "assistant_correction_delivered":
+                    assistant_corrections += 1
+                elif t == "assistant_answer_delivered":
+                    assistant_qa_answers += 1
+                elif t == "assistant_answer_failed":
+                    failed_qa_answers += 1
+                elif t == "haptic_cue_requested":
+                    haptic_cue_requests += 1
+                elif t == "haptic_cue_triggered":
+                    haptic_cue_triggers += 1
+                elif t == "haptic_cue_failed":
+                    haptic_cue_failures += 1
                 elif t == "trainer_instruction_repeated":
                     repeats += 1
                 elif t == "section_skipped":
                     skips += 1
-                elif t == "haptic_cue_requested":
-                    haptic_cues += 1
                 elif t == "user_question_submitted":
                     user_questions += 1
 
-            summary_parts = []
-            if total_reps > 0:
-                summary_parts.append(f"{total_reps} tracked repetitions")
-            if total_errors > 0:
-                summary_parts.append(f"{total_errors} form corrections")
-            if assistant_cues > 0:
-                summary_parts.append(f"{assistant_cues} assistant cues")
-            if haptic_cues > 0:
-                summary_parts.append(f"{haptic_cues} haptic feedback cues")
-            if repeats > 0:
-                summary_parts.append(f"{repeats} trainer instructions repeated")
-            if skips > 0:
-                summary_parts.append(f"{skips} skipped sections")
-            if user_questions > 0:
-                summary_parts.append(f"{user_questions} assistant questions asked")
+            # Build summary
+            # FitA11y supplemented the trainer with:
+            supplement_parts = []
+            
+            # Cues: sum up assistant cues
+            all_assistant_cues = assistant_cues + assistant_corrections + assistant_qa_answers
+            if all_assistant_cues > 0:
+                supplement_parts.append(f"{all_assistant_cues} assistant cue{'s' if all_assistant_cues != 1 else ''}")
+            
+            # Haptic cues: triggered if >0, otherwise requested
+            haptic_count = haptic_cue_triggers if haptic_cue_triggers > 0 else haptic_cue_requests
+            if haptic_count > 0:
+                supplement_parts.append(f"{haptic_count} haptic cue{'s' if haptic_count != 1 else ''}")
+            
+            # Reps and form warnings
+            reps_count = total_reps if total_reps > 0 else sum(1 for e in session.playback_events if e.event_type == "prototype_rep_detected")
+            errors_count = total_errors if total_errors > 0 else sum(1 for e in session.playback_events if e.event_type == "prototype_form_error_detected")
 
-            if not summary_parts:
-                events_desc = "no significant events recorded"
-            elif len(summary_parts) == 1:
-                events_desc = summary_parts[0]
+            if reps_count > 0:
+                supplement_parts.append(f"{reps_count} tracked rep{'s' if reps_count != 1 else ''}")
+            if errors_count > 0:
+                supplement_parts.append(f"{errors_count} form warning{'s' if errors_count != 1 else ''}")
+
+            if supplement_parts:
+                if len(supplement_parts) == 1:
+                    supp_text = supplement_parts[0]
+                else:
+                    supp_text = ", ".join(supplement_parts[:-1]) + f", and {supplement_parts[-1]}"
+                supp_sentence = f"FitA11y supplemented the trainer with {supp_text}."
             else:
-                events_desc = ", ".join(summary_parts[:-1]) + f", and {summary_parts[-1]}"
+                supp_sentence = "FitA11y supplemented your session with real-time feedback."
 
-            session.summary = (
-                f"Assisted session completed! During this workout, we tracked: {events_desc}. "
-                f"Great job sticking with the trainer's workout!"
-            )
+            # User actions: repeats, skips, and questions asked
+            user_parts = []
+            if repeats > 0:
+                user_parts.append(f"repeated {repeats} trainer instruction{'s' if repeats != 1 else ''}")
+            if skips > 0:
+                user_parts.append(f"skipped {skips} section{'s' if skips != 1 else ''}")
+            if user_questions > 0:
+                user_parts.append(f"asked {user_questions} question{'s' if user_questions != 1 else ''}")
+
+            if user_parts:
+                if len(user_parts) == 1:
+                    user_text = user_parts[0]
+                else:
+                    user_text = ", ".join(user_parts[:-1]) + f", and {user_parts[-1]}"
+                user_sentence = f" You {user_text}."
+            else:
+                user_sentence = ""
+
+            session.summary = f"Assisted playback session completed. {supp_sentence}{user_sentence}"
             return True
 
     def list_sessions(self, user_id: uuid.UUID, include_active: bool = False) -> list[Session]:

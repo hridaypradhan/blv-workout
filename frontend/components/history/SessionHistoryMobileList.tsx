@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Session } from "@/types";
-import { formatSessionDate, formatSessionDuration, shortVideoId } from "@/lib/formatters/sessionFormatters";
+import { formatSessionDate, formatSessionDuration, shortVideoId, getSessionMetrics } from "@/lib/formatters/sessionFormatters";
 
 interface SessionHistoryMobileListProps {
   sessions: Session[];
@@ -13,6 +13,7 @@ export default function SessionHistoryMobileList({ sessions }: SessionHistoryMob
       {sessions.map((s) => {
         const shortId = shortVideoId(s.video_id);
         const sessionDate = formatSessionDate(s.ended_at || s.started_at);
+        const metrics = getSessionMetrics(s);
         return (
           <div key={s.id} className="p-4 flex flex-col gap-3" role="listitem">
             <div className="flex justify-between items-start gap-2">
@@ -25,18 +26,32 @@ export default function SessionHistoryMobileList({ sessions }: SessionHistoryMob
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+            {s.summary && (
+              <p className="text-xs text-slate-400 bg-slate-950/40 p-3 rounded-xl border border-slate-850/50 leading-relaxed">
+                {s.summary}
+              </p>
+            )}
+
+            <div className="grid grid-cols-5 gap-1 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
               <div className="flex flex-col">
-                <span className="text-xs text-slate-400 uppercase font-extrabold tracking-wider">Reps</span>
-                <span className="text-sm font-bold text-slate-200 mt-0.5">{s.reps?.length || 0}</span>
+                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Reps</span>
+                <span className="text-xs font-bold text-slate-200 mt-0.5">{metrics.reps}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-xs text-slate-400 uppercase font-extrabold tracking-wider">Corrections</span>
-                <span className="text-sm font-bold text-amber-400 mt-0.5">{s.form_errors?.length || 0}</span>
+                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Warns</span>
+                <span className="text-xs font-bold text-amber-400 mt-0.5">{metrics.formErrors}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-xs text-slate-400 uppercase font-extrabold tracking-wider">Events</span>
-                <span className="text-sm font-bold text-slate-200 mt-0.5">{s.playback_events?.length || 0}</span>
+                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Assist</span>
+                <span className="text-xs font-bold text-slate-200 mt-0.5">{metrics.assistantInteractions}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Haptic</span>
+                <span className="text-xs font-bold text-slate-200 mt-0.5">{metrics.hapticCues}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Plays</span>
+                <span className="text-xs font-bold text-slate-200 mt-0.5">{metrics.playbackInteractions}</span>
               </div>
             </div>
 

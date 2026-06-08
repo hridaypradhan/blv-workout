@@ -35,6 +35,7 @@ export default function MovementCorrectionLog({ session }: MovementCorrectionLog
         {/* Form Errors */}
         <div className="flex flex-col">
           <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Form Corrections</h3>
+          {/* Note: The FormError schema does not yet support timestamps. These can be added in future migrations. */}
           {session.form_errors && session.form_errors.length > 0 ? (
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
               {session.form_errors.map((err, idx) => (

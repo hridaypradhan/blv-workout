@@ -1,3 +1,5 @@
+import { Session } from "../../types";
+
 /**
  * Formats a session's started_at or ended_at date string into a human-readable date.
  * If verbose is true, returns a full date representation including weekday.
@@ -62,4 +64,51 @@ export function formatPlaybackTime(seconds: number): string {
  */
 export function shortVideoId(videoId: string | null | undefined): string {
   return videoId ? videoId.substring(0, 8) : "Unknown";
+}
+
+/**
+ * Calculates high-level metrics for a session.
+ */
+export function getSessionMetrics(session: Session) {
+  const reps = session.reps?.length || 0;
+  const formErrors = session.form_errors?.length || 0;
+  
+  let assistantInteractions = 0;
+  let hapticCues = 0;
+  let playbackInteractions = 0;
+  
+  if (session.playback_events) {
+    for (const evt of session.playback_events) {
+      const type = evt.event_type;
+      if (
+        type === "assistant_cue_delivered" ||
+        type === "assistant_correction_delivered" ||
+        type === "assistant_answer_delivered" ||
+        type === "user_question_submitted"
+      ) {
+        assistantInteractions++;
+      } else if (
+        type === "haptic_cue_triggered" ||
+        type === "haptic_cue_requested"
+      ) {
+        hapticCues++;
+      } else if (
+        type === "play" ||
+        type === "pause" ||
+        type === "seek" ||
+        type === "speed_change" ||
+        type === "ended"
+      ) {
+        playbackInteractions++;
+      }
+    }
+  }
+  
+  return {
+    reps,
+    formErrors,
+    assistantInteractions,
+    hapticCues,
+    playbackInteractions,
+  };
 }

@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Session } from "@/types";
-import { formatSessionDate, formatSessionDuration, shortVideoId } from "@/lib/formatters/sessionFormatters";
+import { formatSessionDate, formatSessionDuration, shortVideoId, getSessionMetrics } from "@/lib/formatters/sessionFormatters";
 
 interface SessionHistoryTableProps {
   sessions: Session[];
@@ -17,8 +17,10 @@ export default function SessionHistoryTable({ sessions }: SessionHistoryTablePro
             <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Workout Video</th>
             <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Duration</th>
             <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Reps</th>
-            <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Corrections</th>
-            <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Events</th>
+            <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Warnings</th>
+            <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Assistant Cues</th>
+            <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Haptic Cues</th>
+            <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Playback Events</th>
             <th className="p-4 md:p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Details</th>
           </tr>
         </thead>
@@ -26,25 +28,37 @@ export default function SessionHistoryTable({ sessions }: SessionHistoryTablePro
           {sessions.map((s) => {
             const shortId = shortVideoId(s.video_id);
             const dateFormatted = formatSessionDate(s.ended_at || s.started_at);
+            const metrics = getSessionMetrics(s);
             return (
               <tr key={s.id} className="hover:bg-slate-800/30 transition-colors">
                 <td className="p-4 md:p-5 text-sm font-semibold text-slate-300 whitespace-nowrap">
                   {dateFormatted}
                 </td>
-                <td className="p-4 md:p-5 text-sm font-bold text-white truncate max-w-[240px]" title={s.video_title || s.video_id}>
-                  {s.video_title || `Video ${shortId}`}
+                <td className="p-4 md:p-5 text-sm font-bold text-white max-w-[240px]" title={s.video_title || s.video_id}>
+                  <div className="truncate font-bold text-slate-200">{s.video_title || `Video ${shortId}`}</div>
+                  {s.summary && (
+                    <div className="text-xs font-normal text-slate-400 mt-1 truncate max-w-[240px]" title={s.summary}>
+                      {s.summary}
+                    </div>
+                  )}
                 </td>
                 <td className="p-4 md:p-5 text-sm text-slate-400">
                   {formatSessionDuration(s.started_at, s.ended_at)}
                 </td>
                 <td className="p-4 md:p-5 text-sm text-slate-200 text-center font-semibold">
-                  {s.reps?.length || 0}
+                  {metrics.reps}
                 </td>
                 <td className="p-4 md:p-5 text-sm text-amber-400 text-center font-bold">
-                  {s.form_errors?.length || 0}
+                  {metrics.formErrors}
+                </td>
+                <td className="p-4 md:p-5 text-sm text-slate-200 text-center font-semibold">
+                  {metrics.assistantInteractions}
+                </td>
+                <td className="p-4 md:p-5 text-sm text-slate-200 text-center font-semibold">
+                  {metrics.hapticCues}
                 </td>
                 <td className="p-4 md:p-5 text-sm text-slate-200 text-center">
-                  {s.playback_events?.length || 0}
+                  {metrics.playbackInteractions}
                 </td>
                 <td className="p-4 md:p-5 text-sm text-right whitespace-nowrap">
                   <Link

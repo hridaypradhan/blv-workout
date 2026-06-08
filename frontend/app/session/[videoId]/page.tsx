@@ -172,6 +172,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           replace_with: "mediapipe_service",
           exercise_name: exerciseName,
         }).catch((err) => console.warn("Failed to log rep completion telemetry:", err));
+
+        recordPlaybackEvent(sessionId, "prototype_rep_detected", currentTimeMs, {
+          rep_count: repCount,
+          exercise_name: exerciseName,
+        }).catch((err) => console.warn("Failed to log rep event to timeline:", err));
       }
 
       // Trigger a success haptic feedback pulse
@@ -236,6 +241,14 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           severity: latestFormError.severity,
           message: latestFormError.message,
         }).catch((err) => console.warn("Failed to log form error telemetry:", err));
+
+        recordPlaybackEvent(sessionId, "prototype_form_error_detected", currentTimeMs, {
+          joint: latestFormError.joint,
+          observed_angle: latestFormError.observed_angle,
+          expected_range: latestFormError.expected_range,
+          severity: latestFormError.severity,
+          message: latestFormError.message,
+        }).catch((err) => console.warn("Failed to log form error event to timeline:", err));
       }
 
       // 1. Fetch form correction cue from assistant API
@@ -264,8 +277,9 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           announce(`Assistant correction: ${response.text}`);
 
           if (sessionId) {
-            recordPlaybackEvent(sessionId, "assistant_cue_delivered", currentTimeMs, {
+            recordPlaybackEvent(sessionId, "assistant_correction_delivered", currentTimeMs, {
               text: response.text,
+              joint: latestFormError.joint,
               modality: response.modality,
               priority: response.priority,
               persona: response.persona,

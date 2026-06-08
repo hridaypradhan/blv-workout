@@ -10,12 +10,12 @@ import { ProcessingStage } from "@/types";
 import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
-import { endSession, getUserProfile, recordPlaybackEvent, askAssistant } from "@/lib/api";
+import { endSession, getUserProfile, recordPlaybackEvent, askAssistant, triggerHapticPattern } from "@/lib/api";
 import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User } from "@/types";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, SleeveSide } from "@/types";
 
 interface LiveSessionProps {
   params: {
@@ -183,8 +183,9 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         announce(`Haptic cue requested: ${activeCue.text}`);
       }
 
+      const isHaptic = activeCue.modality === "haptic";
+
       if (sessionId) {
-        const isHaptic = activeCue.modality === "haptic";
         const eventType = isHaptic ? "haptic_cue_requested" : "assistant_cue_delivered";
         recordPlaybackEvent(sessionId, eventType, activeCue.timestamp_ms, {
           text: activeCue.text,
@@ -193,8 +194,47 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           persona: activeCue.persona
         }).catch((err) => console.warn(`Failed to log ${eventType} event:`, err));
       }
+
+      if (isHaptic) {
+        // Trigger prototype haptic pattern trigger via backend
+        const sleeveSides = (activeCue.metadata?.sleeve_sides || activeCue.metadata?.sleeves || ["both"]) as SleeveSide[];
+        const patternName = (activeCue.metadata?.pattern_name || activeCue.metadata?.pattern || "double_pulse") as string;
+        const intensity = typeof activeCue.metadata?.intensity === "number" ? activeCue.metadata.intensity : 0.7;
+
+        triggerHapticPattern(sleeveSides, patternName, intensity)
+          .then((res) => {
+            announce(`Prototype haptic cue triggered: ${patternName} at intensity ${intensity}`);
+            if (sessionId) {
+              recordPlaybackEvent(sessionId, "haptic_cue_triggered", activeCue.timestamp_ms, {
+                pattern_name: patternName,
+                sleeve_sides: sleeveSides,
+                intensity: intensity,
+                text: activeCue.text,
+                cue_timestamp_ms: activeCue.timestamp_ms,
+                source: res.source || "prototype",
+                provider: res.provider || "prototype_haptic",
+                current_timestamp: currentTime
+              }).catch((err) => console.warn("Failed to log haptic_cue_triggered event:", err));
+            }
+          })
+          .catch((err) => {
+            console.error("Failed to trigger prototype haptic cue:", err);
+            const errMsg = err instanceof Error ? err.message : "Unknown error";
+            announce(`Prototype haptic cue failed: ${errMsg}`);
+            if (sessionId) {
+              recordPlaybackEvent(sessionId, "haptic_cue_failed", activeCue.timestamp_ms, {
+                pattern_name: patternName,
+                sleeve_sides: sleeveSides,
+                intensity: intensity,
+                text: activeCue.text,
+                error: errMsg,
+                current_timestamp: currentTime
+              }).catch((err) => console.warn("Failed to log haptic_cue_failed event:", err));
+            }
+          });
+      }
     }
-  }, [activeCue, sessionId]);
+  }, [activeCue, sessionId, currentTime]);
 
   const handleRepeatTrainerInstruction = () => {
     if (!manifest || !manifest.trainer_instruction_events) return;

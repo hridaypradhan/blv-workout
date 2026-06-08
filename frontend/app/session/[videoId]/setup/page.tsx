@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { startSession, getUserProfile } from "@/lib/api";
+import { startSession, getUserProfile, triggerHapticTest, recordPlaybackEvent } from "@/lib/api";
 import { getActiveUserId, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
 import { mergeUserPreferences } from "@/lib/userPreferences";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
+import { SleeveSide } from "@/types";
 
 interface SetupPageProps {
   params: {
@@ -17,6 +18,9 @@ interface SetupPageProps {
 
 export default function SessionSetup({ params }: SetupPageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("sessionId");
+
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeUserId, setActiveUserId] = useState(PROTOTYPE_USER_ID);
@@ -28,6 +32,11 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [askInput, setAskInput] = useState("");
   const [assistantResponse, setAssistantResponse] = useState<string | null>(null);
   const [askAnnouncement, setAskAnnouncement] = useState("");
+
+  // Haptic test states
+  const [testingSleeves, setTestingSleeves] = useState<Record<string, boolean>>({});
+  const [sleeveResults, setSleeveResults] = useState<Record<string, string>>({});
+  const [sleeveAnnouncement, setSleeveAnnouncement] = useState("");
 
   const { hapticState } = usePrototypeHapticConnection();
 
@@ -65,6 +74,34 @@ export default function SessionSetup({ params }: SetupPageProps) {
     setAskInput("");
   };
 
+  const handleTestSleeve = async (sleeveKey: string, name: string) => {
+    const side = (sleeveKey === "la" || sleeveKey === "ll") ? "left" : "right";
+    setTestingSleeves((prev) => ({ ...prev, [sleeveKey]: true }));
+    setSleeveResults((prev) => ({ ...prev, [sleeveKey]: "" }));
+    setSleeveAnnouncement(`Testing ${name} haptic cue...`);
+
+    if (sessionId) {
+      recordPlaybackEvent(sessionId, "haptic_test_requested", null, {
+        sleeve_side: side,
+        sleeve_key: sleeveKey,
+        sleeve_name: name
+      }).catch((err) => console.warn("Failed to log haptic_test_requested event:", err));
+    }
+
+    try {
+      const response = await triggerHapticTest(side as SleeveSide);
+      setSleeveResults((prev) => ({ ...prev, [sleeveKey]: "Pulse Fired" }));
+      setSleeveAnnouncement(`${name} test pulse success: ${response.message}`);
+    } catch (err) {
+      console.error(`Failed to test haptic sleeve ${sleeveKey}:`, err);
+      const errMsg = err instanceof Error ? err.message : "Failed";
+      setSleeveResults((prev) => ({ ...prev, [sleeveKey]: "Failed" }));
+      setSleeveAnnouncement(`${name} test pulse failed: ${errMsg}`);
+    } finally {
+      setTestingSleeves((prev) => ({ ...prev, [sleeveKey]: false }));
+    }
+  };
+
   const handleStartWorkout = async () => {
     setIsStarting(true);
     setError(null);
@@ -96,6 +133,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
     <PageWrapper id="session-setup-wrapper">
       {/* Hidden announcer region for Ask Assistant */}
       <ScreenReaderStatus content={askAnnouncement} />
+      <ScreenReaderStatus content={sleeveAnnouncement} />
 
       <div className="max-w-3xl mx-auto py-4">
         {/* Page Title */}
@@ -149,23 +187,45 @@ export default function SessionSetup({ params }: SetupPageProps) {
             <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between" aria-labelledby="sleeve-heading">
               <div>
                 <h2 id="sleeve-heading" className="text-lg font-bold text-white mb-2">
-                  Sleeve Status
+                  Prototype Sleeve Status
                 </h2>
                 <p className="text-sm text-slate-300 mb-4">
-                  Verify bluetooth pairing status for all limbs.
+                  Verify prototype haptic readiness for all limbs.
                 </p>
               </div>
 
               <div className="space-y-3">
-                {sleeveStatus.map((sleeve) => (
-                  <div key={sleeve.key} className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                    <span className="text-sm font-semibold text-slate-200">{sleeve.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${sleeve.colorClass}`} aria-hidden="true" />
-                      <span className="text-sm font-semibold text-slate-300">{sleeve.statusText}</span>
+                {sleeveStatus.map((sleeve) => {
+                  const isTesting = !!testingSleeves[sleeve.key];
+                  const testResult = sleeveResults[sleeve.key];
+                  return (
+                    <div key={sleeve.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                      <div className="flex items-center justify-between sm:justify-start gap-4 flex-1">
+                        <span className="text-sm font-semibold text-slate-200">{sleeve.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${sleeve.colorClass}`} aria-hidden="true" />
+                          <span className="text-sm font-semibold text-slate-300">{sleeve.statusText}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 self-end sm:self-auto">
+                        {testResult && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${testResult === "Pulse Fired" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400"}`}>
+                            {testResult}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleTestSleeve(sleeve.key, sleeve.name)}
+                          disabled={isTesting}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-xs font-bold text-slate-200 border border-slate-700 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all"
+                          aria-label={`Test ${sleeve.name} haptic cue`}
+                        >
+                          {isTesting ? "Testing..." : "Test"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           </div>

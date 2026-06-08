@@ -61,3 +61,52 @@ export async function getSession(sessionId: string): Promise<Session> {
   const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}`);
   return checkResponse(res, "Fetch session failed");
 }
+
+/** Record a rep completion event in a session. */
+export async function recordRepCompletion(
+  sessionId: string,
+  exerciseId: string,
+  repCount: number,
+  metadata?: object
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}/rep`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      exercise_id: exerciseId,
+      rep_count: repCount,
+      timestamp: new Date().toISOString(),
+      metadata: metadata || {},
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to record rep completion (${res.status})`);
+  }
+}
+
+/** Record a form error event in a session. */
+export async function recordFormError(
+  sessionId: string,
+  exerciseId: string,
+  formError: {
+    joint: string;
+    observed_angle: number;
+    expected_range: [number, number];
+    severity: string;
+    message?: string | null;
+  }
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}/form-error`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      exercise_id: exerciseId,
+      form_error: formError,
+      timestamp: new Date().toISOString(),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to record form error (${res.status})`);
+  }
+}
+

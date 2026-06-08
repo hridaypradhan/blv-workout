@@ -10,12 +10,22 @@ import { ProcessingStage } from "@/types";
 import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
-import { endSession, getUserProfile, recordPlaybackEvent, askAssistant, triggerHapticPattern } from "@/lib/api";
+import {
+  endSession,
+  getUserProfile,
+  recordPlaybackEvent,
+  askAssistant,
+  triggerHapticPattern,
+  recordRepCompletion,
+  recordFormError,
+  generateCorrection,
+} from "@/lib/api";
 import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, SleeveSide } from "@/types";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, SleeveSide, AssistantPersona } from "@/types";
+import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
 
 interface LiveSessionProps {
   params: {
@@ -115,6 +125,205 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     jobStage === ProcessingStage.COMPLETED
   );
 
+  const currentExercise = manifest?.exercise_timeline_anchors.find(
+    (anchor) => currentTime >= anchor.start_time_seconds && currentTime <= anchor.end_time_seconds
+  ) || null;
+
+  const currentTimeMs = currentTime * 1000;
+
+  // Setup the prototype pose runtime hook
+  const {
+    startCamera: startPoseTracking,
+    stopCamera: stopPoseTracking,
+    isPrototypeTracking,
+    currentAngles,
+    latestRepEvent,
+    latestFormError,
+    trackingStatusLabel,
+  } = useMediaPipe({
+    currentTimeMs,
+    activeAnchor: currentExercise,
+    isPlaying,
+  });
+
+  // Automatically start prototype pose tracking simulation
+  useEffect(() => {
+    if (sessionId && !isPrototypeTracking) {
+      startPoseTracking();
+    }
+  }, [sessionId, isPrototypeTracking, startPoseTracking]);
+
+  // Handle prototype repetition events
+  const lastHandledRepRef = useRef<number>(-1);
+  useEffect(() => {
+    if (latestRepEvent && latestRepEvent.rep_count > lastHandledRepRef.current) {
+      const repCount = latestRepEvent.rep_count;
+      lastHandledRepRef.current = repCount;
+
+      const exerciseId = currentExercise ? currentExercise.id : "00000000-0000-0000-0000-000000000000";
+      const exerciseName = currentExercise ? currentExercise.name : "Workout";
+
+      announce(`Repetition ${repCount} completed.`);
+
+      if (sessionId) {
+        recordRepCompletion(sessionId, exerciseId, repCount, {
+          source: "prototype",
+          provider: "prototype_pose",
+          replace_with: "mediapipe_service",
+          exercise_name: exerciseName,
+        }).catch((err) => console.warn("Failed to log rep completion telemetry:", err));
+      }
+
+      // Trigger a success haptic feedback pulse
+      const sleeveSides: SleeveSide[] = ["both"];
+      const patternName = "short_success_pulse";
+      const intensity = 0.6;
+
+      if (sessionId) {
+        recordPlaybackEvent(sessionId, "haptic_cue_requested", currentTimeMs, {
+          pattern_name: patternName,
+          sleeve_sides: sleeveSides,
+          intensity,
+          purpose: "Rep completion feedback",
+        }).catch((err) => console.warn("Failed to log haptic cue requested:", err));
+      }
+
+      triggerHapticPattern(sleeveSides, patternName, intensity)
+        .then((res) => {
+          announce(`Prototype haptic rep cue triggered.`);
+          if (sessionId) {
+            recordPlaybackEvent(sessionId, "haptic_cue_triggered", currentTimeMs, {
+              pattern_name: patternName,
+              sleeve_sides: sleeveSides,
+              intensity,
+              source: res.source,
+              provider: res.provider,
+            }).catch((err) => console.warn("Failed to log haptic cue triggered:", err));
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to trigger rep haptic cue:", err);
+          if (sessionId) {
+            recordPlaybackEvent(sessionId, "haptic_cue_failed", currentTimeMs, {
+              pattern_name: patternName,
+              sleeve_sides: sleeveSides,
+              intensity,
+              error: err instanceof Error ? err.message : String(err),
+            }).catch((err) => console.warn("Failed to log haptic cue failed:", err));
+          }
+        });
+    }
+  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs]);
+
+  // Handle prototype form error events
+  const lastHandledErrorRepRef = useRef<number>(-1);
+  useEffect(() => {
+    if (latestFormError) {
+      const repCount = Math.floor(currentTimeMs / 4000);
+      if (repCount <= lastHandledErrorRepRef.current) return;
+      lastHandledErrorRepRef.current = repCount;
+
+      const exerciseId = currentExercise ? currentExercise.id : "00000000-0000-0000-0000-000000000000";
+      const exerciseName = currentExercise ? currentExercise.name : "Workout";
+
+      announce(`Form warning: ${latestFormError.message}`);
+
+      if (sessionId) {
+        recordFormError(sessionId, exerciseId, {
+          joint: latestFormError.joint,
+          observed_angle: latestFormError.observed_angle,
+          expected_range: latestFormError.expected_range,
+          severity: latestFormError.severity,
+          message: latestFormError.message,
+        }).catch((err) => console.warn("Failed to log form error telemetry:", err));
+      }
+
+      // 1. Fetch form correction cue from assistant API
+      const correctionPayload = {
+        exercise_id: exerciseId,
+        exercise_name: exerciseName,
+        joint: latestFormError.joint,
+        angle: latestFormError.observed_angle,
+        current_timestamp_ms: currentTimeMs,
+        persona: userProfile?.assistant_persona || AssistantPersona.SUPPORTIVE,
+      };
+
+      if (sessionId) {
+        recordPlaybackEvent(sessionId, "assistant_correction_requested", currentTimeMs, {
+          joint: latestFormError.joint,
+          observed_angle: latestFormError.observed_angle,
+        }).catch((err) => console.warn("Failed to log correction request telemetry:", err));
+      }
+
+      generateCorrection(correctionPayload)
+        .then((response) => {
+          setChatMessages((prev) => [
+            ...prev,
+            { sender: "assistant", text: response.text },
+          ]);
+          announce(`Assistant correction: ${response.text}`);
+
+          if (sessionId) {
+            recordPlaybackEvent(sessionId, "assistant_cue_delivered", currentTimeMs, {
+              text: response.text,
+              modality: response.modality,
+              priority: response.priority,
+              persona: response.persona,
+              source: response.metadata?.source,
+              provider: response.metadata?.provider,
+            }).catch((err) => console.warn("Failed to log correction cue delivered telemetry:", err));
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to generate correction cue:", err);
+        });
+
+      // 2. Trigger corrective haptic feedback on target sleeve side
+      const jointLower = latestFormError.joint.toLowerCase();
+      const sleeveSides: SleeveSide[] = jointLower.includes("left")
+        ? ["left"]
+        : jointLower.includes("right")
+        ? ["right"]
+        : ["both"];
+      const patternName = "single_long_pulse";
+      const intensity = 0.8;
+
+      if (sessionId) {
+        recordPlaybackEvent(sessionId, "haptic_cue_requested", currentTimeMs, {
+          pattern_name: patternName,
+          sleeve_sides: sleeveSides,
+          intensity,
+          purpose: "Form correction warning",
+        }).catch((err) => console.warn("Failed to log haptic cue requested:", err));
+      }
+
+      triggerHapticPattern(sleeveSides, patternName, intensity)
+        .then((res) => {
+          announce(`Prototype corrective haptic cue triggered.`);
+          if (sessionId) {
+            recordPlaybackEvent(sessionId, "haptic_cue_triggered", currentTimeMs, {
+              pattern_name: patternName,
+              sleeve_sides: sleeveSides,
+              intensity,
+              source: res.source,
+              provider: res.provider,
+            }).catch((err) => console.warn("Failed to log haptic cue triggered:", err));
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to trigger corrective haptic cue:", err);
+          if (sessionId) {
+            recordPlaybackEvent(sessionId, "haptic_cue_failed", currentTimeMs, {
+              pattern_name: patternName,
+              sleeve_sides: sleeveSides,
+              intensity,
+              error: err instanceof Error ? err.message : String(err),
+            }).catch((err) => console.warn("Failed to log haptic cue failed:", err));
+          }
+        });
+    }
+  }, [latestFormError, sessionId, currentExercise, currentTimeMs, userProfile]);
+
   // Monitor manifest loading updates
   const prevIsLoadingManifest = useRef(false);
   const prevManifestError = useRef<string | null>(null);
@@ -149,7 +358,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   };
 
   // Wire up the assistant cue queue
-  const currentTimeMs = currentTime * 1000;
   const { activeCue } = useAssistantCueQueue(
     manifest,
     currentTimeMs,
@@ -402,10 +610,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
   const sleeveStatus = getPrototypeSleeveStatuses(hapticState);
 
-  const currentExercise = manifest?.exercise_timeline_anchors.find(
-    (anchor) => currentTime >= anchor.start_time_seconds && currentTime <= anchor.end_time_seconds
-  ) || null;
-
   if (!sessionId) {
     return (
       <PageWrapper id="live-session-no-id-wrapper">
@@ -557,20 +761,45 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           </YouTubePlayerPanel>
 
           {/* Bottom Pose Feed Panel */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex items-center justify-between" aria-label="Pose Tracker Cam">
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4" aria-label="Pose Tracker Cam">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center text-slate-600">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all ${isPrototypeTracking ? "bg-emerald-950/40 border-emerald-500/20 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-600"}`}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Live Pose Tracker Active</h3>
-                <p className="text-sm text-slate-300">Camera feed tracks body joint angles to trigger supplementary haptics.</p>
+                <h3 className="text-sm font-bold text-white">{trackingStatusLabel}</h3>
+                <p className="text-xs text-slate-400">
+                  {isPrototypeTracking 
+                    ? "Simulating time-varying joint angles from manifest coordinates." 
+                    : "Mock tracking coordinates are currently offline."}
+                </p>
+                {isPrototypeTracking && Object.keys(currentAngles).length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-slate-300">
+                    {Object.entries(currentAngles).map(([joint, val]) => (
+                      <span key={joint} className="bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
+                        {joint.replace("_", " ")}: {val.toFixed(0)}°
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="text-sm text-emerald-400 font-semibold px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 whitespace-nowrap shrink-0">
-              Tracking Body
+            
+            <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={isPrototypeTracking ? stopPoseTracking : startPoseTracking}
+                className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 ${
+                  isPrototypeTracking 
+                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700" 
+                    : "bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-400"
+                }`}
+                aria-label={isPrototypeTracking ? "Stop prototype pose tracking" : "Start prototype pose tracking"}
+              >
+                {isPrototypeTracking ? "Stop Simulating" : "Start Simulating"}
+              </button>
             </div>
           </section>
         </div>
@@ -600,6 +829,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               {currentExercise && (
                 <span className="text-sm text-slate-400 mt-2 block">
                   Joint: <strong className="text-slate-200 capitalize">{currentExercise.counting_joint || "any"}</strong> | Target: 15 reps
+                  {lastHandledRepRef.current >= 0 && (
+                    <span className="block text-yellow-400 font-bold mt-1 text-sm" id="rep-completion-telemetry-badge">
+                      Completed: {lastHandledRepRef.current} reps
+                    </span>
+                  )}
                 </span>
               )}
             </div>

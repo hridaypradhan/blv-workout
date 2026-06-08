@@ -279,4 +279,14 @@ export interface QARequest {
   persona?: AssistantPersona;
 }
 
+export interface CorrectionRequest {
+  exercise_id: string;
+  exercise_name: string;
+  joint: string;
+  angle: number;
+  current_timestamp_ms?: number | null;
+  persona?: AssistantPersona;
+}
+
+
 

@@ -239,3 +239,36 @@ export interface SidecarManifest {
   speaking_opportunity_map: SpeakingOpportunityWindow[];
   created_at?: string;
 }
+
+export type SleeveSide = "left" | "right" | "both";
+
+export interface HapticPattern {
+  name: string;
+  label: string;
+  purpose: string;
+  duration_ms: number;
+  pulse_count: number;
+  default_intensity: number;
+  replace_with: string;
+  metadata?: Record<string, any>;
+}
+
+export interface HapticTestResponse {
+  success: boolean;
+  sleeve_side: SleeveSide;
+  message: string;
+  source: string;
+  provider: string;
+  replace_with: string;
+}
+
+export interface HapticTriggerResponse {
+  status: string;
+  pattern_name: string;
+  sleeve_sides: SleeveSide[];
+  intensity: number;
+  source: string;
+  provider: string;
+  replace_with: string;
+}
+

@@ -22,6 +22,7 @@ from app.models.schemas import (
     AssistantPersona,
 )
 from app.services import pacing_service
+from app.prototype import assistant_provider
 
 router = APIRouter()
 
@@ -33,7 +34,14 @@ async def generate_correction(payload: CorrectionRequest) -> AssistantCue:
     This is a brief, contextual correction that supplements — never
     replaces — the trainer's own form instruction in the video.
     """
-    raise HTTPException(status_code=501, detail="Form correction generation is not implemented yet.")
+    return assistant_provider.generate_correction(
+        exercise_id=payload.exercise_id,
+        exercise_name=payload.exercise_name,
+        joint=payload.joint,
+        angle=payload.angle,
+        current_timestamp_ms=payload.current_timestamp_ms,
+        persona=payload.persona,
+    )
 
 
 @router.post("/pacing/adaptive", response_model=AdaptivePacingResponse)
@@ -95,7 +103,10 @@ async def generate_pacing_feedback(payload: PacingRequest) -> AssistantCue:
 @router.post("/motivation", response_model=AssistantCue)
 async def generate_motivation(payload: MotivationRequest) -> AssistantCue:
     """Generate a low-priority motivational assistant cue for a milestone event."""
-    raise HTTPException(status_code=501, detail="Motivational cue generation is not implemented yet.")
+    return assistant_provider.generate_motivation(
+        milestone_event=payload.milestone_event,
+        persona=payload.persona,
+    )
 
 
 @router.post("/qa", response_model=AssistantCue)
@@ -105,7 +116,12 @@ async def answer_question(payload: QARequest) -> AssistantCue:
     The assistant pauses or waits for a speaking opportunity before
     responding, respecting audio coexistence settings.
     """
-    raise HTTPException(status_code=501, detail="Assistant Q&A is not implemented yet.")
+    return assistant_provider.answer_question(
+        question=payload.question,
+        session_context=payload.session_context,
+        current_timestamp_ms=payload.current_timestamp_ms,
+        persona=payload.persona,
+    )
 
 
 @router.get("/form-risk-templates/{exercise_id}", response_model=list[str])
@@ -114,4 +130,4 @@ async def get_form_risk_templates(exercise_id: UUID) -> list[str]:
 
     These templates are supplementary cues — not a replacement trainer script.
     """
-    raise HTTPException(status_code=501, detail="Retrieving form risk templates is not implemented yet.")
+    return assistant_provider.get_form_risk_templates(exercise_id)

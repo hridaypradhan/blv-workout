@@ -458,9 +458,46 @@ class HapticTriggerRequest(BaseModel):
     intensity: float
 
 
+class HapticPattern(BaseModel):
+    """Available haptic pattern description with metadata."""
+
+    name: str
+    label: str
+    purpose: str
+    duration_ms: int
+    pulse_count: int
+    default_intensity: float
+    replace_with: str = "haptic_hardware_provider"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class HapticTestResponse(BaseModel):
+    """Response returned from a successful calibration/test pulse."""
+
+    success: bool
+    sleeve_side: SleeveSide
+    message: str
+    source: str = "prototype"
+    provider: str = "prototype_haptic"
+    replace_with: str = "haptic_service"
+
+
+class HapticTriggerResponse(BaseModel):
+    """Response returned from triggering a haptic pattern."""
+
+    status: str
+    pattern_name: str
+    sleeve_sides: list[SleeveSide]
+    intensity: float
+    source: str = "prototype"
+    provider: str = "prototype_haptic"
+    replace_with: str = "haptic_service"
+
+
 # ---------------------------------------------------------------------------
 # Playback & Pacing Instruction Models
 # ---------------------------------------------------------------------------
+
 
 class PlaybackInstruction(BaseModel):
     """YouTube IFrame playback adjustment commands (pause, play, seek, set_speed)."""

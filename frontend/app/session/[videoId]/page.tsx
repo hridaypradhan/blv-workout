@@ -10,7 +10,7 @@ import { ProcessingStage } from "@/types";
 import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
-import { endSession, getUserProfile, recordPlaybackEvent } from "@/lib/api";
+import { endSession, getUserProfile, recordPlaybackEvent, askAssistant } from "@/lib/api";
 import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
@@ -160,6 +160,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     { sender: "assistant", text: "Welcome! Stand 6 feet back. We are preparing to assist with your YouTube workout." }
   ]);
   const [chatInput, setChatInput] = useState("");
+  const [isPending, setIsPending] = useState(false);
+  const [qaError, setQaError] = useState<string | null>(null);
 
   // Append new cues to the message feed as they trigger
   const lastRecordedCueKey = useRef<string | null>(null);
@@ -255,22 +257,101 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     }
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const query = chatInput.trim();
-    if (!query) return;
+    if (!query || isPending) return;
 
+    setIsPending(true);
+    setQaError(null);
+    setChatInput("");
+
+    // Append user message immediately
     setChatMessages((prev) => [
       ...prev,
       { sender: "user", text: query }
     ]);
-    setChatInput("");
     announce(`User question submitted: "${query}"`);
+
+    const activeExerciseName = currentExercise ? currentExercise.name : null;
+    let latestInstructionText = null;
+    if (manifest && manifest.trainer_instruction_events) {
+      const priorEvents = manifest.trainer_instruction_events.filter(
+        (evt) => evt.start_ms !== null && evt.start_ms !== undefined && evt.start_ms <= currentTimeMs
+      );
+      if (priorEvents.length > 0) {
+        priorEvents.sort((a, b) => (b.start_ms ?? 0) - (a.start_ms ?? 0));
+        latestInstructionText = priorEvents[0].text;
+      }
+    }
 
     if (sessionId) {
       recordPlaybackEvent(sessionId, "user_question_submitted", currentTimeMs, {
-        question: query
-      }).catch((err) => console.warn("Failed to log user question event:", err));
+        question: query,
+        active_exercise: activeExerciseName,
+        latest_trainer_instruction: latestInstructionText
+      }).catch((err) => console.warn("Failed to log user_question_submitted event:", err));
+    }
+
+    try {
+      announce("Assistant is responding.");
+
+      const response = await askAssistant({
+        question: query,
+        session_context: {
+          sessionId,
+          videoId: params.videoId,
+          currentTimeSeconds: currentTime,
+          currentTimeMs,
+          active_exercise: activeExerciseName,
+          latest_trainer_instruction: latestInstructionText,
+          audio_coexistence: coexistenceSettings,
+          assistant_voice_muted: assistantMuted,
+          youtube_metadata: metadata ? { title: metadata.title } : null
+        },
+        current_timestamp_ms: currentTimeMs,
+        persona: userProfile?.assistant_persona || undefined
+      });
+
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: "assistant", text: response.text }
+      ]);
+      announce(`Assistant response received: "${response.text}"`);
+
+      if (sessionId) {
+        recordPlaybackEvent(sessionId, "assistant_answer_delivered", currentTimeMs, {
+          question: query,
+          answer: response.text,
+          current_timestamp_ms: currentTimeMs,
+          active_exercise: activeExerciseName,
+          latest_trainer_instruction: latestInstructionText,
+          source: response.metadata?.source || "prototype",
+          provider: response.metadata?.provider || "prototype_assistant"
+        }).catch((err) => console.warn("Failed to log assistant_answer_delivered event:", err));
+      }
+    } catch (err) {
+      console.error("Assistant Q&A failed:", err);
+      const errMsg = err instanceof Error ? err.message : "Failed to get response from assistant.";
+      setQaError(errMsg);
+
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: "assistant", text: `Error: ${errMsg}` }
+      ]);
+      announce(`Assistant response failed: ${errMsg}`);
+
+      if (sessionId) {
+        recordPlaybackEvent(sessionId, "assistant_answer_failed", currentTimeMs, {
+          question: query,
+          error: errMsg,
+          current_timestamp_ms: currentTimeMs,
+          active_exercise: activeExerciseName,
+          latest_trainer_instruction: latestInstructionText
+        }).catch((err) => console.warn("Failed to log assistant_answer_failed event:", err));
+      }
+    } finally {
+      setIsPending(false);
     }
   };
 
@@ -556,24 +637,38 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               </div>
             </div>
 
-            <form onSubmit={handleSendMessage} className="w-full flex items-center gap-2 border-t border-slate-800/80 pt-4">
-              <input
-                type="text"
-                placeholder="Ask assistant about movement setup..."
-                className="flex-1 min-w-0 px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
-                aria-label="Ask assistant for verbal clarification"
-                id="live-chat-input"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-              />
-              <button
-                type="submit"
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0"
-                id="live-chat-btn"
-              >
-                Send
-              </button>
-            </form>
+            <div className="w-full border-t border-slate-800/80 pt-4 flex flex-col">
+              {isPending && (
+                <div className="text-xs text-yellow-400 animate-pulse px-1 mb-2 font-medium" id="assistant-responding-indicator">
+                  Assistant is responding...
+                </div>
+              )}
+              {qaError && (
+                <div className="text-xs text-red-400 px-1 mb-2 font-semibold" id="qa-error-display">
+                  ⚠️ Error: {qaError}
+                </div>
+              )}
+              <form onSubmit={handleSendMessage} className="w-full flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder={isPending ? "Assistant is responding..." : "Ask assistant about movement setup..."}
+                  disabled={isPending}
+                  className="flex-1 min-w-0 px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all disabled:opacity-50"
+                  aria-label="Ask assistant for verbal clarification"
+                  id="live-chat-input"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0 transition-all"
+                  id="live-chat-btn"
+                >
+                  {isPending ? "Sending..." : "Send"}
+                </button>
+              </form>
+            </div>
           </section>
         </div>
       </div>

@@ -272,3 +272,11 @@ export interface HapticTriggerResponse {
   replace_with: string;
 }
 
+export interface QARequest {
+  question: string;
+  session_context?: Record<string, any>;
+  current_timestamp_ms?: number | null;
+  persona?: AssistantPersona;
+}
+
+

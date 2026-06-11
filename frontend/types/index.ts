@@ -54,6 +54,30 @@ export enum FeedbackModality {
   VISUAL = "visual",
 }
 
+export type HapticLimb = "left_arm" | "right_arm" | "left_leg" | "right_leg";
+
+export interface HapticPreferences {
+  start?: string | null;
+  countdown?: string | null;
+  per_rep_tick?: string | null;
+  speed_up?: string | null;
+  slow_down?: string | null;
+  form_warning_above?: string | null;
+  cooldown?: string | null;
+}
+
+export interface HapticVibrationCandidate {
+  id: string;
+  cue_type: string;
+  label: string;
+  source_wav: string;
+  filename: string;
+  duration_ms: number;
+  conversion_status: string;
+  bhaptics_event_name?: string | null;
+  provider_notes?: string | null;
+}
+
 export interface User {
   id?: string | null;
   email: string;
@@ -62,6 +86,7 @@ export interface User {
   voice_settings?: Record<string, unknown> | null;
   feedback_modalities?: FeedbackModality[] | null;
   audio_coexistence?: AudioCoexistenceSettings | null;
+  haptic_preferences?: HapticPreferences | null;
   created_at?: string | null;
 }
 
@@ -70,6 +95,7 @@ export interface UserSettingsUpdate {
   voice_settings?: Record<string, unknown> | null;
   feedback_modalities?: FeedbackModality[] | null;
   audio_coexistence?: AudioCoexistenceSettings | null;
+  haptic_preferences?: HapticPreferences | null;
 }
 
 export interface UserPreferencesFormState {
@@ -264,12 +290,17 @@ export interface HapticTestResponse {
 
 export interface HapticTriggerResponse {
   status: string;
-  pattern_name: string;
-  sleeve_sides: SleeveSide[];
+  pattern_name?: string | null;
+  sleeve_sides?: SleeveSide[] | null;
   intensity: number;
   source: string;
   provider: string;
   replace_with: string;
+  cue_type?: string | null;
+  selected_vibration_id?: string | null;
+  selected_wav?: string | null;
+  target_limbs?: HapticLimb[] | null;
+  bhaptics_event_name?: string | null;
 }
 
 export interface QARequest {

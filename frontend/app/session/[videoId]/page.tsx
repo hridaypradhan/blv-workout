@@ -24,7 +24,7 @@ import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, SleeveSide, AssistantPersona } from "@/types";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, AssistantPersona } from "@/types";
 import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 
@@ -42,27 +42,44 @@ function formatTime(seconds: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-/** Returns the appropriate haptic pattern and intensity for a given feedback purpose. */
-function getHapticPatternForPurpose(purpose: "success" | "correction", joint?: string) {
-  if (purpose === "success") {
-    return {
-      patternName: "short_success_pulse",
-      intensity: 0.6,
-      sleeveSides: ["both"] as SleeveSide[],
-    };
-  } else {
-    const jointLower = joint?.toLowerCase() || "";
-    const sleeveSides: SleeveSide[] = jointLower.includes("left")
-      ? ["left"]
-      : jointLower.includes("right")
-      ? ["right"]
-      : ["both"];
-    return {
-      patternName: "single_long_pulse",
-      intensity: 0.8,
-      sleeveSides,
-    };
+
+
+/** Maps a tracked anatomical joint to logical limb targets for dry-run triggering. */
+function getLimbsForJoint(joint?: string): string[] {
+  const j = joint?.toLowerCase() || "";
+  const limbs: string[] = [];
+
+  const isLeft = j.includes("left");
+  const isRight = j.includes("right");
+  const isArm = j.includes("arm") || j.includes("shoulder") || j.includes("elbow") || j.includes("wrist");
+  const isLeg = j.includes("leg") || j.includes("hip") || j.includes("knee") || j.includes("ankle");
+
+  if (isLeft && isArm) limbs.push("left_arm");
+  else if (isRight && isArm) limbs.push("right_arm");
+  else if (isLeft && isLeg) limbs.push("left_leg");
+  else if (isRight && isLeg) limbs.push("right_leg");
+  else {
+    if (isArm) limbs.push("left_arm", "right_arm");
+    else if (isLeg) limbs.push("left_leg", "right_leg");
+    else limbs.push("left_arm", "right_arm");
   }
+  return limbs;
+}
+
+/** Inferred mapping of cue description text to haptic vibration category types. */
+function getCueTypeFromCue(text: string, metadata?: Record<string, unknown> | null): string {
+  if (metadata?.cue_type && typeof metadata.cue_type === "string") return metadata.cue_type;
+  const t = text.toLowerCase();
+  if (t.includes("countdown")) return "countdown";
+  if (t.includes("start")) return "start";
+  if (t.includes("cooldown") || t.includes("cool down") || t.includes("finish") || t.includes("done")) return "cooldown";
+  if (t.includes("speed up") || t.includes("faster") || t.includes("accelerate")) return "speed_up";
+  if (t.includes("slow down") || t.includes("slower") || t.includes("pace")) {
+    if (t.includes("slow")) return "slow_down";
+    if (t.includes("speed")) return "speed_up";
+  }
+  if (t.includes("rep") || t.includes("tick")) return "per_rep_tick";
+  return "form_warning_above";
 }
 
 function LiveSessionContent({ params }: LiveSessionProps) {
@@ -203,28 +220,31 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         }).catch((err) => console.warn("Failed to log rep event to timeline:", err));
       }
 
-      // Trigger a success haptic feedback pulse using helper
-      const { sleeveSides, patternName, intensity } = getHapticPatternForPurpose("success");
+      const vibrationId = userProfile?.haptic_preferences?.per_rep_tick || "per_rep_tick_001";
+      const limbs = ["left_arm", "right_arm"];
 
       if (sessionId) {
         recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_REQUESTED, currentTimeMs, {
-          pattern_name: patternName,
-          sleeve_sides: sleeveSides,
-          intensity,
+          cue_type: "per_rep_tick",
+          selected_vibration_id: vibrationId,
+          target_limbs: limbs,
+          intensity: 0.6,
           purpose: "Rep completion feedback",
         }).catch((err) => console.warn("Failed to log haptic cue requested:", err));
       }
 
-      triggerHapticPattern(sleeveSides, patternName, intensity)
+      triggerHapticPattern(null, null, 0.6, "per_rep_tick", vibrationId, limbs)
         .then((res) => {
-          announce(`Prototype haptic rep cue triggered.`);
+          announce(`Haptic cue would trigger: ${res.pattern_name} (dry-run).`);
           if (sessionId) {
             recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
-              pattern_name: patternName,
-              sleeve_sides: sleeveSides,
-              intensity,
-              source: res.source,
+              cue_type: "per_rep_tick",
+              selected_vibration_id: vibrationId,
+              selected_wav: res.selected_wav,
+              target_limbs: res.target_limbs,
               provider: res.provider,
+              status: res.status,
+              intensity: 0.6,
             }).catch((err) => console.warn("Failed to log haptic cue triggered:", err));
           }
         })
@@ -232,15 +252,15 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           console.error("Failed to trigger rep haptic cue:", err);
           if (sessionId) {
             recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
-              pattern_name: patternName,
-              sleeve_sides: sleeveSides,
-              intensity,
+              cue_type: "per_rep_tick",
+              selected_vibration_id: vibrationId,
+              intensity: 0.6,
               error: err instanceof Error ? err.message : String(err),
             }).catch((err) => console.warn("Failed to log haptic cue failed:", err));
           }
         });
     }
-  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs]);
+  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs, userProfile]);
 
   // Handle prototype form error events
   const lastHandledErrorRepRef = useRef<number>(-1);
@@ -314,28 +334,32 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           console.error("Failed to generate correction cue:", err);
         });
 
-      // 2. Trigger corrective haptic feedback on target sleeve side using helper
-      const { sleeveSides, patternName, intensity } = getHapticPatternForPurpose("correction", latestFormError.joint);
+      // 2. Trigger corrective haptic feedback on target limbs
+      const limbs = getLimbsForJoint(latestFormError.joint);
+      const vibrationId = userProfile?.haptic_preferences?.form_warning_above || "form_warning_above_001";
 
       if (sessionId) {
         recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_REQUESTED, currentTimeMs, {
-          pattern_name: patternName,
-          sleeve_sides: sleeveSides,
-          intensity,
+          cue_type: "form_warning_above",
+          selected_vibration_id: vibrationId,
+          target_limbs: limbs,
+          intensity: 0.8,
           purpose: "Form correction warning",
         }).catch((err) => console.warn("Failed to log haptic cue requested:", err));
       }
 
-      triggerHapticPattern(sleeveSides, patternName, intensity)
+      triggerHapticPattern(null, null, 0.8, "form_warning_above", vibrationId, limbs)
         .then((res) => {
-          announce(`Prototype corrective haptic cue triggered.`);
+          announce(`Haptic cue would trigger on limbs ${limbs.join(", ")} (dry-run).`);
           if (sessionId) {
             recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
-              pattern_name: patternName,
-              sleeve_sides: sleeveSides,
-              intensity,
-              source: res.source,
+              cue_type: "form_warning_above",
+              selected_vibration_id: vibrationId,
+              selected_wav: res.selected_wav,
+              target_limbs: res.target_limbs,
               provider: res.provider,
+              status: res.status,
+              intensity: 0.8,
             }).catch((err) => console.warn("Failed to log haptic cue triggered:", err));
           }
         })
@@ -343,9 +367,9 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           console.error("Failed to trigger corrective haptic cue:", err);
           if (sessionId) {
             recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
-              pattern_name: patternName,
-              sleeve_sides: sleeveSides,
-              intensity,
+              cue_type: "form_warning_above",
+              selected_vibration_id: vibrationId,
+              intensity: 0.8,
               error: err instanceof Error ? err.message : String(err),
             }).catch((err) => console.warn("Failed to log haptic cue failed:", err));
           }
@@ -433,23 +457,35 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       }
 
       if (isHaptic) {
-        // Trigger prototype haptic pattern trigger via backend
-        const sleeveSides = (activeCue.metadata?.sleeve_sides || activeCue.metadata?.sleeves || ["both"]) as SleeveSide[];
-        const patternName = (activeCue.metadata?.pattern_name || activeCue.metadata?.pattern || "double_pulse") as string;
+        const cueType = getCueTypeFromCue(activeCue.text, activeCue.metadata);
+        const vibrationId = (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] || `${cueType}_001`;
         const intensity = typeof activeCue.metadata?.intensity === "number" ? activeCue.metadata.intensity : 0.7;
 
-        triggerHapticPattern(sleeveSides, patternName, intensity)
+        const limbs: string[] = [];
+        const requestSleeves = (activeCue.metadata?.sleeve_sides || activeCue.metadata?.sleeves || ["both"]) as string[];
+        requestSleeves.forEach(s => {
+          if (s === "left") limbs.push("left_arm");
+          else if (s === "right") limbs.push("right_arm");
+          else if (s === "both") limbs.push("left_arm", "right_arm");
+        });
+        if (limbs.length === 0) {
+          limbs.push("left_arm", "right_arm");
+        }
+
+        triggerHapticPattern(null, null, intensity, cueType, vibrationId, limbs)
           .then((res) => {
-            announce(`Prototype haptic cue triggered: ${patternName} at intensity ${intensity}`);
+            announce(`Haptic cue would trigger: ${res.pattern_name} (dry-run).`);
             if (sessionId) {
               recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, activeCue.timestamp_ms, {
-                pattern_name: patternName,
-                sleeve_sides: sleeveSides,
+                cue_type: cueType,
+                selected_vibration_id: vibrationId,
+                selected_wav: res.selected_wav,
+                target_limbs: res.target_limbs,
+                provider: res.provider,
+                status: res.status,
                 intensity: intensity,
                 text: activeCue.text,
                 cue_timestamp_ms: activeCue.timestamp_ms,
-                source: res.source || "prototype",
-                provider: res.provider || "prototype_haptic",
                 current_timestamp: currentTime
               }).catch((err) => console.warn("Failed to log haptic_cue_triggered event:", err));
             }
@@ -460,8 +496,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
             announce(`Prototype haptic cue failed: ${errMsg}`);
             if (sessionId) {
               recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, activeCue.timestamp_ms, {
-                pattern_name: patternName,
-                sleeve_sides: sleeveSides,
+                cue_type: cueType,
+                selected_vibration_id: vibrationId,
                 intensity: intensity,
                 text: activeCue.text,
                 error: errMsg,
@@ -471,7 +507,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           });
       }
     }
-  }, [activeCue, sessionId, currentTime]);
+  }, [activeCue, sessionId, currentTime, userProfile]);
 
   const handleRepeatTrainerInstruction = () => {
     if (!manifest || !manifest.trainer_instruction_events) return;

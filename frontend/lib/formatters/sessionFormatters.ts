@@ -191,10 +191,24 @@ export function formatSessionEventDetails(evt: { event_type: string; metadata?: 
     return `Skipped directly to workout section: "${metadata.section_name || ""}"`;
   }
   if (type === SESSION_EVENTS.HAPTIC_CUE_REQUESTED) {
+    if (metadata.cue_type) {
+      const vibId = metadata.selected_vibration_id || "none";
+      const limbs = metadata.target_limbs?.join(", ") || "none";
+      return `Requested semantic haptic cue "${metadata.cue_type}" (ID: ${vibId}) on limbs [${limbs}]`;
+    }
     const sides = metadata.sleeve_sides?.join(", ") || "sleeves";
     return `Requested pattern "${metadata.pattern_name || ""}" on ${sides} (${metadata.purpose || "cues"})`;
   }
   if (type === SESSION_EVENTS.HAPTIC_CUE_TRIGGERED) {
+    const provider = metadata.provider || "prototype";
+    if (provider === "bhaptics_dry_run" || metadata.status === "would_trigger") {
+      const cueType = metadata.cue_type || "unknown";
+      const vibId = metadata.selected_vibration_id || "none";
+      const limbs = metadata.target_limbs?.join(", ") || "none";
+      const wav = metadata.selected_wav || "none";
+      const intensity = typeof metadata.intensity === "number" ? metadata.intensity : 0.7;
+      return `[Dry-run] Haptic cue "${cueType}" (ID: ${vibId}, WAV: ${wav}) would trigger on limbs [${limbs}] at ${intensity} intensity`;
+    }
     const sides = metadata.sleeve_sides?.join(", ") || "sleeves";
     const intensity = typeof metadata.intensity === "number" ? metadata.intensity : 0.7;
     return `Triggered haptic pattern "${metadata.pattern_name || ""}" on ${sides} at ${intensity} intensity`;

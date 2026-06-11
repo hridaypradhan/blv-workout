@@ -65,6 +65,15 @@ class SleeveSide(str, Enum):
     BOTH = "both"
 
 
+class HapticLimb(str, Enum):
+    """Logical haptic limb targets."""
+
+    LEFT_ARM = "left_arm"
+    RIGHT_ARM = "right_arm"
+    LEFT_LEG = "left_leg"
+    RIGHT_LEG = "right_leg"
+
+
 class TrainerInstructionEventType(str, Enum):
     """Classification of an instruction spoken by the original YouTube trainer."""
 
@@ -252,6 +261,32 @@ class AudioCoexistenceSettings(BaseModel):
     correction_frequency: str = "medium"
 
 
+class HapticPreferences(BaseModel):
+    """User selections of vibration candidates for haptic cue categories."""
+
+    start: str | None = "start_001"
+    countdown: str | None = "countdown_001"
+    per_rep_tick: str | None = "per_rep_tick_001"
+    speed_up: str | None = "speed_up_001"
+    slow_down: str | None = "slow_down_001"
+    form_warning_above: str | None = "form_warning_above_001"
+    cooldown: str | None = "cooldown_001"
+
+
+class HapticVibrationCandidate(BaseModel):
+    """Individual haptic vibration configuration entry from the manifest."""
+
+    id: str
+    cue_type: str
+    label: str
+    source_wav: str
+    filename: str
+    duration_ms: float
+    conversion_status: str = "raw_wav"
+    bhaptics_event_name: str | None = None
+    provider_notes: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # User
 # ---------------------------------------------------------------------------
@@ -266,6 +301,7 @@ class User(BaseModel):
     voice_settings: dict[str, Any] = Field(default_factory=dict)
     feedback_modalities: list[FeedbackModality] = Field(default_factory=list)
     audio_coexistence: AudioCoexistenceSettings = Field(default_factory=AudioCoexistenceSettings)
+    haptic_preferences: HapticPreferences = Field(default_factory=HapticPreferences)
     created_at: datetime | None = None
 
 
@@ -442,6 +478,7 @@ class UserSettingsUpdate(BaseModel):
     voice_settings: dict[str, Any] | None = None
     feedback_modalities: list[FeedbackModality] | None = None
     audio_coexistence: AudioCoexistenceSettings | None = None
+    haptic_preferences: HapticPreferences | None = None
 
 
 class HapticTestRequest(BaseModel):
@@ -453,9 +490,12 @@ class HapticTestRequest(BaseModel):
 class HapticTriggerRequest(BaseModel):
     """Request body for triggering a named haptic/spatial assistance cue pattern."""
 
-    sleeve_sides: list[SleeveSide]
-    pattern_name: str
+    sleeve_sides: list[SleeveSide] | None = None
+    pattern_name: str | None = None
     intensity: float
+    cue_type: str | None = None
+    vibration_id: str | None = None
+    limbs: list[HapticLimb] | None = None
 
 
 class HapticPattern(BaseModel):
@@ -486,12 +526,17 @@ class HapticTriggerResponse(BaseModel):
     """Response returned from triggering a haptic pattern."""
 
     status: str
-    pattern_name: str
-    sleeve_sides: list[SleeveSide]
+    pattern_name: str | None = None
+    sleeve_sides: list[SleeveSide] | None = None
     intensity: float
     source: str = "prototype"
     provider: str = "prototype_haptic"
     replace_with: str = "haptic_hardware_provider"
+    cue_type: str | None = None
+    selected_vibration_id: str | None = None
+    selected_wav: str | None = None
+    target_limbs: list[HapticLimb] | None = None
+    bhaptics_event_name: str | None = None
 
 
 # ---------------------------------------------------------------------------

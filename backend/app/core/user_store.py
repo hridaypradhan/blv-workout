@@ -122,6 +122,8 @@ class UserStore:
             if settings.audio_coexistence is not None:
                 # Merge coexistence fields if provided
                 user.audio_coexistence = settings.audio_coexistence
+            if settings.haptic_preferences is not None:
+                user.haptic_preferences = settings.haptic_preferences
 
             self._save_to_disk()
             return user

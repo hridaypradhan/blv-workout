@@ -15,6 +15,7 @@ from app.models.schemas import (
     HapticTestResponse,
     HapticTriggerRequest,
     HapticTriggerResponse,
+    HapticVibrationCandidate,
 )
 from app.prototype import haptic_provider
 
@@ -29,18 +30,18 @@ async def run_haptic_test(payload: HapticTestRequest) -> HapticTestResponse:
 
 @router.post("/trigger", response_model=HapticTriggerResponse)
 async def trigger_haptic_pattern(payload: HapticTriggerRequest) -> HapticTriggerResponse:
-    """Trigger a specific haptic/spatial assistance cue pattern on one or more sleeves."""
-    # Validate pattern name exists in the library
-    if not haptic_provider.get_pattern(payload.pattern_name):
+    """Trigger a specific haptic/spatial assistance cue pattern on one or more sleeves/limbs."""
+    # Validate pattern name exists in the library if provided
+    if payload.pattern_name and not haptic_provider.get_pattern(payload.pattern_name):
         raise HTTPException(
             status_code=400,
             detail=f"Pattern '{payload.pattern_name}' is not defined in the haptic library.",
         )
-    # Validate sleeve sides list is not empty
-    if not payload.sleeve_sides:
+    # Validate sleeve sides or limbs are not empty
+    if not payload.sleeve_sides and not payload.limbs:
         raise HTTPException(
             status_code=400,
-            detail="At least one sleeve side must be specified.",
+            detail="At least one sleeve side or target limb must be specified.",
         )
     # Validate intensity is in [0.0, 1.0] range
     if not (0.0 <= payload.intensity <= 1.0):
@@ -53,6 +54,9 @@ async def trigger_haptic_pattern(payload: HapticTriggerRequest) -> HapticTrigger
         sleeve_sides=payload.sleeve_sides,
         pattern_name=payload.pattern_name,
         intensity=payload.intensity,
+        cue_type=payload.cue_type,
+        vibration_id=payload.vibration_id,
+        limbs=payload.limbs,
     )
 
 
@@ -60,5 +64,11 @@ async def trigger_haptic_pattern(payload: HapticTriggerRequest) -> HapticTrigger
 async def get_haptic_patterns() -> dict[str, HapticPattern]:
     """Return the available haptic/spatial assistance cue pattern library."""
     return haptic_provider.get_patterns()
+
+
+@router.get("/vibrations", response_model=list[HapticVibrationCandidate])
+async def get_haptic_vibrations() -> list[HapticVibrationCandidate]:
+    """Return the list of all WAV vibration candidates in the manifest."""
+    return haptic_provider.get_manifest()
 
 

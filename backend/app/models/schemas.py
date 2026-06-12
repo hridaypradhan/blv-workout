@@ -219,7 +219,7 @@ class HapticSpatialCueProfile(BaseModel):
 
     exercise_name: str
     body_parts: list[str] = Field(default_factory=list)
-    patterns: dict[str, Any] = Field(default_factory=dict)
+    patterns: dict[str, str] = Field(default_factory=dict)
     default_intensity: float | None = None
 
 
@@ -236,7 +236,7 @@ class AssistanceSidecarManifest(BaseModel):
     youtube_id: str | None = None
     exercise_timeline_anchors: list[ExerciseTimelineAnchor] = Field(default_factory=list)
     trainer_instruction_events: list[TrainerInstructionEvent] = Field(default_factory=list)
-    expected_movement_windows: dict[str, Any] = Field(default_factory=dict)
+    expected_movement_windows: dict[str, list[float]] = Field(default_factory=dict)
     form_risk_templates: list[FormRiskTemplate] = Field(default_factory=list)
     haptic_spatial_cue_profiles: list[HapticSpatialCueProfile] = Field(default_factory=list)
     beat_timestamps: list[float] = Field(default_factory=list)

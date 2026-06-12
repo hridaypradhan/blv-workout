@@ -244,14 +244,16 @@ def cleanup_transient_artifacts(video_id: str, analysis_dir: str) -> None:
 def extract_transcript(audio_path: str) -> str:
     """Extract or generate a transcript from a transient audio file.
 
-    TODO: Implement using Whisper or YouTube caption API.
+    This is a future integration placeholder for Whisper or a custom speech-to-text API.
+    Currently unused as YouTube captions are fetched directly in transcript_service.py.
     """
-    raise NotImplementedError("TODO: implement transcript extraction")
+    raise NotImplementedError("Future integration placeholder: transcript extraction from audio is not implemented.")
 
 
 def detect_beats(audio_path: str) -> list[float]:
     """Detect beat timestamps from a transient audio file for pacing analysis.
 
-    TODO: Implement using librosa beat detection.
+    This is a future integration placeholder for librosa beat detection to synchronize pacing cues.
+    Currently unused as haptic beat timestamps are generated deterministically in the prototype.
     """
-    raise NotImplementedError("TODO: implement beat detection")
+    raise NotImplementedError("Future integration placeholder: beat detection from audio is not implemented.")

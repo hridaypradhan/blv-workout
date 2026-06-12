@@ -21,10 +21,12 @@ from app.core.config import settings
 from app.core.job_store import job_store, JobRecord
 from app.models.schemas import AssistanceSidecarManifest, ProcessingStage, YouTubeURL
 from app.services.preprocessing_service import run_assistance_preparation
-from app.services.mock_manifest_service import build_deterministic_sidecar_manifest
+from app.services.sidecar_service import sidecar_service
+from app.services.sidecar_manifest_store import load_manifest_from_disk, delete_manifest_from_disk
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 
 def _job_to_status_dict(job: JobRecord) -> dict:
@@ -38,6 +40,9 @@ def _job_to_status_dict(job: JobRecord) -> dict:
         "channel_name": job.channel_name,
         "thumbnail_url": job.thumbnail_url,
         "duration": job.duration,
+        "sidecar_provider": job.sidecar_provider,
+        "sidecar_fallback_reason": job.sidecar_fallback_reason,
+        "caption_status": job.caption_status,
         "created_at": job.created_at,
     }
 
@@ -128,8 +133,18 @@ async def get_sidecar_manifest(video_id: UUID) -> AssistanceSidecarManifest:
     job = job_store.get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
-    return build_deterministic_sidecar_manifest(job)
 
+    # Try loading from disk persistence
+    manifest = load_manifest_from_disk(str(video_id))
+    if manifest:
+        return manifest
+
+    # Graceful fallback on-the-fly generation if not pre-persisted
+    return sidecar_service.generate_sidecar(
+        job,
+        job.transcript or "",
+        job.transcript_segments or []
+    )
 
 
 @router.delete("/{video_id}")
@@ -138,6 +153,10 @@ async def delete_prepared_video(video_id: UUID) -> dict:
     deleted = job_store.delete_job(str(video_id))
     if not deleted:
         raise HTTPException(status_code=404, detail="Video not found.")
+    
+    # Attempt to delete the corresponding sidecar manifest file
+    delete_manifest_from_disk(str(video_id))
+    
     return {"status": "deleted", "video_id": str(video_id)}
 
 

@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     """Environment-backed application settings for external services and URLs."""
 
     GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.5-flash"
+    AI_PROVIDER: str = "prototype"
     DATABASE_URL: str = ""
     YOUTUBE_API_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"

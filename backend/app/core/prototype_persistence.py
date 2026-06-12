@@ -73,3 +73,20 @@ def save_json_store(filename: str, data: Any) -> None:
         os.replace(temp_path, path)
     except Exception as e:
         logger.warning(f"Failed to save prototype persistence file {filename}: {e}")
+
+
+def delete_json_store(filename: str) -> bool:
+    """Delete a JSON file in the prototype data directory if it exists."""
+    path = _get_storage_path(filename)
+    if not path:
+        return False
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info("Deleted prototype persistence file: %s", path)
+            return True
+        return False
+    except Exception as e:
+        logger.warning(f"Failed to delete prototype persistence file {filename}: {e}")
+        return False
+

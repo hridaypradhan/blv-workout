@@ -36,6 +36,9 @@ export interface AssistanceJob {
   channel_name?: string | null;
   thumbnail_url?: string | null;
   created_at?: string | null;
+  sidecar_provider?: string | null;
+  sidecar_fallback_reason?: string | null;
+  caption_status?: string | null;
 }
 
 // Backward compatibility alias
@@ -249,7 +252,7 @@ export interface FormRiskTemplate {
 export interface HapticSpatialCueProfile {
   exercise_name: string;
   body_parts: string[];
-  patterns: Record<string, any>;
+  patterns: Record<string, string>;
   default_intensity?: number;
 }
 
@@ -258,7 +261,7 @@ export interface SidecarManifest {
   youtube_id?: string;
   exercise_timeline_anchors: ExerciseTimelineAnchor[];
   trainer_instruction_events: TrainerInstructionEvent[];
-  expected_movement_windows: Record<string, any>;
+  expected_movement_windows: Record<string, number[]>;
   form_risk_templates: FormRiskTemplate[];
   haptic_spatial_cue_profiles: HapticSpatialCueProfile[];
   beat_timestamps: number[];

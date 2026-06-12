@@ -32,16 +32,19 @@ FitA11y is an **assistive playback companion** prototype designed specifically f
 
 FitA11y is currently implemented as an end-to-end runnable **prototype** to showcase assistive playback companion capabilities and validate the architecture:
 
-### Current Prototype State:
+#### Current Prototype State:
 - **Embedded YouTube Player**: Real YouTube player integration where playback events (play/pause/seek/speed changes) drive session timing.
-- **Deterministic Sidecars**: Pre-processing generates structured sidecar manifests mapping events to the video timeline.
+- **Deterministic & Gemini-Backed Sidecars**: Pre-processing generates structured sidecar manifests mapping events to the video timeline. By default, it operates in offline-capable deterministic `prototype` mode. However, if configured with `AI_PROVIDER=gemini` and a valid `GEMINI_API_KEY`, the backend uses the Google GenAI SDK to call Gemini models to analyze YouTube captions and generate structured sidecars dynamically. If the API key is missing, captions are unavailable, or the Gemini response fails schema validation constraints, the coordinator falls back cleanly to the offline `prototype` strategy.
 - **Simulated Assistant Q&A**: Answers to user questions are provided via deterministic mock responses rather than live LLM API calls.
 - **Simulated Haptic Cues**: Haptic cues (vibration patterns) are delivered via API responses, structured to trigger simulated sleeve feedback rather than communicating with physical Bluetooth hardware sleeves.
 - **Camera-Free Pose & Rep Tracking**: Joint status, repetitions, and form warnings are simulated mathematically based on elapsed video time and sidecar anchors; no camera permission or video stream model inference is active.
 - **JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory; no SQL database or PostgreSQL migration layer is active.
 
 ### Intended Future System State:
-- **Real AI/Gemini Integration**: Connect the Assistant Q&A to Gemini (or another LLM) for dynamic workout reasoning and custom instruction synthesis.
+- **Future AI / Gemini Work**:
+  - Gemini sidecar generation exists now as an optional provider.
+  - Assistant Q&A is still deterministic/prototype today.
+  - Future AI work includes live Assistant Q&A, richer reasoning, stronger validation, and possibly audio/video analysis beyond captions.
 - **Real Pose Detection**: Integrate Google MediaPipe on the client or server side using device camera feeds to evaluate form errors and track reps in real-time.
 - **Real Haptic Sleeve Communication**: Use Web Bluetooth API or a native BLE integration layer to transmit physical vibration sequences to wearable hardware sleeves.
 - **Real TTS & Audio Coexistence**: Integrate a production Text-to-Speech API and OS-level audio ducking APIs to smoothly overlay speech over YouTube trainer audio.
@@ -50,10 +53,12 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
 
 > [!TIP]
 > **Prototype Persistence**: For local developer and demo convenience, prepared jobs, session history, and user settings are persisted locally in the `backend/.prototype_data` directory. To reset the application back to its default clean state, simply delete the `backend/.prototype_data` directory.
+>
+> If you make changes to your local configuration and want to reset the cache, delete the `jobs.json` file inside `backend/.prototype_data/` to reset the active job list.
 
 ---
 
-## Setup & Running the Application
+#### Setup & Running the Application
 
 ### 1. Prerequisites
 - **Python**: Version 3.10 or higher.
@@ -63,48 +68,54 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
 
 ### 2. Backend Setup & Run
 
-Go to the `backend` directory:
-```bash
-cd backend
-```
+Perform the following steps from the repository root:
 
-#### Step A: Set up a Virtual Environment
-We recommend using Python's built-in `venv`.
-
-On **Windows** (Command Prompt or PowerShell):
 ```powershell
+# Go to the repository root directory
+cd "C:\Users\hrida\Documents\ASU\Summer 26\Teal Lab\blv-workout"
+
+# Set up a Virtual Environment
 python -m venv .venv
-# Activate in PowerShell:
-.venv\Scripts\Activate.ps1
-# Or in Command Prompt:
-.venv\Scripts\activate.bat
+
+# Activate the virtual environment
+# Note: On Windows, use "python", not "python3", after activating.
+# If PowerShell blocks activation, run this execution policy bypass first:
+# Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+
+# Upgrade pip and install package dependencies
+python -m pip install --upgrade pip
+python -m pip install -r backend\requirements.txt
+
+# Run the FastAPI server from the backend directory.
+# (Running from backend/ is required so that "backend/.env" is loaded correctly)
+cd backend
+python -m uvicorn app.main:app --reload --log-level debug
 ```
 
-On **macOS / Linux**:
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-#### Step B: Install Packages
-With your virtual environment activated, install the required packages:
-```bash
-pip install -r requirements.txt
-```
-
-#### Step C: Configure Environment Variables
-Copy `.env.example` to `.env`:
-```bash
-cp .env.example .env
-```
-*(Note: While `.env.example` lists variables like `GEMINI_API_KEY`, `DATABASE_URL`, and `YOUTUBE_API_KEY`, the core prototype runs in offline-capable mock mode and does not require active external services or a running PostgreSQL database.)*
-
-#### Step D: Run the Backend
-Start the FastAPI server:
-```bash
-uvicorn app.main:app --reload
-```
 The backend API will run on [http://localhost:8000](http://localhost:8000). You can access the auto-generated Swagger documentation at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+#### Environment Variables Configuration
+The `backend/.env` file is untracked by Git to protect secrets. You must create it manually in the `backend/` directory or copy it from `backend/.env.example`. 
+
+Never commit real API keys to the repository. The `backend/.env.example` file must always contain placeholders only.
+
+The `backend/.env` file should include the following configuration:
+```env
+AI_PROVIDER=prototype
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash
+DATABASE_URL=postgresql+asyncpg://user:password@localhost/blvworkout
+YOUTUBE_API_KEY=
+FRONTEND_URL=http://localhost:3000
+```
+
+To enable and test the Gemini-backed sidecar generation:
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_real_key_here
+GEMINI_MODEL=gemini-3.5-flash
+```
 
 ---
 

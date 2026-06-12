@@ -6,11 +6,12 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
+
+UNSET: Any = object()
 
 from app.models.schemas import ProcessingStage
 from app.core.prototype_persistence import load_json_store, save_json_store
-
 
 
 @dataclass
@@ -31,6 +32,11 @@ class JobRecord:
     channel_name: Optional[str] = None
     thumbnail_url: Optional[str] = None
     duration: Optional[float] = None
+    transcript: Optional[str] = None
+    sidecar_provider: Optional[str] = None
+    sidecar_fallback_reason: Optional[str] = None
+    caption_status: Optional[str] = None
+    transcript_segments: Optional[list[dict]] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
@@ -45,8 +51,92 @@ class JobRecord:
             "channel_name": self.channel_name,
             "thumbnail_url": self.thumbnail_url,
             "duration": self.duration,
+            "transcript": self.transcript,
+            "sidecar_provider": self.sidecar_provider,
+            "sidecar_fallback_reason": self.sidecar_fallback_reason,
+            "caption_status": self.caption_status,
+            "transcript_segments": self.transcript_segments,
             "created_at": self.created_at,
         }
+
+
+def normalize_youtube_url(url: str) -> str:
+    """Normalize YouTube URL to a standard format for comparison."""
+    if not url:
+        return ""
+    url = url.strip()
+    if "://" in url:
+        url = url.split("://", 1)[1]
+    if url.startswith("www."):
+        url = url[4:]
+    return url.lower()
+
+
+def is_legitimate_job(job: JobRecord) -> bool:
+    """Filter out jobs that are clearly not legitimate user-prepared videos."""
+    # Always reject malformed records with invalid created_at.
+    try:
+        created_dt = datetime.fromisoformat(job.created_at)
+        if created_dt.tzinfo is None:
+            created_dt = created_dt.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        age_seconds = (now - created_dt).total_seconds()
+    except Exception:
+        # If timestamp parsing fails, filter out
+        return False
+
+    # Check for recent user-facing failures (e.g. invalid URL errors)
+    if job.stage == ProcessingStage.FAILED:
+        if not job.error:
+            return False
+        err_msg = job.error.lower()
+        # Reject internal/code-error failed jobs immediately
+        if (
+            "unexpected keyword argument" in err_msg
+            or "typeerror" in err_msg
+            or "attributeerror" in err_msg
+            or "syntaxerror" in err_msg
+        ):
+            return False
+        # Keep recent user-facing failed jobs for about 30 minutes if they have an actionable error.
+        return age_seconds <= 30 * 60
+
+    # Otherwise, apply strict validation for normal/in-progress/completed jobs:
+    # Reject missing/blank youtube_id for normal non-failed jobs.
+    if not job.youtube_id or not job.youtube_id.strip():
+        return False
+
+    # Reject non-11-character youtube_id for normal non-failed jobs.
+    if len(job.youtube_id.strip()) != 11:
+        return False
+
+    # Reject missing/blank title for normal completed jobs.
+    if job.stage == ProcessingStage.COMPLETED:
+        if not job.title or not job.title.strip():
+            return False
+
+    # Reject known test/placeholder titles
+    if job.title:
+        title_clean = job.title.strip()
+        if title_clean in ("Test Workout", "Untitled Video"):
+            return False
+
+    # Invalid YouTube URLs
+    if "youtube.com" not in job.youtube_url and "youtu.be" not in job.youtube_url:
+        return False
+
+    # Filter stale submitted jobs older than 10 minutes.
+    if job.stage == ProcessingStage.SUBMITTED:
+        if age_seconds > 10 * 60:
+            return False
+
+    # Filter stale in-progress jobs older than 30 minutes.
+    elif job.stage not in (ProcessingStage.COMPLETED, ProcessingStage.FAILED):
+        if age_seconds > 30 * 60:
+            return False
+
+    # Do NOT expire valid completed jobs just because they are older than 30 minutes.
+    return True
 
 
 class JobStore:
@@ -62,9 +152,10 @@ class JobStore:
         data = load_json_store("jobs.json")
         if data and isinstance(data, dict):
             with self._lock:
+                changed = False
                 for k, v in data.items():
                     try:
-                        self._jobs[k] = JobRecord(
+                        job = JobRecord(
                             video_id=v["video_id"],
                             youtube_url=v["youtube_url"],
                             stage=ProcessingStage(v["stage"]),
@@ -74,10 +165,64 @@ class JobStore:
                             channel_name=v.get("channel_name"),
                             thumbnail_url=v.get("thumbnail_url"),
                             duration=v.get("duration"),
+                            transcript=v.get("transcript"),
+                            sidecar_provider=v.get("sidecar_provider"),
+                            sidecar_fallback_reason=v.get("sidecar_fallback_reason"),
+                            caption_status=v.get("caption_status"),
+                            transcript_segments=v.get("transcript_segments"),
                             created_at=v.get("created_at"),
                         )
+                        if is_legitimate_job(job):
+                            self._jobs[k] = job
+                        else:
+                            changed = True
                     except Exception:
-                        pass
+                        changed = True
+                
+                deduped = self._deduplicate_jobs_nolock()
+                if changed or deduped:
+                    self._save_to_disk()
+
+    def _deduplicate_jobs_nolock(self) -> bool:
+        """Groups jobs by youtube_id (or normalized URL) and keeps the best one. Assumes lock is held."""
+        groups: dict[str, list[JobRecord]] = {}
+        for job in self._jobs.values():
+            key = job.youtube_id.strip() if (job.youtube_id and job.youtube_id.strip()) else normalize_youtube_url(job.youtube_url)
+            groups.setdefault(key, []).append(job)
+        
+        new_jobs: dict[str, JobRecord] = {}
+        changed = False
+        
+        for key, group in groups.items():
+            if len(group) == 1:
+                new_jobs[group[0].video_id] = group[0]
+                continue
+            
+            # Deduplicate: find the best one
+            # Priority: completed > recent in-progress > recent failed
+            def get_priority(j: JobRecord) -> int:
+                if j.stage == ProcessingStage.COMPLETED:
+                    return 3
+                elif j.stage != ProcessingStage.FAILED:
+                    return 2
+                else:
+                    return 1
+            
+            # Sort group by priority descending, then created_at descending
+            group.sort(key=lambda j: (get_priority(j), j.created_at), reverse=True)
+            best_job = group[0]
+            new_jobs[best_job.video_id] = best_job
+            changed = True
+            
+        if changed:
+            self._jobs = new_jobs
+        return changed
+
+    def deduplicate_jobs(self) -> None:
+        """Deduplicate jobs by youtube_id (or normalized URL) and persist the cleaned store."""
+        with self._lock:
+            if self._deduplicate_jobs_nolock():
+                self._save_to_disk()
 
     def _save_to_disk(self) -> None:
         """Save job records to local JSON store if enabled. Assumes lock is held."""
@@ -109,6 +254,11 @@ class JobStore:
         channel_name: Optional[str] = None,
         thumbnail_url: Optional[str] = None,
         duration: Optional[float] = None,
+        transcript: Optional[str] = UNSET,
+        sidecar_provider: Optional[str] = UNSET,
+        sidecar_fallback_reason: Optional[str] = UNSET,
+        caption_status: Optional[str] = UNSET,
+        transcript_segments: Optional[list[dict]] = UNSET,
     ) -> None:
         """Update a job's stage and optional metadata fields."""
         with self._lock:
@@ -128,6 +278,16 @@ class JobStore:
                 job.thumbnail_url = thumbnail_url
             if duration is not None:
                 job.duration = duration
+            if transcript is not UNSET:
+                job.transcript = transcript
+            if sidecar_provider is not UNSET:
+                job.sidecar_provider = sidecar_provider
+            if sidecar_fallback_reason is not UNSET:
+                job.sidecar_fallback_reason = sidecar_fallback_reason
+            if caption_status is not UNSET:
+                job.caption_status = caption_status
+            if transcript_segments is not UNSET:
+                job.transcript_segments = transcript_segments
             self._save_to_disk()
 
     def delete_job(self, video_id: str) -> bool:
@@ -139,8 +299,16 @@ class JobStore:
         return job is not None
 
     def list_jobs(self) -> list[JobRecord]:
-        """Return all jobs, newest first."""
+        """Return all legitimate, non-stale, deduped jobs, newest first."""
         with self._lock:
+            original_len = len(self._jobs)
+            self._jobs = {k: j for k, j in self._jobs.items() if is_legitimate_job(j)}
+            filtered_len = len(self._jobs)
+            
+            deduped = self._deduplicate_jobs_nolock()
+            if filtered_len != original_len or deduped:
+                self._save_to_disk()
+                
             jobs = list(self._jobs.values())
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)
 

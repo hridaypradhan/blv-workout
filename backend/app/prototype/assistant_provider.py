@@ -69,7 +69,7 @@ def generate_correction(
     metadata = {
         "source": "prototype",
         "provider": "prototype_assistant",
-        "replace_with": "gemini_service",
+        "replace_with": "ai_assistant_provider",
         "exercise_id": str(exercise_id),
         "exercise_name": exercise_name,
         "joint": joint,
@@ -142,7 +142,7 @@ def generate_motivation(
         metadata={
             "source": "prototype",
             "provider": "prototype_assistant",
-            "replace_with": "gemini_service",
+            "replace_with": "ai_assistant_provider",
             "milestone_event": milestone_event,
         },
     )
@@ -205,7 +205,7 @@ def answer_question(
     metadata = {
         "source": "prototype",
         "provider": "prototype_assistant",
-        "replace_with": "gemini_service",
+        "replace_with": "ai_assistant_provider",
         "session_context_used": bool(session_context),
         "question": question,
     }

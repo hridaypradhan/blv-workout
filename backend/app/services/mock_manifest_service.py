@@ -19,13 +19,16 @@ from app.models.schemas import (
 
 if TYPE_CHECKING:
     from app.core.job_store import JobRecord
+    from app.services.sidecar_providers.base import SidecarGenerationInput
 
 # Default fallback video duration in seconds (10 minutes)
 DEFAULT_FALLBACK_DURATION = 600.0
 
 
-def build_deterministic_sidecar_manifest(job: JobRecord) -> AssistanceSidecarManifest:
-    """Generate a deterministic AssistanceSidecarManifest based on JobRecord metadata.
+def build_deterministic_sidecar_manifest(
+    job: JobRecord | SidecarGenerationInput
+) -> AssistanceSidecarManifest:
+    """Generate a deterministic AssistanceSidecarManifest based on JobRecord or SidecarGenerationInput metadata.
 
     Ensures timestamps and ranges do not exceed the video's actual or fallback duration.
     Uses UUID namespace mappings to ensure generated UUIDs are completely deterministic.
@@ -34,7 +37,12 @@ def build_deterministic_sidecar_manifest(job: JobRecord) -> AssistanceSidecarMan
     video_uuid = uuid.UUID(video_id_str)
 
     # Determine duration
-    duration = job.duration if (job.duration and job.duration > 0) else DEFAULT_FALLBACK_DURATION
+    if hasattr(job, "duration_seconds"):
+        raw_duration = job.duration_seconds
+    else:
+        raw_duration = job.duration
+
+    duration = raw_duration if (raw_duration and raw_duration > 0) else DEFAULT_FALLBACK_DURATION
 
     # Exercise timeline anchors and expected movement windows
     exercise_timeline_anchors = []

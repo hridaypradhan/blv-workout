@@ -4,7 +4,7 @@ pydantic
 pydantic-settings
 sqlalchemy
 asyncpg
-google-generativeai
+google-genai
 mediapipe
 yt-dlp
 librosa

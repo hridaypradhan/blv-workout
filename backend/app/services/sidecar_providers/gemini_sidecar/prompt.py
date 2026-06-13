@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+PROMPT_VERSION = "gemini_sidecar_v1"
+
 if TYPE_CHECKING:
     from app.services.sidecar_providers.base import SidecarGenerationInput
 

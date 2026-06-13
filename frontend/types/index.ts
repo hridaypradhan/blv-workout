@@ -256,6 +256,23 @@ export interface HapticSpatialCueProfile {
   default_intensity?: number;
 }
 
+export interface SidecarValidationWarning {
+  code: string;
+  message: string;
+  path?: string | null;
+}
+
+export interface SidecarGenerationMetadata {
+  provider: string;
+  model?: string | null;
+  prompt_version: string;
+  schema_version: string;
+  generated_at: string;
+  caption_status?: string | null;
+  fallback_reason?: string | null;
+  validation_warning_count: number;
+}
+
 export interface SidecarManifest {
   video_id?: string;
   youtube_id?: string;
@@ -266,6 +283,8 @@ export interface SidecarManifest {
   haptic_spatial_cue_profiles: HapticSpatialCueProfile[];
   beat_timestamps: number[];
   speaking_opportunity_map: SpeakingOpportunityWindow[];
+  generation_metadata?: SidecarGenerationMetadata | null;
+  validation_warnings?: SidecarValidationWarning[];
   created_at?: string;
 }
 

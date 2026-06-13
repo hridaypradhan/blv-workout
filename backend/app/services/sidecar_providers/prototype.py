@@ -7,6 +7,9 @@ from typing import Any
 from app.services.mock_manifest_service import build_deterministic_sidecar_manifest
 from app.services.sidecar_providers.base import SidecarGenerationInput
 
+PROMPT_VERSION = "prototype_deterministic_v1"
+SCHEMA_VERSION = "sidecar_schema_v1"
+
 
 class PrototypeSidecarProvider:
     """Strategy for offline deterministic mock sidecar generation."""

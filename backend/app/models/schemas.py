@@ -223,6 +223,27 @@ class HapticSpatialCueProfile(BaseModel):
     default_intensity: float | None = None
 
 
+class SidecarValidationWarning(BaseModel):
+    """Structured warning detail produced during manifest validation/clamping."""
+
+    code: str
+    message: str
+    path: str | None = None
+
+
+class SidecarGenerationMetadata(BaseModel):
+    """Metadata about the generation process of the assistance sidecar manifest."""
+
+    provider: str
+    model: str | None = None
+    prompt_version: str
+    schema_version: str
+    generated_at: datetime
+    caption_status: str | None = None
+    fallback_reason: str | None = None
+    validation_warning_count: int = 0
+
+
 class AssistanceSidecarManifest(BaseModel):
     """The full assistance sidecar manifest for a YouTube video.
 
@@ -241,6 +262,8 @@ class AssistanceSidecarManifest(BaseModel):
     haptic_spatial_cue_profiles: list[HapticSpatialCueProfile] = Field(default_factory=list)
     beat_timestamps: list[float] = Field(default_factory=list)
     speaking_opportunity_map: list[SpeakingOpportunityWindow] = Field(default_factory=list)
+    generation_metadata: SidecarGenerationMetadata | None = None
+    validation_warnings: list[SidecarValidationWarning] = Field(default_factory=list)
     created_at: datetime | None = None
 
 

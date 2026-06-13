@@ -62,14 +62,21 @@ def parse_vtt(vtt_text: str) -> list[dict[str, Any]]:
             start_ms = parse_vtt_timestamp(start_str)
             end_ms = parse_vtt_timestamp(end_str)
             text = ' '.join(text_lines)
+            
+            # Clean VTT tags, styling artifacts, and curly braces
             text = re.sub(r'<[^>]+>', '', text)
+            text = re.sub(r'\{[^}]+\}', '', text)
+            text = re.sub(r'\b(?:align|position|line|size|vertical):\S+', '', text)
             text = re.sub(r'\s+', ' ', text).strip()
+            
             if text:
-                segments.append({
-                    'start_ms': start_ms,
-                    'end_ms': end_ms,
-                    'text': text
-                })
+                # Avoid repeated identical adjacent caption text
+                if not segments or segments[-1]['text'] != text:
+                    segments.append({
+                        'start_ms': start_ms,
+                        'end_ms': end_ms,
+                        'text': text
+                    })
         except Exception:
             continue
     return segments

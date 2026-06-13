@@ -11,6 +11,8 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from app.models.schemas import TrainerInstructionEventType, SpeakingOpportunityMode
 
+SCHEMA_VERSION = "sidecar_schema_v1"
+
 
 class JointAcceptableRangeGemini(BaseModel):
     joint: str

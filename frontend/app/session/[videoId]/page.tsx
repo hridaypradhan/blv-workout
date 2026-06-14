@@ -19,12 +19,14 @@ import {
   recordRepCompletion,
   recordFormError,
   generateCorrection,
+  getCuePlan,
+  selectCueCandidate,
 } from "@/lib/api";
 import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, AssistantPersona } from "@/types";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, AssistantPersona, CuePlan } from "@/types";
 import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 
@@ -94,6 +96,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const [isEnding, setIsEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [cuePlan, setCuePlan] = useState<CuePlan | null>(null);
+  const [isLoadingCuePlan, setIsLoadingCuePlan] = useState(true);
+  const [cuePlanError, setCuePlanError] = useState<string | null>(null);
+  const [recentlyDeliveredCueIds, setRecentlyDeliveredCueIds] = useState<string[]>([]);
+
 
   const { hapticState } = usePrototypeHapticConnection();
 
@@ -108,9 +115,30 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       });
   }, []);
 
-  const announce = (msg: string) => {
+  useEffect(() => {
+    if (jobStage === ProcessingStage.COMPLETED) {
+      setIsLoadingCuePlan(true);
+      getCuePlan(params.videoId)
+        .then((plan) => {
+          setCuePlan(plan);
+          setCuePlanError(null);
+          setIsLoadingCuePlan(false);
+          console.log("Successfully loaded assistance cue plan for video:", params.videoId);
+        })
+        .catch((err) => {
+          console.warn("Failed to load cue plan, will fallback to legacy timeline cue delivery:", err);
+          setCuePlanError(err instanceof Error ? err.message : String(err));
+          setIsLoadingCuePlan(false);
+        });
+    }
+  }, [params.videoId, jobStage]);
+
+
+
+
+  const announce = React.useCallback((msg: string) => {
     setAnnouncement(msg);
-  };
+  }, []);
 
   // Hook into the YouTube IFrame player
   const {
@@ -148,7 +176,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       announce("Loading trainer video player.");
     }
     prevIsPlayingAnnouncement.current = isPlaying;
-  }, [isReady, isPlaying, isBuffering, hasEnded, playerError, youtubeId]);
+  }, [isReady, isPlaying, isBuffering, hasEnded, playerError, youtubeId, announce]);
 
   // Session playback interaction telemetry hook
   useSessionTelemetry({
@@ -260,7 +288,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           }
         });
     }
-  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs, userProfile]);
+  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs, userProfile, announce]);
 
   // Handle prototype form error events
   const lastHandledErrorRepRef = useRef<number>(-1);
@@ -375,7 +403,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           }
         });
     }
-  }, [latestFormError, sessionId, currentExercise, currentTimeMs, userProfile]);
+  }, [latestFormError, sessionId, currentExercise, currentTimeMs, userProfile, announce]);
 
   // Monitor manifest loading updates
   const prevIsLoadingManifest = useRef(false);
@@ -392,27 +420,137 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     }
     prevIsLoadingManifest.current = isLoadingManifest;
     prevManifestError.current = manifestError;
-  }, [isLoadingManifest, manifest, manifestError]);
+  }, [isLoadingManifest, manifest, manifestError, announce]);
 
   const searchLevel = searchParams.get("overrideLevel");
   const searchPause = searchParams.get("overridePause");
 
-  const coexistenceSettings: AudioCoexistenceSettings = {
-    interruption_level: assistantMuted
-      ? InterruptionLevel.HAPTIC_ONLY
-      : ((searchLevel as InterruptionLevel) || userProfile?.audio_coexistence?.interruption_level || InterruptionLevel.BRIEF_SPEECH),
-    assistant_verbosity: userProfile?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
-    pause_before_speaking: searchPause !== null
-      ? searchPause === "true"
-      : (userProfile?.audio_coexistence?.pause_before_speaking !== undefined
-        ? userProfile.audio_coexistence.pause_before_speaking
-        : true),
-    correction_frequency: userProfile?.audio_coexistence?.correction_frequency || "medium",
-  };
+  const coexistenceSettings = React.useMemo<AudioCoexistenceSettings>(() => {
+    return {
+      interruption_level: assistantMuted
+        ? InterruptionLevel.HAPTIC_ONLY
+        : ((searchLevel as InterruptionLevel) || userProfile?.audio_coexistence?.interruption_level || InterruptionLevel.BRIEF_SPEECH),
+      assistant_verbosity: userProfile?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
+      pause_before_speaking: searchPause !== null
+        ? searchPause === "true"
+        : (userProfile?.audio_coexistence?.pause_before_speaking !== undefined
+          ? userProfile.audio_coexistence.pause_before_speaking
+          : true),
+      correction_frequency: userProfile?.audio_coexistence?.correction_frequency || "medium",
+    };
+  }, [assistantMuted, searchLevel, userProfile, searchPause]);
 
-  // Wire up the assistant cue queue
+  const prevTimeRef = useRef<number>(0);
+  useEffect(() => {
+    if (currentTime < prevTimeRef.current - 1.5) {
+      setRecentlyDeliveredCueIds([]);
+      lastCheckedSecond.current = -1;
+    }
+    prevTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  const lastCheckedSecond = useRef<number>(-1);
+
+  useEffect(() => {
+    if (!cuePlan || !isPlaying) return;
+
+    const currentSecond = Math.floor(currentTime);
+    if (currentSecond === lastCheckedSecond.current) return;
+    lastCheckedSecond.current = currentSecond;
+
+    const payload = {
+      video_id: params.videoId,
+      current_time_ms: currentTime * 1000,
+      coexistence_settings: coexistenceSettings,
+      assistant_muted: assistantMuted,
+      recently_delivered_cue_ids: recentlyDeliveredCueIds,
+    };
+
+    selectCueCandidate(payload)
+      .then((res) => {
+        if (res.should_deliver && res.cue_id) {
+          setRecentlyDeliveredCueIds((prev) => [...prev, res.cue_id!]);
+
+          const text = res.text || "";
+
+          if (text) {
+            setChatMessages((prev) => [
+              ...prev,
+              { sender: "assistant", text: text },
+            ]);
+          }
+
+          if (res.modality === "audio" && text) {
+            announce(`Assistant cue: ${text}`);
+          } else if (res.modality === "haptic") {
+            if (text) {
+              announce(`Haptic cue requested: ${text}`);
+            }
+
+            const cueType = res.haptic_cue_ref || (text ? getCueTypeFromCue(text) : "per_rep_tick");
+            const vibrationId = (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] || `${cueType}_001`;
+            const limbs = ["left_arm", "right_arm"];
+
+            triggerHapticPattern(null, null, 0.7, cueType, vibrationId, limbs)
+              .then((hapticRes) => {
+                announce(`Haptic cue would trigger: ${hapticRes.pattern_name} (dry-run).`);
+                if (sessionId) {
+                  recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTime * 1000, {
+                    cue_type: cueType,
+                    selected_vibration_id: vibrationId,
+                    selected_wav: hapticRes.selected_wav,
+                    target_limbs: hapticRes.target_limbs,
+                    provider: hapticRes.provider,
+                    status: hapticRes.status,
+                    intensity: 0.7,
+                    text: text,
+                    cue_id: res.cue_id,
+                  }).catch((err) => console.warn("Failed to log haptic cue triggered telemetry:", err));
+                }
+              })
+              .catch((err) => {
+                console.error("Failed to trigger haptic cue:", err);
+              });
+          }
+
+          if (sessionId) {
+            recordPlaybackEvent(sessionId, res.modality === "haptic" ? SESSION_EVENTS.HAPTIC_CUE_REQUESTED : SESSION_EVENTS.ASSISTANT_CUE_DELIVERED, currentTime * 1000, {
+              text: text,
+              modality: res.modality,
+              priority: "normal",
+              cue_id: res.cue_id,
+              reason: res.reason,
+            }).catch((err) => console.warn("Failed to log cue delivery telemetry:", err));
+          }
+
+          if (res.recommended_playback_action === "pause_before_speaking") {
+            pause();
+            announce("Pausing workout playback for assistant instruction.");
+          } else if (res.recommended_playback_action === "duck_audio") {
+            announce("[Assistant ducks background music]");
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to select cue candidate:", err);
+      });
+  }, [
+    currentTime,
+    isPlaying,
+    cuePlan,
+    coexistenceSettings,
+    assistantMuted,
+    recentlyDeliveredCueIds,
+    params.videoId,
+    userProfile,
+    sessionId,
+    pause,
+    announce
+  ]);
+
+  // Wire up the assistant cue queue (legacy fallback)
   const { activeCue } = useAssistantCueQueue(
-    manifest,
+    cuePlan ? null : manifest,
     currentTimeMs,
     coexistenceSettings
   );
@@ -436,7 +574,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         ...prev,
         { sender: "assistant", text: activeCue.text }
       ]);
-      
+
       // Expose as announcement for screen readers
       if (activeCue.modality === "audio") {
         announce(`Assistant cue: ${activeCue.text}`);
@@ -507,7 +645,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           });
       }
     }
-  }, [activeCue, sessionId, currentTime, userProfile]);
+  }, [activeCue, sessionId, currentTime, userProfile, announce]);
 
   const handleRepeatTrainerInstruction = () => {
     if (!manifest || !manifest.trainer_instruction_events) return;
@@ -769,25 +907,25 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         <div className="flex items-center gap-2">
           <span className={`w-2.5 h-2.5 rounded-full ${hapticState === "connected" ? "bg-emerald-500 animate-ping" : hapticState === "connecting" ? "bg-yellow-500 animate-pulse" : "bg-red-500"}`} />
           <span className="text-sm font-semibold text-slate-300">
-            {hapticState === "connected" 
-              ? "Prototype Sleeve Calibration Mode (Simulated)" 
-              : hapticState === "connecting" 
-              ? "Prototype Sleeve Connecting..." 
-              : "Prototype Sleeves Disconnected (Simulated)"}
+            {hapticState === "connected"
+              ? "Prototype Sleeve Calibration Mode (Simulated)"
+              : hapticState === "connecting"
+                ? "Prototype Sleeve Connecting..."
+                : "Prototype Sleeves Disconnected (Simulated)"}
           </span>
         </div>
         <div className="flex flex-wrap gap-3 sm:gap-4" aria-label="Individual Limb Calibration Statuses">
           {sleeveStatus.map((s) => {
-            const limbStatusText = s.styleState === "connected" 
-              ? "Prototype Cue Ready" 
-              : s.styleState === "connecting" 
-              ? "Prototype Connecting..." 
-              : "Offline (Simulated)";
-            const dotColor = s.styleState === "connected" 
-              ? "bg-yellow-400 animate-pulse" 
-              : s.styleState === "connecting" 
-              ? "bg-yellow-500 animate-pulse" 
-              : "bg-red-500";
+            const limbStatusText = s.styleState === "connected"
+              ? "Prototype Cue Ready"
+              : s.styleState === "connecting"
+                ? "Prototype Connecting..."
+                : "Offline (Simulated)";
+            const dotColor = s.styleState === "connected"
+              ? "bg-yellow-400 animate-pulse"
+              : s.styleState === "connecting"
+                ? "bg-yellow-500 animate-pulse"
+                : "bg-red-500";
             return (
               <div key={s.label} className="flex items-center gap-1.5" aria-label={`${s.name}: ${limbStatusText}`}>
                 <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} aria-hidden="true" />
@@ -837,8 +975,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               <div>
                 <h3 className="text-sm font-bold text-white">{trackingStatusLabel}</h3>
                 <p className="text-xs text-slate-400">
-                  {isPrototypeTracking 
-                    ? "Simulating time-varying joint angles from manifest coordinates." 
+                  {isPrototypeTracking
+                    ? "Simulating time-varying joint angles from manifest coordinates."
                     : "Mock tracking coordinates are currently offline."}
                 </p>
                 {isPrototypeTracking && Object.keys(currentAngles).length > 0 && (
@@ -852,16 +990,15 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 )}
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
               <button
                 type="button"
                 onClick={isPrototypeTracking ? stopPoseTracking : startPoseTracking}
-                className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 ${
-                  isPrototypeTracking 
-                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700" 
+                className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 ${isPrototypeTracking
+                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
                     : "bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-400"
-                }`}
+                  }`}
                 aria-label={isPrototypeTracking ? "Stop prototype pose tracking" : "Start prototype pose tracking"}
               >
                 {isPrototypeTracking ? "Stop Simulating" : "Start Simulating"}
@@ -933,20 +1070,31 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 <h2 id="assistant-feed-heading" className="text-sm font-bold text-slate-400 uppercase tracking-wider">
                   Assistant Cue Feed
                 </h2>
-                {isLoadingManifest && (
+                {isLoadingCuePlan && (
+                  <span className="text-xs text-yellow-400/80 animate-pulse flex items-center gap-1" id="cueplan-loading-indicator">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400/80" />
+                    Loading assistance cues...
+                  </span>
+                )}
+                {!isLoadingCuePlan && cuePlanError && (
+                  <span className="text-xs text-slate-400 font-medium flex items-center gap-1" id="cueplan-error-indicator" title="Using basic timeline fallback">
+                    Using basic assistance cues
+                  </span>
+                )}
+                {isLoadingManifest && !isLoadingCuePlan && (
                   <span className="text-sm text-yellow-400 animate-pulse flex items-center gap-1.5" id="manifest-loading-indicator">
                     <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
                     Loading Manifest
                   </span>
                 )}
-                {manifestError && (
+                {manifestError && !cuePlanError && (
                   <span className="text-sm text-red-400 font-semibold flex items-center gap-1" id="manifest-error-indicator" title={manifestError}>
-                    ⚠️ Load Error
+                    Load Error
                   </span>
                 )}
               </div>
-    
-              <div 
+
+              <div
                 className="space-y-4 mb-4 pr-1 max-h-[220px] lg:max-h-[320px] overflow-y-auto"
                 role="log"
                 aria-live="polite"
@@ -962,11 +1110,10 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 {chatMessages.map((msg, index) => (
                   <div
                     key={index}
-                    className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[90%] ${
-                      msg.sender === "assistant"
+                    className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[90%] ${msg.sender === "assistant"
                         ? "bg-slate-950 border border-slate-800 text-slate-300 self-start"
                         : "bg-yellow-400 text-slate-950 font-medium ml-auto"
-                    }`}
+                      }`}
                   >
                     <p className="font-bold text-xs mb-1 opacity-70">
                       {msg.sender === "assistant" ? "ASSISTANT" : "YOU"}
@@ -1023,7 +1170,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         >
           {isPlaying ? "Pause Playback" : "Resume Playback"}
         </button>
-        
+
         <button
           onClick={handleSkipSection}
           className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
@@ -1032,7 +1179,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         >
           Skip to Next Section
         </button>
- 
+
         <div className="flex flex-col items-center gap-1.5">
           {endError && (
             <span className="text-sm text-red-400 font-semibold animate-pulse" role="alert">

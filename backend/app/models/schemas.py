@@ -673,3 +673,20 @@ class RhythmPacingResponse(BaseModel):
     assistant_message: str
     rhythm: RhythmMetrics
     reason: str
+
+
+# Import and re-export Cue Plan schemas to maintain canonical app models namespace
+from app.models.cue_plan_schemas import (
+    CueSourceType,
+    CuePriority,
+    CueIntent,
+    InterruptionPolicyHint,
+    CueModality,
+    CuePlanValidationWarning,
+    CuePlanGenerationMetadata,
+    CueTextVariants,
+    CueCandidate,
+    ExerciseCueDescription,
+    TrainerInstructionSummary,
+    CuePlan,
+)

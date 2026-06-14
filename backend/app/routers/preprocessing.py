@@ -24,6 +24,8 @@ from app.services.preprocessing_service import run_assistance_preparation
 from app.services.sidecar_service import sidecar_service
 from app.services.sidecar_manifest_store import load_manifest_from_disk, delete_manifest_from_disk
 from app.core.prototype_persistence import delete_json_store
+from app.models.cue_plan_schemas import CuePlan
+from app.services.cue_plan_store import load_cue_plan_from_disk, delete_cue_plan_from_disk
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -245,7 +247,63 @@ async def delete_prepared_video(video_id: UUID) -> dict:
     delete_manifest_from_disk(str(video_id))
     delete_json_store(f"ai_diagnostics/{video_id}.json")
     
+    # Clean up cue plan and diagnostics
+    delete_cue_plan_from_disk(str(video_id))
+    delete_json_store(f"ai_diagnostics/cue_plan_{video_id}.json")
+    
     return {"status": "deleted", "video_id": str(video_id)}
+
+
+@router.get("/cue-plan/{video_id}", response_model=CuePlan)
+async def get_cue_plan(video_id: UUID) -> CuePlan:
+    """Return the candidate cue plan for a prepared YouTube video."""
+    cue_plan = load_cue_plan_from_disk(str(video_id))
+    if cue_plan is None:
+        raise HTTPException(status_code=404, detail="Cue plan not found on disk.")
+    return cue_plan
+
+
+@router.get("/cue-plan/{video_id}/inspection", response_model=dict)
+async def inspect_cue_plan(video_id: UUID) -> dict:
+    """Return developer-safe inspection metadata and warnings for the generated cue plan."""
+    cue_plan = load_cue_plan_from_disk(str(video_id))
+    if cue_plan is None:
+        raise HTTPException(status_code=404, detail="Cue plan not found on disk.")
+        
+    meta = cue_plan.generation_metadata
+    provider = meta.provider if meta else None
+    model = meta.model if meta else None
+    prompt_version = meta.prompt_version if meta else None
+    schema_version = meta.schema_version if meta else None
+    source_sidecar_provider = meta.source_sidecar_provider if meta else None
+    source_sidecar_prompt_version = meta.source_sidecar_prompt_version if meta else None
+    source_sidecar_schema_version = meta.source_sidecar_schema_version if meta else None
+    validation_warning_count = meta.validation_warning_count if meta else len(cue_plan.validation_warnings)
+    
+    warnings_preview = []
+    for w in cue_plan.validation_warnings[:10]:
+        warnings_preview.append({
+            "code": w.code,
+            "message": w.message,
+            "path": w.path
+        })
+        
+    return {
+        "video_id": str(video_id),
+        "youtube_id": cue_plan.youtube_id,
+        "provider": provider,
+        "model": model,
+        "prompt_version": prompt_version,
+        "schema_version": schema_version,
+        "source_sidecar_provider": source_sidecar_provider,
+        "source_sidecar_prompt_version": source_sidecar_prompt_version,
+        "source_sidecar_schema_version": source_sidecar_schema_version,
+        "cue_candidate_count": len(cue_plan.cue_candidates),
+        "exercise_description_count": len(cue_plan.exercise_descriptions),
+        "trainer_instruction_summary_count": len(cue_plan.trainer_instruction_summaries),
+        "validation_warning_count": validation_warning_count,
+        "warnings_preview": warnings_preview,
+    }
 
 
 @router.get("/jobs")

@@ -341,5 +341,116 @@ export interface CorrectionRequest {
   persona?: AssistantPersona;
 }
 
+export type CueSourceType =
+  | "exercise_anchor"
+  | "trainer_instruction"
+  | "speaking_window"
+  | "form_risk"
+  | "haptic_profile";
+
+export type CuePriority = "low" | "medium" | "high";
+
+export type CueIntent =
+  | "setup_orientation"
+  | "movement_description"
+  | "form_reminder"
+  | "pacing_reminder"
+  | "transition_notice"
+  | "trainer_instruction_repeat"
+  | "haptic_prompt";
+
+export type InterruptionPolicyHint =
+  | "haptic_only"
+  | "safe_gap_only"
+  | "pause_then_speak"
+  | "duck_speak";
+
+export type CueModality = "audio" | "haptic";
+
+export interface CuePlanValidationWarning {
+  code: string;
+  message: string;
+  path?: string | null;
+}
+
+export interface CuePlanGenerationMetadata {
+  provider: string;
+  model?: string | null;
+  prompt_version: string;
+  schema_version: string;
+  source_sidecar_provider?: string | null;
+  source_sidecar_prompt_version?: string | null;
+  source_sidecar_schema_version?: string | null;
+  generated_at: string;
+  fallback_reason?: string | null;
+  validation_warning_count: number;
+}
+
+export interface CueTextVariants {
+  brief?: string | null;
+  moderate: string;
+  detailed?: string | null;
+}
+
+export interface CueCandidate {
+  id: string;
+  exercise_anchor_id?: string | null;
+  source_type: CueSourceType;
+  source_ref?: string | null;
+  start_ms: number;
+  end_ms: number;
+  priority: CuePriority;
+  intent: CueIntent;
+  allowed_modalities: CueModality[];
+  text_variants?: CueTextVariants | null;
+  haptic_cue_ref?: string | null;
+  interruption_policy_hint: InterruptionPolicyHint;
+}
+
+export interface ExerciseCueDescription {
+  exercise_anchor_id: string;
+  name: string;
+  accessible_description: string;
+}
+
+export interface TrainerInstructionSummary {
+  source_event_id?: string | null;
+  start_ms: number;
+  end_ms: number;
+  summary: string;
+}
+
+export interface CuePlan {
+  video_id?: string | null;
+  youtube_id?: string | null;
+  generation_metadata?: CuePlanGenerationMetadata | null;
+  pre_session_overview: string;
+  exercise_descriptions: ExerciseCueDescription[];
+  cue_candidates: CueCandidate[];
+  trainer_instruction_summaries: TrainerInstructionSummary[];
+  validation_warnings: CuePlanValidationWarning[];
+  created_at?: string | null;
+}
+
+export interface RuntimeCueSelectionRequest {
+  video_id: string;
+  current_time_ms: number;
+  coexistence_settings: AudioCoexistenceSettings;
+  assistant_muted: boolean;
+  recently_delivered_cue_ids?: string[] | null;
+}
+
+export interface RuntimeCueSelectionResponse {
+  cue_id: string | null;
+  should_deliver: boolean;
+  modality: CueModality | null;
+  text: string | null;
+  haptic_cue_ref: string | null;
+  interruption_policy_hint: InterruptionPolicyHint | null;
+  recommended_playback_action: "none" | "pause_before_speaking" | "duck_audio" | null;
+  reason: string;
+}
+
+
 
 

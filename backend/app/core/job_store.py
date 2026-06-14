@@ -35,6 +35,8 @@ class JobRecord:
     transcript: Optional[str] = None
     sidecar_provider: Optional[str] = None
     sidecar_fallback_reason: Optional[str] = None
+    cue_plan_provider: Optional[str] = None
+    cue_plan_fallback_reason: Optional[str] = None
     caption_status: Optional[str] = None
     transcript_segments: Optional[list[dict]] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -54,6 +56,8 @@ class JobRecord:
             "transcript": self.transcript,
             "sidecar_provider": self.sidecar_provider,
             "sidecar_fallback_reason": self.sidecar_fallback_reason,
+            "cue_plan_provider": self.cue_plan_provider,
+            "cue_plan_fallback_reason": self.cue_plan_fallback_reason,
             "caption_status": self.caption_status,
             "transcript_segments": self.transcript_segments,
             "created_at": self.created_at,
@@ -168,6 +172,8 @@ class JobStore:
                             transcript=v.get("transcript"),
                             sidecar_provider=v.get("sidecar_provider"),
                             sidecar_fallback_reason=v.get("sidecar_fallback_reason"),
+                            cue_plan_provider=v.get("cue_plan_provider"),
+                            cue_plan_fallback_reason=v.get("cue_plan_fallback_reason"),
                             caption_status=v.get("caption_status"),
                             transcript_segments=v.get("transcript_segments"),
                             created_at=v.get("created_at"),
@@ -257,6 +263,8 @@ class JobStore:
         transcript: Optional[str] = UNSET,
         sidecar_provider: Optional[str] = UNSET,
         sidecar_fallback_reason: Optional[str] = UNSET,
+        cue_plan_provider: Optional[str] = UNSET,
+        cue_plan_fallback_reason: Optional[str] = UNSET,
         caption_status: Optional[str] = UNSET,
         transcript_segments: Optional[list[dict]] = UNSET,
     ) -> None:
@@ -284,6 +292,10 @@ class JobStore:
                 job.sidecar_provider = sidecar_provider
             if sidecar_fallback_reason is not UNSET:
                 job.sidecar_fallback_reason = sidecar_fallback_reason
+            if cue_plan_provider is not UNSET:
+                job.cue_plan_provider = cue_plan_provider
+            if cue_plan_fallback_reason is not UNSET:
+                job.cue_plan_fallback_reason = cue_plan_fallback_reason
             if caption_status is not UNSET:
                 job.caption_status = caption_status
             if transcript_segments is not UNSET:

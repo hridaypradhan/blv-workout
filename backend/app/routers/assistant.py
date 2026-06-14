@@ -20,9 +20,21 @@ from app.models.schemas import (
     RhythmPacingRequest,
     RhythmPacingResponse,
     AssistantPersona,
+    AudioCoexistenceSettings,
 )
 from app.services import pacing_service
 from app.prototype import assistant_provider
+from app.services.cue_plan_runtime_service import cue_plan_runtime_service, RuntimeCueSelectionResponse
+from typing import Optional, List
+from pydantic import BaseModel
+
+class RuntimeCueSelectionRequest(BaseModel):
+    video_id: str
+    current_time_ms: float
+    coexistence_settings: AudioCoexistenceSettings
+    assistant_muted: bool
+    recently_delivered_cue_ids: Optional[List[str]] = None
+
 
 router = APIRouter()
 
@@ -131,3 +143,19 @@ async def get_form_risk_templates(exercise_id: UUID) -> list[str]:
     These templates are supplementary cues — not a replacement trainer script.
     """
     return assistant_provider.get_form_risk_templates(exercise_id)
+
+
+@router.post("/cue-plan/select", response_model=RuntimeCueSelectionResponse)
+async def select_cue_candidate(payload: RuntimeCueSelectionRequest) -> RuntimeCueSelectionResponse:
+    """Selects the next eligible cue plan candidate deterministically based on playback state and settings.
+    
+    This endpoint does not call Gemini.
+    """
+    return cue_plan_runtime_service.select_cue(
+        video_id=payload.video_id,
+        current_time_ms=payload.current_time_ms,
+        settings=payload.coexistence_settings,
+        assistant_muted=payload.assistant_muted,
+        recently_delivered_cue_ids=payload.recently_delivered_cue_ids,
+    )
+

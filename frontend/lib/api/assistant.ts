@@ -1,5 +1,11 @@
 import { API_BASE_URL, checkResponse } from "./client";
-import { AssistantCue, QARequest, CorrectionRequest } from "../../types";
+import {
+  AssistantCue,
+  QARequest,
+  CorrectionRequest,
+  RuntimeCueSelectionRequest,
+  RuntimeCueSelectionResponse,
+} from "../../types";
 
 // ============================================================================
 // Wired API Surface - Assistant Telemetry and Q&A
@@ -32,5 +38,20 @@ export async function generateCorrection(payload: CorrectionRequest): Promise<As
   });
   return checkResponse<AssistantCue>(res, "Failed to generate correction cue");
 }
+
+
+
+/** Selects the next eligible cue plan candidate deterministically based on playback state and settings. */
+export async function selectCueCandidate(payload: RuntimeCueSelectionRequest): Promise<RuntimeCueSelectionResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/assistant/cue-plan/select`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  return checkResponse<RuntimeCueSelectionResponse>(res, "Failed to select cue candidate");
+}
+
 
 

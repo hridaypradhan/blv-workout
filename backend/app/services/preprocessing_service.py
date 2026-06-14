@@ -20,6 +20,7 @@ from app.services.transcript_service import get_youtube_transcript
 from app.services.sidecar_service import sidecar_service
 from app.services.sidecar_manifest_store import save_manifest_to_disk
 from app.services.sidecar_providers.registry import provider_requires_transcript
+from app.services.cue_plan_service import cue_plan_service
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,19 @@ def run_assistance_preparation(video_id: str, youtube_url: str) -> None:
         job = job_store.get_job(video_id)
         manifest = sidecar_service.generate_sidecar(job, full_transcript, segments)
         save_manifest_to_disk(video_id, manifest)
+        
+        # Generate and save candidate Cue Plan
+        try:
+            logger.info("Generating candidate cue plan for prepared video: %s", video_id)
+            cue_plan_service.generate_cue_plan(job, manifest)
+        except Exception as cue_exc:
+            logger.exception("Cue plan generation failed entirely for video %s (non-fatal):", video_id)
+            job_store.update_stage(
+                video_id,
+                job.stage,
+                cue_plan_provider="none",
+                cue_plan_fallback_reason=f"generation_failed_entirely: {cue_exc}"
+            )
         
         # Stage: completed
         job_store.update_stage(video_id, ProcessingStage.COMPLETED)

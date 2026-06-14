@@ -341,7 +341,7 @@ export default function ProcessVideo() {
 
           {/* List of steps */}
           <div
-            className="relative border-l-2 border-slate-800 ml-3.5 pl-6 space-y-8"
+            className="space-y-0"
             role="feed"
             aria-busy={isProcessing}
           >
@@ -377,29 +377,36 @@ export default function ProcessVideo() {
               return (
                 <div
                   key={step.key}
-                  className="relative group"
+                  className="flex gap-4 items-stretch"
                   aria-label={`Stage ${idx + 1}: ${step.name}${statusLabel}`}
                 >
-                  {/* Step dot */}
-                  <span
-                    className={`absolute -left-[33px] top-0 flex items-center justify-center w-5 h-5 rounded-full border-2 font-bold text-xs transition-all duration-300 ${dotClasses}`}
-                    aria-hidden="true"
-                  >
-                    {state === "completed" ? (
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : state === "failed" ? (
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    ) : (
-                      idx + 1
+                  {/* Left Marker Column */}
+                  <div className="flex flex-col items-center shrink-0 w-6">
+                    {/* Step dot */}
+                    <div
+                      className={`flex items-center justify-center w-6 h-6 rounded-full border-2 font-bold text-xs transition-all duration-300 shrink-0 ${dotClasses}`}
+                      aria-hidden="true"
+                    >
+                      {state === "completed" ? (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : state === "failed" ? (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      ) : (
+                        idx + 1
+                      )}
+                    </div>
+                    {/* Connector line segment */}
+                    {idx < PIPELINE_STEPS.length - 1 && (
+                      <div className="w-0.5 bg-slate-800 grow" />
                     )}
-                  </span>
+                  </div>
 
-                  {/* Text description */}
-                  <div>
+                  {/* Text description Column */}
+                  <div className="pb-8 flex-1 min-w-0">
                     <h3
                       className={`text-sm font-bold transition-colors ${titleClasses}`}
                     >

@@ -1,6 +1,7 @@
 "use client";
 
 import Header from "./Header";
+import { useLayout } from "./LayoutContext";
 
 interface PageWrapperProps {
   children: React.ReactNode;
@@ -8,8 +9,11 @@ interface PageWrapperProps {
 }
 
 export default function PageWrapper({ children, id = "main-wrapper" }: PageWrapperProps) {
+  const { sidebarCollapsed } = useLayout();
   return (
-    <div id={id} className="min-h-screen pl-0 md:pl-64 bg-slate-950 text-slate-100 flex flex-col">
+    <div id={id} className={`min-h-screen bg-slate-950 text-slate-100 flex flex-col transition-all duration-300 ${
+      sidebarCollapsed ? "pl-0 md:pl-16" : "pl-0 md:pl-64"
+    }`}>
       {/* Header component */}
       <Header id="main-header" />
 

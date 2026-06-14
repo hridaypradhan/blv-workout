@@ -903,9 +903,9 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       </div>
 
       {/* Top Bar: Sleeve Calibration & Device Strip */}
-      <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-6 shadow-md" aria-label="Device Status Bar">
-        <div className="flex items-center gap-2">
-          <span className={`w-2.5 h-2.5 rounded-full ${hapticState === "connected" ? "bg-emerald-500 animate-ping" : hapticState === "connecting" ? "bg-yellow-500 animate-pulse" : "bg-red-500"}`} />
+      <section className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-6 shadow-md" aria-label="Device Status Bar">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${hapticState === "connected" ? "bg-emerald-500 animate-ping" : hapticState === "connecting" ? "bg-yellow-500 animate-pulse" : "bg-red-500"}`} />
           <span className="text-sm font-semibold text-slate-300">
             {hapticState === "connected"
               ? "Prototype Sleeve Calibration Mode (Simulated)"
@@ -914,7 +914,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 : "Prototype Sleeves Disconnected (Simulated)"}
           </span>
         </div>
-        <div className="flex flex-wrap gap-3 sm:gap-4" aria-label="Individual Limb Calibration Statuses">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 xl:gap-4 w-full xl:w-auto" aria-label="Individual Limb Calibration Statuses">
           {sleeveStatus.map((s) => {
             const limbStatusText = s.styleState === "connected"
               ? "Prototype Cue Ready"
@@ -927,12 +927,13 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                 ? "bg-yellow-500 animate-pulse"
                 : "bg-red-500";
             return (
-              <div key={s.label} className="flex items-center gap-1.5" aria-label={`${s.name}: ${limbStatusText}`}>
-                <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} aria-hidden="true" />
-                <span className="text-sm font-bold text-slate-300">
+              <div key={s.label} className="flex items-center gap-2 p-2 bg-slate-950 border border-slate-800/60 rounded-xl min-w-0" aria-label={`${s.name}: ${limbStatusText}`}>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} aria-hidden="true" />
+                <div className="text-xs font-bold text-slate-300 min-w-0">
                   <span className="sr-only">{s.name} </span>
-                  <span>{s.label}</span> ({limbStatusText})
-                </span>
+                  <span className="text-yellow-400">{s.label}: </span>
+                  <span className="block md:inline font-semibold text-slate-400" title={limbStatusText}>{limbStatusText}</span>
+                </div>
               </div>
             );
           })}

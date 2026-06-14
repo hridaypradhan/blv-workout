@@ -195,30 +195,53 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 </p>
               </div>
 
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {sleeveStatus.map((sleeve) => {
                   const isTesting = !!testingSleeves[sleeve.key];
                   const testResult = sleeveResults[sleeve.key];
                   return (
-                    <div key={sleeve.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                      <div className="flex items-center justify-between sm:justify-start gap-4 flex-1">
-                        <span className="text-sm font-semibold text-slate-200">{sleeve.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full ${sleeve.colorClass}`} aria-hidden="true" />
-                          <span className="text-sm font-semibold text-slate-300">{sleeve.statusText}</span>
-                        </div>
+                    <div
+                      key={sleeve.key}
+                      className="flex flex-col justify-between p-4 bg-slate-950 border border-slate-800 rounded-xl gap-3"
+                    >
+                      {/* Top: Sleeve Name */}
+                      <div>
+                        <span className="text-sm font-semibold text-slate-200 block">
+                          {sleeve.name}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-3 self-end sm:self-auto">
-                        {testResult && (
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${testResult === "Pulse Fired" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400"}`}>
-                            {testResult}
-                          </span>
-                        )}
+
+                      {/* Middle: Connection Status */}
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${sleeve.colorClass}`}
+                          aria-hidden="true"
+                        />
+                        <span className="text-sm font-semibold text-slate-300">
+                          {sleeve.statusText}
+                        </span>
+                      </div>
+
+                      {/* Bottom/Action Row */}
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-900 mt-auto">
+                        <div className="min-w-0">
+                          {testResult && (
+                            <span
+                              className={`text-xs font-semibold px-2 py-0.5 rounded inline-block ${
+                                testResult === "Pulse Fired"
+                                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                  : "bg-red-500/10 border border-red-500/20 text-red-400"
+                              }`}
+                            >
+                              {testResult}
+                            </span>
+                          )}
+                        </div>
                         <button
                           type="button"
                           onClick={() => handleTestSleeve(sleeve.key, sleeve.name)}
                           disabled={isTesting}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-xs font-bold text-slate-200 border border-slate-700 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all"
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-xs font-bold text-slate-200 border border-slate-700 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all text-center shrink-0"
                           aria-label={`Test ${sleeve.name} haptic cue`}
                         >
                           {isTesting ? "Testing..." : "Test"}

@@ -12,7 +12,7 @@ interface SidebarProps {
 
 export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
   const pathname = usePathname();
-  const { sidebarOpen, setSidebarOpen } = useLayout();
+  const { sidebarOpen, setSidebarOpen, sidebarCollapsed } = useLayout();
 
   const {
     statusText,
@@ -179,25 +179,32 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
 
       <aside
         id={id}
-        className={`fixed inset-y-0 left-0 z-40 flex flex-col w-64 bg-slate-900 border-r border-slate-800 text-slate-100 transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-slate-900 border-r border-slate-800 text-slate-100 transition-all duration-300 ease-in-out md:translate-x-0 w-64 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } ${
+          sidebarCollapsed ? "md:w-16" : "md:w-64"
         }`}
         aria-label="Sidebar Navigation"
       >
         {/* Brand Section */}
-        <div className="flex items-center justify-between h-16 px-6 border-b border-slate-800">
+        <div className={`flex items-center border-b border-slate-800 transition-all duration-300 ${
+          sidebarCollapsed ? "justify-center h-16 px-0" : "justify-between h-16 px-6"
+        }`}>
           <Link
             href="/"
             onClick={() => setSidebarOpen(false)}
             className="flex items-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 rounded"
             aria-label="FitA11y Home Page"
+            title={sidebarCollapsed ? "FitA11y" : undefined}
           >
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-900 font-bold text-lg">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-900 font-bold text-lg shrink-0">
               FA
             </div>
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-yellow-400 to-amber-200 bg-clip-text text-transparent">
-              FitA11y
-            </span>
+            {!sidebarCollapsed && (
+              <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-yellow-400 to-amber-200 bg-clip-text text-transparent">
+                FitA11y
+              </span>
+            )}
           </Link>
 
           {/* Close Sidebar Button for Mobile Accessibility */}
@@ -221,7 +228,9 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+        <nav className={`flex-1 py-6 space-y-2 overflow-y-auto ${
+          sidebarCollapsed ? "px-2" : "px-4"
+        }`}>
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -229,18 +238,24 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
                 key={item.name}
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-1 ${
+                title={sidebarCollapsed ? item.name : undefined}
+                className={`flex items-center rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-1 ${
+                  sidebarCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3"
+                } ${
                   isActive
                     ? "bg-yellow-400 text-slate-950 shadow-lg shadow-yellow-400/10 font-bold"
                     : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/60"
                 }`}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={item.name}
               >
-                <span className={isActive ? "text-slate-950" : "text-slate-400 group-hover:text-slate-100"}>
+                <span className={isActive ? "text-slate-950" : "text-slate-400 group-hover:text-slate-100 shrink-0"}>
                   {item.icon}
                 </span>
-                <span>{item.name}</span>
-                {item.isPlaceholder && (
+                <span className={sidebarCollapsed ? "sr-only" : "text-sm font-medium truncate"}>
+                  {item.name}
+                </span>
+                {!sidebarCollapsed && item.isPlaceholder && (
                   <span className="ml-auto text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
                     Placeholder
                   </span>
@@ -252,31 +267,45 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
 
         {/* Quick Access / Haptic Sleeve Status Info (Useful for BLV Users) */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/40">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-800 bg-slate-900/60">
-            <div className={`w-2.5 h-2.5 rounded-full ${
-              isConnected ? "bg-emerald-500" : isConnecting ? "bg-yellow-500 animate-pulse" : "bg-red-500 animate-pulse"
-            }`} aria-hidden="true" />
-            <div className="flex-1 text-xs">
-              <p className="font-semibold text-slate-200">Haptic Sleeve</p>
-              <p className="text-slate-300 font-medium">{statusText}</p>
-            </div>
+          {sidebarCollapsed ? (
             <button
               onClick={toggleConnection}
               disabled={isConnecting}
-              className="text-xs font-bold text-yellow-400 hover:text-yellow-300 disabled:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5"
-              aria-pressed={isConnected}
-              aria-label={
-                isConnected
-                  ? "Disconnect Haptic Sleeve (Prototype)"
-                  : isConnecting
-                  ? "Connecting Haptic Sleeve (Prototype)"
-                  : "Connect Haptic Sleeve (Prototype)"
-              }
-              id="sleeve-connect-btn"
+              className="flex items-center justify-center mx-auto w-8 h-8 rounded-lg border border-slate-800 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+              aria-label={`Haptic Sleeve Status: ${statusText}. Click to toggle connection.`}
+              title={`Haptic Sleeve: ${statusText}`}
             >
-              {isConnected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                isConnected ? "bg-emerald-500" : isConnecting ? "bg-yellow-500 animate-pulse" : "bg-red-500 animate-pulse"
+              }`} />
             </button>
-          </div>
+          ) : (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-800 bg-slate-900/60">
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                isConnected ? "bg-emerald-500" : isConnecting ? "bg-yellow-500 animate-pulse" : "bg-red-500 animate-pulse"
+              }`} aria-hidden="true" />
+              <div className="flex-1 text-xs min-w-0">
+                <p className="font-semibold text-slate-200">Haptic Sleeve</p>
+                <p className="text-slate-300 font-medium truncate">{statusText}</p>
+              </div>
+              <button
+                onClick={toggleConnection}
+                disabled={isConnecting}
+                className="text-xs font-bold text-yellow-400 hover:text-yellow-300 disabled:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5 shrink-0"
+                aria-pressed={isConnected}
+                aria-label={
+                  isConnected
+                    ? "Disconnect Haptic Sleeve (Prototype)"
+                    : isConnecting
+                    ? "Connecting Haptic Sleeve (Prototype)"
+                    : "Connect Haptic Sleeve (Prototype)"
+                }
+                id="sleeve-connect-btn"
+              >
+                {isConnected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
+              </button>
+            </div>
+          )}
         </div>
       </aside>
     </>

@@ -52,6 +52,12 @@ class TestSidecarInspection(unittest.TestCase):
         job_store._load_from_disk()
 
     def setUp(self):
+        self.original_provider = settings.STORAGE_PROVIDER
+        settings.STORAGE_PROVIDER = "local_json"
+        from app.core.storage import factory
+        factory._job_storage = None
+        factory._artifact_storage = None
+
         job_store._jobs.clear()
         self.original_ai_provider = settings.AI_PROVIDER
         self.original_api_key = settings.GEMINI_API_KEY
@@ -61,6 +67,11 @@ class TestSidecarInspection(unittest.TestCase):
         settings.AI_PROVIDER = self.original_ai_provider
         settings.GEMINI_API_KEY = self.original_api_key
         settings.AI_DIAGNOSTICS_ENABLED = self.original_diagnostics_enabled
+
+        settings.STORAGE_PROVIDER = self.original_provider
+        from app.core.storage import factory
+        factory._job_storage = None
+        factory._artifact_storage = None
 
     def test_metadata_added_for_prototype_sidecars(self):
         """Verify generation metadata is added for normal prototype sidecars."""

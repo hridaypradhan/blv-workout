@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.core.config import settings
-from app.core.job_store import job_store, JobRecord
+from app.core.job_store import JobRecord
+from app.core.storage import get_job_storage, get_artifact_storage
 from app.models.cue_plan_schemas import CuePlan, CuePlanGenerationMetadata
 from app.models.schemas import AssistanceSidecarManifest
 from app.services.cue_plan_providers.base import CuePlanGenerationInput
@@ -28,8 +29,10 @@ from app.services.cue_plan_providers.prototype import (
     SCHEMA_VERSION as PROTOTYPE_SCHEMA_VERSION,
 )
 from app.services.cue_plan_validator import validate_and_clamp_cue_plan
-from app.services.cue_plan_store import save_cue_plan_to_disk
-from app.core.prototype_persistence import save_json_store
+
+# Wrapper to preserve compatibility with test patching
+def save_cue_plan_to_disk(video_id: str, cue_plan: CuePlan) -> None:
+    get_artifact_storage().save_cue_plan(video_id, cue_plan)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,7 @@ class CuePlanService:
 
         If Gemini is requested but fails or lacks API keys, falls back to prototype.
         """
+        job_store = get_job_storage()
         provider_name = settings.AI_PROVIDER
         resolved_name, provider = resolve_cue_plan_provider(provider_name)
         duration = job.duration or 600.0
@@ -187,6 +191,7 @@ class CuePlanService:
         sidecar_manifest: AssistanceSidecarManifest,
         fallback_reason: str,
     ) -> CuePlan:
+        job_store = get_job_storage()
         from app.services.cue_plan_providers.prototype import PrototypeCuePlanProvider
         provider = PrototypeCuePlanProvider()
         duration = job.duration or 600.0
@@ -285,7 +290,7 @@ class CuePlanService:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         
-        save_json_store(f"ai_diagnostics/cue_plan_{video_id}.json", diagnostics_data)
+        get_artifact_storage().save_cue_plan_diagnostics(video_id, diagnostics_data)
         logger.info("Saved cue plan AI diagnostics summary for video %s", video_id)
 
 

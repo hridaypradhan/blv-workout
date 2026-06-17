@@ -29,6 +29,12 @@ class TestCuePlanGeneration(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls.original_provider = settings.STORAGE_PROVIDER
+        settings.STORAGE_PROVIDER = "local_json"
+        from app.core.storage import factory
+        factory._job_storage = None
+        factory._artifact_storage = None
+
         cls.original_data_dir = settings.PROTOTYPE_DATA_DIR
         cls.temp_dir = tempfile.TemporaryDirectory()
         settings.PROTOTYPE_DATA_DIR = cls.temp_dir.name
@@ -39,6 +45,11 @@ class TestCuePlanGeneration(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        settings.STORAGE_PROVIDER = cls.original_provider
+        from app.core.storage import factory
+        factory._job_storage = None
+        factory._artifact_storage = None
+
         settings.PROTOTYPE_DATA_DIR = cls.original_data_dir
         cls.temp_dir.cleanup()
         

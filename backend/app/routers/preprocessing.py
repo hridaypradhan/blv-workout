@@ -12,20 +12,32 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
-from app.core.job_store import job_store, JobRecord
+from app.core.job_store import JobRecord
+from app.core.storage import get_job_storage, get_artifact_storage
 from app.models.schemas import AssistanceSidecarManifest, ProcessingStage, YouTubeURL
 from app.services.preprocessing_service import run_assistance_preparation
 from app.services.sidecar_service import sidecar_service
-from app.services.sidecar_manifest_store import load_manifest_from_disk, delete_manifest_from_disk
-from app.core.prototype_persistence import delete_json_store
 from app.models.cue_plan_schemas import CuePlan
-from app.services.cue_plan_store import load_cue_plan_from_disk, delete_cue_plan_from_disk
+
+# Wrappers to preserve compatibility with test patching
+def load_manifest_from_disk(video_id: str) -> Optional[AssistanceSidecarManifest]:
+    return get_artifact_storage().load_manifest(video_id)
+
+def delete_manifest_from_disk(video_id: str) -> bool:
+    return get_artifact_storage().delete_manifest(video_id)
+
+def load_cue_plan_from_disk(video_id: str) -> Optional[CuePlan]:
+    return get_artifact_storage().load_cue_plan(video_id)
+
+def delete_cue_plan_from_disk(video_id: str) -> bool:
+    return get_artifact_storage().delete_cue_plan(video_id)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -67,7 +79,7 @@ async def submit_video(
             detail="Invalid YouTube URL. Please provide a valid youtube.com or youtu.be link.",
         )
 
-    job = job_store.create_job(url_str)
+    job = get_job_storage().create_job(url_str)
     background_tasks.add_task(run_assistance_preparation, job.video_id, url_str)
 
     return {"video_id": job.video_id}
@@ -76,7 +88,7 @@ async def submit_video(
 @router.get("/status/{video_id}")
 async def get_processing_status(video_id: UUID) -> dict:
     """Return the current assistance preparation status for a submitted video."""
-    job = job_store.get_job(str(video_id))
+    job = get_job_storage().get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
     return _job_to_status_dict(job)
@@ -85,7 +97,7 @@ async def get_processing_status(video_id: UUID) -> dict:
 @router.get("/events/{video_id}")
 async def stream_events(video_id: UUID) -> StreamingResponse:
     """Server-Sent Events endpoint for real-time assistance preparation updates."""
-    job = job_store.get_job(str(video_id))
+    job = get_job_storage().get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
 
@@ -94,7 +106,7 @@ async def stream_events(video_id: UUID) -> StreamingResponse:
         last_stage = None
 
         while True:
-            job = job_store.get_job(vid)
+            job = get_job_storage().get_job(vid)
             if job is None:
                 # Job was deleted
                 yield f"data: {json.dumps({'stage': 'deleted', 'error': 'Job was deleted'})}\n\n"
@@ -133,7 +145,7 @@ async def stream_events(video_id: UUID) -> StreamingResponse:
 @router.get("/manifest/{video_id}", response_model=AssistanceSidecarManifest)
 async def get_sidecar_manifest(video_id: UUID) -> AssistanceSidecarManifest:
     """Return the assistance sidecar manifest for a prepared YouTube video."""
-    job = job_store.get_job(str(video_id))
+    job = get_job_storage().get_job(str(video_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Video not found.")
 
@@ -161,7 +173,7 @@ async def inspect_sidecar_manifest(video_id: UUID) -> dict:
     if manifest is None:
         raise HTTPException(status_code=404, detail="Sidecar manifest not found on disk.")
 
-    job = job_store.get_job(str(video_id))
+    job = get_job_storage().get_job(str(video_id))
 
     # Calculate anchors timeline ordering sanity
     anchors_out_of_order_count = 0
@@ -239,17 +251,17 @@ async def inspect_sidecar_manifest(video_id: UUID) -> dict:
 @router.delete("/{video_id}")
 async def delete_prepared_video(video_id: UUID) -> dict:
     """Remove a prepared video and its assistance artifacts."""
-    deleted = job_store.delete_job(str(video_id))
+    deleted = get_job_storage().delete_job(str(video_id))
     if not deleted:
         raise HTTPException(status_code=404, detail="Video not found.")
     
     # Attempt to delete the corresponding sidecar manifest file and diagnostics
     delete_manifest_from_disk(str(video_id))
-    delete_json_store(f"ai_diagnostics/{video_id}.json")
+    get_artifact_storage().delete_sidecar_diagnostics(str(video_id))
     
     # Clean up cue plan and diagnostics
     delete_cue_plan_from_disk(str(video_id))
-    delete_json_store(f"ai_diagnostics/cue_plan_{video_id}.json")
+    get_artifact_storage().delete_cue_plan_diagnostics(str(video_id))
     
     return {"status": "deleted", "video_id": str(video_id)}
 
@@ -309,5 +321,5 @@ async def inspect_cue_plan(video_id: UUID) -> dict:
 @router.get("/jobs")
 async def list_jobs() -> list[dict]:
     """List all assistance preparation jobs (newest first)."""
-    jobs = job_store.list_jobs()
+    jobs = get_job_storage().list_jobs()
     return [j.to_dict() for j in jobs]

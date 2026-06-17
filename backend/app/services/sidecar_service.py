@@ -26,8 +26,8 @@ from app.services.sidecar_providers.prototype import (
     SCHEMA_VERSION as PROTOTYPE_SCHEMA_VERSION,
 )
 from app.services.sidecar_validator import validate_and_clamp_sidecar_manifest_with_warnings
-from app.core.job_store import job_store, JobRecord
-from app.core.prototype_persistence import save_json_store
+from app.core.job_store import JobRecord
+from app.core.storage import get_job_storage, get_artifact_storage
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ class SidecarService:
         transcript_text: str,
         transcript_segments: list[dict[str, Any]] | None = None,
     ) -> AssistanceSidecarManifest:
+        job_store = get_job_storage()
         provider_name = settings.AI_PROVIDER
         resolved_name, provider = resolve_sidecar_provider(provider_name)
         video_uuid = uuid.UUID(job.video_id)
@@ -323,7 +324,7 @@ class SidecarService:
             "generated_at": datetime.now(timezone.utc).isoformat()
         }
 
-        save_json_store(f"ai_diagnostics/{job.video_id}.json", diagnostics_data)
+        get_artifact_storage().save_sidecar_diagnostics(job.video_id, diagnostics_data)
         logger.info("Saved AI diagnostics summary to disk persistence for video %s", job.video_id)
 
 

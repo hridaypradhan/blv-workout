@@ -36,9 +36,21 @@ class TestSidecarService(unittest.TestCase):
         job_store._load_from_disk()
 
     def setUp(self):
+        self.original_provider = settings.STORAGE_PROVIDER
+        settings.STORAGE_PROVIDER = "local_json"
+        from app.core.storage import factory
+        factory._job_storage = None
+        factory._artifact_storage = None
+
         job_store._jobs.clear()
         from app.services.ai.gemini_client import gemini_client
         gemini_client._client = None
+
+    def tearDown(self):
+        settings.STORAGE_PROVIDER = self.original_provider
+        from app.core.storage import factory
+        factory._job_storage = None
+        factory._artifact_storage = None
 
     @patch("app.services.sidecar_service.settings")
     def test_provider_fallback_when_key_missing(self, mock_settings):

@@ -6,7 +6,11 @@ from uuid import UUID
 
 from app.models.cue_plan_schemas import CuePlan, CueCandidate, CueModality, CuePriority, InterruptionPolicyHint
 from app.models.schemas import AudioCoexistenceSettings, InterruptionLevel, AssistantVerbosity
-from app.services.cue_plan_store import load_cue_plan_from_disk
+from app.core.storage import get_artifact_storage
+
+# Wrapper to preserve compatibility with test patching
+def load_cue_plan_from_disk(video_id: str) -> Optional[CuePlan]:
+    return get_artifact_storage().load_cue_plan(video_id)
 
 logger = logging.getLogger(__name__)
 

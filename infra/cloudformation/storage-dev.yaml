@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation stack for FitA11y development storage (S3 Bucket and DynamoDB Tables).'
+
+Resources:
+  # S3 Bucket for Workout and Preprocessing Artifacts
+  FitA11yDevArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: fita11y-dev-artifacts-905418181041
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # DynamoDB Table: FitA11y-dev-Users
+  FitA11yDevUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: FitA11y-dev-Users
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+
+  # DynamoDB Table: FitA11y-dev-Jobs
+  FitA11yDevJobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: FitA11y-dev-Jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: video_id
+          AttributeType: S
+        - AttributeName: library_partition
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: video_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: LibraryPartitionCreatedAtIndex
+          KeySchema:
+            - AttributeName: library_partition
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # DynamoDB Table: FitA11y-dev-Sessions
+  FitA11yDevSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: FitA11y-dev-Sessions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: started_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdStartedAtIndex
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+            - AttributeName: started_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # DynamoDB Table: FitA11y-dev-SessionEvents
+  FitA11yDevSessionEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: FitA11y-dev-SessionEvents
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: event_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+        - AttributeName: event_key
+          KeyType: RANGE
+
+Outputs:
+  ArtifactsBucketName:
+    Description: 'Name of the S3 Bucket for FitA11y artifacts'
+    Value: !Ref FitA11yDevArtifactsBucket
+    Export:
+      Name: FitA11y-dev-ArtifactsBucketName
+
+  UsersTableName:
+    Description: 'Name of the Users DynamoDB Table'
+    Value: !Ref FitA11yDevUsersTable
+    Export:
+      Name: FitA11y-dev-UsersTableName
+
+  JobsTableName:
+    Description: 'Name of the Preprocessing Jobs DynamoDB Table'
+    Value: !Ref FitA11yDevJobsTable
+    Export:
+      Name: FitA11y-dev-JobsTableName
+
+  SessionsTableName:
+    Description: 'Name of the Sessions DynamoDB Table'
+    Value: !Ref FitA11yDevSessionsTable
+    Export:
+      Name: FitA11y-dev-SessionsTableName
+
+  SessionEventsTableName:
+    Description: 'Name of the Session Events DynamoDB Table'
+    Value: !Ref FitA11yDevSessionEventsTable
+    Export:
+      Name: FitA11y-dev-SessionEventsTableName

@@ -12,6 +12,7 @@ UNSET: Any = object()
 
 from app.models.schemas import ProcessingStage
 from app.core.prototype_persistence import load_json_store, save_json_store
+from app.core.storage.interfaces import JobStorage
 
 
 @dataclass
@@ -143,7 +144,7 @@ def is_legitimate_job(job: JobRecord) -> bool:
     return True
 
 
-class JobStore:
+class JobStore(JobStorage):
     """Thread-safe in-memory store for assistance preparation job records."""
 
     def __init__(self) -> None:

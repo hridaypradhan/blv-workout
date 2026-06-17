@@ -9,7 +9,6 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash"
     AI_PROVIDER: str = "prototype"
-    DATABASE_URL: str = ""
     AI_DIAGNOSTICS_ENABLED: bool = True
     YOUTUBE_API_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
@@ -22,6 +21,16 @@ class Settings(BaseSettings):
     # Local JSON-backed persistence settings for the prototype
     PROTOTYPE_PERSISTENCE_ENABLED: bool = True
     PROTOTYPE_DATA_DIR: str = ".prototype_data"
+
+    # Storage Architecture Configuration
+    STORAGE_PROVIDER: str = "local_json"
+    AWS_PROFILE: str = ""
+    AWS_REGION: str = "us-east-2"
+    DYNAMODB_USERS_TABLE: str = "FitA11y-dev-Users"
+    DYNAMODB_JOBS_TABLE: str = "FitA11y-dev-Jobs"
+    DYNAMODB_SESSIONS_TABLE: str = "FitA11y-dev-Sessions"
+    DYNAMODB_SESSION_EVENTS_TABLE: str = "FitA11y-dev-SessionEvents"
+    ARTIFACTS_BUCKET: str = "fita11y-dev-artifacts-905418181041"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

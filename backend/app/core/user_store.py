@@ -9,6 +9,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from app.core.prototype_persistence import load_json_store, save_json_store
+from app.core.storage.interfaces import UserStorage
 
 from app.models.schemas import (
     AssistantPersona,
@@ -23,7 +24,7 @@ from app.models.schemas import (
 PROTOTYPE_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
-class UserStore:
+class UserStore(UserStorage):
     """Thread-safe in-memory store for user profiles and accessibility settings."""
 
     def __init__(self) -> None:

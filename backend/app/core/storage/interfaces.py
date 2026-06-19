@@ -10,6 +10,7 @@ from app.models.schemas import (
     FormError,
     ProcessingStage,
     AssistanceSidecarManifest,
+    TranscriptArtifact,
 )
 from app.models.cue_plan_schemas import CuePlan
 
@@ -190,3 +191,19 @@ class GeneratedArtifactStorage(ABC):
     def delete_cue_plan_diagnostics(self, video_id: str) -> bool:
         """Delete cue plan diagnostics from persistence."""
         pass
+
+    @abstractmethod
+    def load_transcript(self, video_id: str) -> Optional[TranscriptArtifact]:
+        """Load transcript artifact from persistence."""
+        pass
+
+    @abstractmethod
+    def save_transcript(self, video_id: str, transcript_data: TranscriptArtifact) -> None:
+        """Save transcript artifact to persistence."""
+        pass
+
+    @abstractmethod
+    def delete_transcript(self, video_id: str) -> bool:
+        """Delete transcript artifact from persistence."""
+        pass
+

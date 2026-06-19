@@ -40,6 +40,7 @@ class JobRecord:
     cue_plan_fallback_reason: Optional[str] = None
     caption_status: Optional[str] = None
     transcript_segments: Optional[list[dict]] = None
+    has_transcript_artifact: Optional[bool] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
@@ -61,6 +62,7 @@ class JobRecord:
             "cue_plan_fallback_reason": self.cue_plan_fallback_reason,
             "caption_status": self.caption_status,
             "transcript_segments": self.transcript_segments,
+            "has_transcript_artifact": self.has_transcript_artifact,
             "created_at": self.created_at,
         }
 
@@ -177,6 +179,7 @@ class JobStore(JobStorage):
                             cue_plan_fallback_reason=v.get("cue_plan_fallback_reason"),
                             caption_status=v.get("caption_status"),
                             transcript_segments=v.get("transcript_segments"),
+                            has_transcript_artifact=v.get("has_transcript_artifact"),
                             created_at=v.get("created_at"),
                         )
                         if is_legitimate_job(job):
@@ -268,6 +271,7 @@ class JobStore(JobStorage):
         cue_plan_fallback_reason: Optional[str] = UNSET,
         caption_status: Optional[str] = UNSET,
         transcript_segments: Optional[list[dict]] = UNSET,
+        has_transcript_artifact: Optional[bool] = UNSET,
     ) -> None:
         """Update a job's stage and optional metadata fields."""
         with self._lock:
@@ -301,6 +305,8 @@ class JobStore(JobStorage):
                 job.caption_status = caption_status
             if transcript_segments is not UNSET:
                 job.transcript_segments = transcript_segments
+            if has_transcript_artifact is not UNSET:
+                job.has_transcript_artifact = has_transcript_artifact
             self._save_to_disk()
 
     def delete_job(self, video_id: str) -> bool:

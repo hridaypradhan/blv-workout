@@ -57,6 +57,8 @@ def _job_to_status_dict(job: JobRecord) -> dict:
         "duration": job.duration,
         "sidecar_provider": job.sidecar_provider,
         "sidecar_fallback_reason": job.sidecar_fallback_reason,
+        "cue_plan_provider": job.cue_plan_provider,
+        "cue_plan_fallback_reason": job.cue_plan_fallback_reason,
         "caption_status": job.caption_status,
         "created_at": job.created_at,
     }
@@ -155,10 +157,19 @@ async def get_sidecar_manifest(video_id: UUID) -> AssistanceSidecarManifest:
         return manifest
 
     # Graceful fallback on-the-fly generation if not pre-persisted
+    transcript_text = job.transcript
+    transcript_segments = job.transcript_segments
+    if not transcript_text:
+        # Load from transcript artifact storage
+        artifact = get_artifact_storage().load_transcript(str(video_id))
+        if artifact:
+            transcript_text = artifact.transcript
+            transcript_segments = artifact.transcript_segments
+
     return sidecar_service.generate_sidecar(
         job,
-        job.transcript or "",
-        job.transcript_segments or []
+        transcript_text or "",
+        transcript_segments or []
     )
 
 
@@ -263,6 +274,9 @@ async def delete_prepared_video(video_id: UUID) -> dict:
     delete_cue_plan_from_disk(str(video_id))
     get_artifact_storage().delete_cue_plan_diagnostics(str(video_id))
     
+    # Clean up transcript artifact
+    get_artifact_storage().delete_transcript(str(video_id))
+    
     return {"status": "deleted", "video_id": str(video_id)}
 
 
@@ -322,4 +336,10 @@ async def inspect_cue_plan(video_id: UUID) -> dict:
 async def list_jobs() -> list[dict]:
     """List all assistance preparation jobs (newest first)."""
     jobs = get_job_storage().list_jobs()
-    return [j.to_dict() for j in jobs]
+    results = []
+    for j in jobs:
+        d = j.to_dict()
+        d.pop("transcript", None)
+        d.pop("transcript_segments", None)
+        results.append(d)
+    return results

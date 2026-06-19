@@ -7,7 +7,7 @@ import botocore.exceptions
 from app.core.config import settings
 from app.core.storage import get_artifact_storage
 from app.core.storage.s3_artifacts import S3GeneratedArtifactStorage
-from app.models.schemas import AssistanceSidecarManifest
+from app.models.schemas import AssistanceSidecarManifest, TranscriptArtifact
 from app.models.cue_plan_schemas import CuePlan
 
 
@@ -191,3 +191,41 @@ class TestS3GeneratedArtifactStorage(unittest.TestCase):
             Bucket=settings.ARTIFACTS_BUCKET,
             Key=f"diagnostics/cue-plan/{video_id}.json"
         )
+
+    def test_transcript_crud(self) -> None:
+        storage = S3GeneratedArtifactStorage()
+        video_id = str(uuid4())
+        transcript_data = TranscriptArtifact(
+            video_id=video_id,
+            caption_status="acquired",
+            transcript="Test transcript text content",
+            transcript_segments=[{"start_ms": 0, "end_ms": 1000, "text": "Hello"}],
+            created_at="2026-06-18T22:00:00Z"
+        )
+
+        # Save
+        storage.save_transcript(video_id, transcript_data)
+        self.mock_s3.put_object.assert_called_once_with(
+            Bucket=settings.ARTIFACTS_BUCKET,
+            Key=f"transcripts/{video_id}.json",
+            Body=transcript_data.model_dump_json(),
+            ContentType="application/json"
+        )
+
+        # Load
+        self.mock_s3.get_object.reset_mock()
+        mock_body = MagicMock()
+        mock_body.read.return_value = transcript_data.model_dump_json().encode("utf-8")
+        self.mock_s3.get_object.return_value = {"Body": mock_body}
+        loaded = storage.load_transcript(video_id)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.transcript, "Test transcript text content")
+
+        # Delete
+        self.mock_s3.delete_object.reset_mock()
+        storage.delete_transcript(video_id)
+        self.mock_s3.delete_object.assert_called_once_with(
+            Bucket=settings.ARTIFACTS_BUCKET,
+            Key=f"transcripts/{video_id}.json"
+        )
+

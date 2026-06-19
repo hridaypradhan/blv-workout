@@ -675,6 +675,16 @@ class RhythmPacingResponse(BaseModel):
     reason: str
 
 
+class TranscriptArtifact(BaseModel):
+    """Developer analysis artifact for raw/segmented video transcript."""
+
+    video_id: str
+    caption_status: str
+    transcript: str
+    transcript_segments: list[dict]
+    created_at: str
+
+
 # Import and re-export Cue Plan schemas to maintain canonical app models namespace
 from app.models.cue_plan_schemas import (
     CueSourceType,

@@ -201,6 +201,7 @@ Upon video preparation completion, the backend persists the generated sidecars, 
 * **Cue Plan**: `backend/.prototype_data/cue_plans/{video_id}.json`
 * **Sidecar Diagnostics**: `backend/.prototype_data/ai_diagnostics/{video_id}.json`
 * **Cue Plan Diagnostics**: `backend/.prototype_data/ai_diagnostics/cue_plan_{video_id}.json`
+* **Transcript Artifact**: `backend/.prototype_data/transcripts/{video_id}.json`
 
 #### When using DynamoDB/S3 persistence (`STORAGE_PROVIDER=dynamodb`):
 Job metadata is updated in the DynamoDB table, and artifacts are uploaded to S3 with the following object keys:
@@ -208,8 +209,9 @@ Job metadata is updated in the DynamoDB table, and artifacts are uploaded to S3 
 * **Cue Plan**: `cue-plans/{video_id}.json`
 * **Sidecar Diagnostics**: `diagnostics/sidecar/{video_id}.json`
 * **Cue Plan Diagnostics**: `diagnostics/cue-plan/{video_id}.json`
+* **Transcript Artifact**: `transcripts/{video_id}.json`
 
-To check job status, fetch progress via `/api/preprocessing/status/{video_id}`. This response includes `sidecar_provider`, `cue_plan_provider`, `caption_status`, and any corresponding fallback reasons.
+To check job status, fetch progress via `/api/preprocessing/status/{video_id}`. This response includes `sidecar_provider`, `cue_plan_provider`, `caption_status`, and any corresponding fallback reasons. Note that large transcript payloads are stored only as developer/analysis artifacts and are omitted from the status endpoint responses to minimize network bandwidth during workout playback.
 
 ### 4. API Endpoints
 * **Get Sidecar Manifest**:
@@ -245,7 +247,7 @@ Follow these steps to manually test the full pipeline:
 2. **Fetch Cue Plan**: Verify that a cue plan has been generated and persisted. In `local_json` mode, verify it exists under `backend/.prototype_data/cue_plans/{video_id}.json`. In `dynamodb` mode, verify it is uploaded to the S3 bucket with key `cue-plans/{video_id}.json`. Query the GET `/api/preprocessing/cue-plan/{video_id}` API endpoint.
 3. **Start Session**: Start a workout session. Open the Live Session playback screen.
 4. **Confirm Cue Delivery**: Play the workout video.
-   - **Speech Delivery**: Verify that cues show up in the Assistant Cue Feed panel and trigger audio alerts.
+   - **Speech Delivery**: Verify that cues show up in the Assistant Cue Feed panel (live cue UI). Note that spoken audio cue/TTS playback is not yet implemented on the frontend client (cues currently appear only in the Assistant Cue Feed/live cue UI, and spoken delivery is a future integration).
    - **Coexistence Check**: Toggle the assistant Mute setting in the session controls. Verify that only haptic notifications trigger when muted (or under Haptic Only mode).
    - **Action Triggers**: Check if playback actions pause or trigger audio ducking recommendations according to candidate interruption policy hints.
 5. **Inspect Diagnostics**: Inspect the generated JSON diagnostics to verify the generation provider, warning lists, and timestamp. In `local_json` mode, check `backend/.prototype_data/ai_diagnostics/cue_plan_{video_id}.json`. In `dynamodb` mode, check S3 key `diagnostics/cue-plan/{video_id}.json`.

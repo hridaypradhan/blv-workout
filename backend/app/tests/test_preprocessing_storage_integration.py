@@ -1,4 +1,4 @@
-"""Unit tests verifying the storage integration fixes in the preprocessing router and sidecar service."""
+"""Unit tests verifying the preprocessing storage integration behaviors in the preprocessing router and sidecar service."""
 
 import importlib
 import unittest
@@ -10,12 +10,13 @@ from app.main import app
 from app.core.config import settings
 from app.core.job_store import JobRecord
 from app.services.sidecar_service import sidecar_service
-from app.models.schemas import AssistanceSidecarManifest
+from app.models.schemas import AssistanceSidecarManifest, TranscriptArtifact
 
-class TestStorageIntegrationFixes(unittest.TestCase):
+class TestPreprocessingStorageIntegration(unittest.TestCase):
+    """Verifies preprocessing job and artifact lifecycle integration across storage providers."""
 
     def test_imports_and_no_name_error(self):
-        """Dynamic reload of modules to guarantee no SyntaxError or NameError (e.g. missing Optional)."""
+        """Verify that modules reload without import errors, SyntaxErrors, or NameErrors."""
         try:
             importlib.reload(importlib.import_module("app.routers.preprocessing"))
             importlib.reload(importlib.import_module("app.services.sidecar_service"))
@@ -24,7 +25,7 @@ class TestStorageIntegrationFixes(unittest.TestCase):
 
     @patch("app.routers.preprocessing.get_job_storage")
     def test_preprocessing_router_uses_active_storage_for_submit(self, mock_get_job_storage):
-        """Verify the /submit route uses get_job_storage() rather than a singleton."""
+        """Verify the /submit route uses the active storage provider to register new jobs."""
         mock_store = MagicMock()
         mock_job = JobRecord(
             video_id=str(uuid4()),
@@ -48,7 +49,7 @@ class TestStorageIntegrationFixes(unittest.TestCase):
 
     @patch("app.routers.preprocessing.get_job_storage")
     def test_preprocessing_router_uses_active_storage_for_status(self, mock_get_job_storage):
-        """Verify the /status route uses get_job_storage() rather than a singleton."""
+        """Verify the /status route retrieves job metadata from the active storage provider."""
         mock_store = MagicMock()
         video_id = str(uuid4())
         mock_job = JobRecord(
@@ -68,7 +69,7 @@ class TestStorageIntegrationFixes(unittest.TestCase):
 
     @patch("app.routers.preprocessing.get_job_storage")
     def test_preprocessing_router_uses_active_storage_for_events(self, mock_get_job_storage):
-        """Verify the /events route uses get_job_storage() rather than a singleton."""
+        """Verify the SSE events loop queries the active storage provider for progress updates."""
         from app.models.schemas import ProcessingStage
         mock_store = MagicMock()
         video_id = str(uuid4())
@@ -83,7 +84,6 @@ class TestStorageIntegrationFixes(unittest.TestCase):
         mock_get_job_storage.return_value = mock_store
 
         client = TestClient(app)
-        # We can just open a stream and close it
         with client.stream("GET", f"/api/preprocessing/events/{video_id}") as response:
             self.assertEqual(response.status_code, 200)
             mock_store.get_job.assert_any_call(video_id)
@@ -91,7 +91,7 @@ class TestStorageIntegrationFixes(unittest.TestCase):
     @patch("app.services.sidecar_service.get_job_storage")
     @patch("app.services.sidecar_service.settings")
     def test_sidecar_service_uses_active_storage(self, mock_settings, mock_get_job_storage):
-        """Verify sidecar_service updates stages through get_job_storage() not singleton."""
+        """Verify that the sidecar generator updates job progress stages in the active storage provider."""
         mock_settings.AI_PROVIDER = "gemini"
         mock_settings.GEMINI_API_KEY = ""  # Force api_key_missing fallback to test updates
         mock_settings.AI_DIAGNOSTICS_ENABLED = False
@@ -108,7 +108,6 @@ class TestStorageIntegrationFixes(unittest.TestCase):
 
         manifest = sidecar_service.generate_sidecar(job, "some transcript")
         self.assertIsNotNone(manifest)
-        # Should have called update_stage on the mock_store, not local singleton
         mock_store.update_stage.assert_called_with(
             job.video_id,
             job.stage,
@@ -121,7 +120,7 @@ class TestStorageIntegrationFixes(unittest.TestCase):
     def test_delete_prepared_video_deletes_all_artifact_categories(
         self, mock_get_artifact_storage, mock_get_job_storage
     ):
-        """Verify that DELETE endpoint removes job metadata and all artifact types from storage."""
+        """Verify that DELETE endpoint cleanses job metadata, manifest, diagnostics, and transcript artifacts."""
         mock_job_store = MagicMock()
         mock_artifact_store = MagicMock()
         
@@ -136,14 +135,68 @@ class TestStorageIntegrationFixes(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "deleted", "video_id": video_id})
         
-        # Verify job is deleted from storage
         mock_job_store.delete_job.assert_called_once_with(video_id)
-        
-        # Verify all artifact types are cleaned up from storage
         mock_artifact_store.delete_manifest.assert_called_once_with(video_id)
         mock_artifact_store.delete_sidecar_diagnostics.assert_called_once_with(video_id)
         mock_artifact_store.delete_cue_plan.assert_called_once_with(video_id)
         mock_artifact_store.delete_cue_plan_diagnostics.assert_called_once_with(video_id)
+        mock_artifact_store.delete_transcript.assert_called_once_with(video_id)
+
+    @patch("app.routers.preprocessing.get_job_storage")
+    @patch("app.routers.preprocessing.get_artifact_storage")
+    @patch("app.routers.preprocessing.sidecar_service")
+    def test_get_sidecar_manifest_fallback_loads_transcript_artifact(
+        self, mock_sidecar_service, mock_get_artifact_storage, mock_get_job_storage
+    ):
+        """Verify get_sidecar_manifest resolves missing inline transcripts by loading transcript artifacts."""
+        mock_job_store = MagicMock()
+        mock_artifact_store = MagicMock()
+        
+        video_id = str(uuid4())
+        mock_job = JobRecord(
+            video_id=video_id,
+            youtube_url="https://youtube.com/watch?v=12345678901",
+            youtube_id="12345678901",
+            duration=300.0,
+            transcript=None,
+            transcript_segments=None
+        )
+        
+        mock_job_store.get_job.return_value = mock_job
+        mock_get_job_storage.return_value = mock_job_store
+        
+        mock_artifact_store.load_manifest.return_value = None
+        mock_artifact_store.load_transcript.return_value = TranscriptArtifact(
+            video_id=video_id,
+            caption_status="acquired",
+            transcript="Stored transcript text",
+            transcript_segments=[{"text": "stored segment"}],
+            created_at="2026-06-18T22:00:00Z"
+        )
+        mock_get_artifact_storage.return_value = mock_artifact_store
+        
+        dummy_manifest = AssistanceSidecarManifest(
+            youtube_id="12345678901",
+            exercise_timeline_anchors=[],
+            trainer_instruction_events=[],
+            speaking_opportunity_map=[],
+            form_risk_templates=[],
+            haptic_spatial_cue_profiles=[],
+            beat_timestamps=[],
+            expected_movement_windows={}
+        )
+        mock_sidecar_service.generate_sidecar.return_value = dummy_manifest
+        
+        client = TestClient(app)
+        response = client.get(f"/api/preprocessing/manifest/{video_id}")
+        self.assertEqual(response.status_code, 200)
+        
+        mock_artifact_store.load_transcript.assert_called_once_with(video_id)
+        mock_sidecar_service.generate_sidecar.assert_called_once_with(
+            mock_job,
+            "Stored transcript text",
+            [{"text": "stored segment"}]
+        )
 
     def test_local_json_fallback_active_by_default(self):
         """Ensure local_json defaults are configured correctly and active by default."""
@@ -154,7 +207,6 @@ class TestStorageIntegrationFixes(unittest.TestCase):
         
         original_provider = settings.STORAGE_PROVIDER
         
-        # Reset factory global state
         factory._job_storage = None
         factory._artifact_storage = None
         
@@ -166,7 +218,6 @@ class TestStorageIntegrationFixes(unittest.TestCase):
             self.assertIsInstance(job_store, JobStore)
             self.assertIsInstance(artifact_store, LocalJsonGeneratedArtifactStorage)
         finally:
-            # Restore state
             settings.STORAGE_PROVIDER = original_provider
             factory._job_storage = None
             factory._artifact_storage = None

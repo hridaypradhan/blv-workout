@@ -6,7 +6,7 @@ import botocore.exceptions
 from app.core.config import settings
 from app.core.storage import aws_client
 from app.core.storage.interfaces import GeneratedArtifactStorage
-from app.models.schemas import AssistanceSidecarManifest
+from app.models.schemas import AssistanceSidecarManifest, TranscriptArtifact
 from app.models.cue_plan_schemas import CuePlan
 
 logger = logging.getLogger(__name__)
@@ -124,3 +124,19 @@ class S3GeneratedArtifactStorage(GeneratedArtifactStorage):
     def delete_cue_plan_diagnostics(self, video_id: str) -> bool:
         key = f"diagnostics/cue-plan/{video_id}.json"
         return self._delete_object(key)
+
+    def load_transcript(self, video_id: str) -> Optional[TranscriptArtifact]:
+        key = f"transcripts/{video_id}.json"
+        data = self._load_json(key)
+        if data is None:
+            return None
+        return TranscriptArtifact.model_validate(data)
+
+    def save_transcript(self, video_id: str, transcript_data: TranscriptArtifact) -> None:
+        key = f"transcripts/{video_id}.json"
+        self._save_json(key, transcript_data.model_dump_json())
+
+    def delete_transcript(self, video_id: str) -> bool:
+        key = f"transcripts/{video_id}.json"
+        return self._delete_object(key)
+

@@ -8,8 +8,9 @@ from __future__ import annotations
 import logging
 import time
 
+from datetime import datetime, timezone
 from app.core.config import settings
-from app.models.schemas import ProcessingStage, AssistanceSidecarManifest
+from app.models.schemas import ProcessingStage, AssistanceSidecarManifest, TranscriptArtifact
 from app.core.storage import get_job_storage, get_artifact_storage
 from app.services.youtube_service import (
     YouTubeMetadataError,
@@ -61,12 +62,24 @@ def run_assistance_preparation(video_id: str, youtube_url: str) -> None:
         
         if provider_requires_transcript(settings.AI_PROVIDER):
             segments, full_transcript, caption_status = get_youtube_transcript(youtube_url, video_id)
+            
+            # Save transcript artifact to storage
+            transcript_artifact = TranscriptArtifact(
+                video_id=video_id,
+                caption_status=caption_status,
+                transcript=full_transcript,
+                transcript_segments=segments,
+                created_at=datetime.now(timezone.utc).isoformat()
+            )
+            get_artifact_storage().save_transcript(video_id, transcript_artifact)
+            
             job_store.update_stage(
                 video_id,
                 ProcessingStage.TRANSCRIBING,
                 transcript=full_transcript,
                 transcript_segments=segments,
                 caption_status=caption_status,
+                has_transcript_artifact=True,
             )
         else:
             job_store.update_stage(
@@ -74,6 +87,7 @@ def run_assistance_preparation(video_id: str, youtube_url: str) -> None:
                 ProcessingStage.TRANSCRIBING,
                 transcript='',
                 caption_status='skipped_offline_prototype',
+                has_transcript_artifact=False,
             )
             
         logger.info('Transcript acquisition status for %s: %s', video_id, caption_status)

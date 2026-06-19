@@ -1,6 +1,6 @@
 from typing import Optional
 from app.core.storage.interfaces import GeneratedArtifactStorage
-from app.models.schemas import AssistanceSidecarManifest
+from app.models.schemas import AssistanceSidecarManifest, TranscriptArtifact
 from app.models.cue_plan_schemas import CuePlan
 from app.services.sidecar_manifest_store import (
     load_manifest_from_disk,
@@ -57,3 +57,16 @@ class LocalJsonGeneratedArtifactStorage(GeneratedArtifactStorage):
 
     def delete_cue_plan_diagnostics(self, video_id: str) -> bool:
         return delete_json_store(f"ai_diagnostics/cue_plan_{video_id}.json")
+
+    def load_transcript(self, video_id: str) -> Optional[TranscriptArtifact]:
+        data = load_json_store(f"transcripts/{video_id}.json")
+        if data is None:
+            return None
+        return TranscriptArtifact.model_validate(data)
+
+    def save_transcript(self, video_id: str, transcript_data: TranscriptArtifact) -> None:
+        save_json_store(f"transcripts/{video_id}.json", transcript_data.model_dump(mode="json"))
+
+    def delete_transcript(self, video_id: str) -> bool:
+        return delete_json_store(f"transcripts/{video_id}.json")
+

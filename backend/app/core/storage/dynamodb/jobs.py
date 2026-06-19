@@ -26,6 +26,8 @@ class DynamoDBJobStorage(JobStorage):
         video_id = str(uuid.uuid4())
         job = JobRecord(video_id=video_id, youtube_url=youtube_url)
         item = job.to_dict()
+        item.pop("transcript", None)
+        item.pop("transcript_segments", None)
         item["library_partition"] = "JOBS"
         item = python_to_dynamodb(item)
         self.table.put_item(Item=item)
@@ -55,6 +57,8 @@ class DynamoDBJobStorage(JobStorage):
             if v is not UNSET:
                 setattr(job, k, v)
         item = job.to_dict()
+        item.pop("transcript", None)
+        item.pop("transcript_segments", None)
         item["library_partition"] = "JOBS"
         item = python_to_dynamodb(item)
         self.table.put_item(Item=item)

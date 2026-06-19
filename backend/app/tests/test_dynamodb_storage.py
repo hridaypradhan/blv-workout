@@ -128,6 +128,10 @@ class TestDynamoDBStorage(unittest.TestCase):
         job = storage.create_job(youtube_url)
         self.assertEqual(job.youtube_url, youtube_url)
         self.mock_table.put_item.assert_called_once()
+        # Verify put_item payload does not contain transcript or transcript_segments
+        called_kwargs = self.mock_table.put_item.call_args[1]
+        self.assertNotIn("transcript", called_kwargs["Item"])
+        self.assertNotIn("transcript_segments", called_kwargs["Item"])
         
         # Get
         job_dict = job.to_dict()
@@ -138,9 +142,17 @@ class TestDynamoDBStorage(unittest.TestCase):
         self.assertEqual(retrieved.video_id, job.video_id)
 
         # Update stage
-        storage.update_stage(job.video_id, ProcessingStage.FETCHING_METADATA, title="Updated Workout")
-        # Assert updated fields
+        storage.update_stage(
+            job.video_id,
+            ProcessingStage.TRANSCRIBING,
+            transcript="Large transcript",
+            transcript_segments=[{"text": "Hello"}]
+        )
         self.assertEqual(self.mock_table.put_item.call_count, 2)
+        # Verify update_stage put_item payload does not contain transcript or transcript_segments
+        called_kwargs_update = self.mock_table.put_item.call_args[1]
+        self.assertNotIn("transcript", called_kwargs_update["Item"])
+        self.assertNotIn("transcript_segments", called_kwargs_update["Item"])
 
         # Delete
         self.mock_table.get_item.return_value = {"Item": job_dict}

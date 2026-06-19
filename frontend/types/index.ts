@@ -38,6 +38,8 @@ export interface AssistanceJob {
   created_at?: string | null;
   sidecar_provider?: string | null;
   sidecar_fallback_reason?: string | null;
+  cue_plan_provider?: string | null;
+  cue_plan_fallback_reason?: string | null;
   caption_status?: string | null;
 }
 

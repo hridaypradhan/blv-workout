@@ -247,9 +247,13 @@ Follow these steps to manually test the full pipeline:
 2. **Fetch Cue Plan**: Verify that a cue plan has been generated and persisted. In `local_json` mode, verify it exists under `backend/.prototype_data/cue_plans/{video_id}.json`. In `dynamodb` mode, verify it is uploaded to the S3 bucket with key `cue-plans/{video_id}.json`. Query the GET `/api/preprocessing/cue-plan/{video_id}` API endpoint.
 3. **Start Session**: Start a workout session. Open the Live Session playback screen.
 4. **Confirm Cue Delivery**: Play the workout video.
-   - **Speech Delivery**: Verify that cues show up in the Assistant Cue Feed panel (live cue UI). Note that spoken audio cue/TTS playback is not yet implemented on the frontend client (cues currently appear only in the Assistant Cue Feed/live cue UI, and spoken delivery is a future integration).
-   - **Coexistence Check**: Toggle the assistant Mute setting in the session controls. Verify that only haptic notifications trigger when muted (or under Haptic Only mode).
-   - **Action Triggers**: Check if playback actions pause or trigger audio ducking recommendations according to candidate interruption policy hints.
+   - **Speech Delivery**: Verify that cues show up in the Assistant Cue Feed panel (live cue UI) and are spoken aloud. Spoken cue playback is implemented using the browser Web Speech API (`window.speechSynthesis`) on the client side. No cloud TTS, backend audio generation, or S3 audio storage is used.
+     - *How to test*: Play the video in a live session with the assistant unmuted and coexistence level set to Brief Speech or Full Speech. The browser should speak the selected audio cues as they appear in the feed.
+     - *Known limitation*: Voice availability, language accents, and overall speech quality depend entirely on the browser and OS-specific voices installed on the user's local machine.
+   - **Coexistence Check**: Toggle the assistant Mute setting in the session controls. Verify that only haptic notifications trigger when muted (or under Haptic Only mode), and any active speech synthesis is cancelled immediately.
+   - **Action Triggers**: Verify that playback actions operate correctly:
+     - *Pause Before Speaking*: The YouTube player pauses when speech starts and resumes automatically when speech ends (if it was playing previously).
+     - *Duck Audio*: The YouTube player volume is ducked/lowered to `25` during speech and restored to its original value when speech ends or is cancelled (unless the player was already muted or volume was already below target).
 5. **Inspect Diagnostics**: Inspect the generated JSON diagnostics to verify the generation provider, warning lists, and timestamp. In `local_json` mode, check `backend/.prototype_data/ai_diagnostics/cue_plan_{video_id}.json`. In `dynamodb` mode, check S3 key `diagnostics/cue-plan/{video_id}.json`.
 
 ---

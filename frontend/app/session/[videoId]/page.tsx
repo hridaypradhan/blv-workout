@@ -25,8 +25,9 @@ import {
 import { getActiveUserId } from "@/lib/prototypeUser";
 import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
+import { useSpokenCuePlayback } from "@/lib/hooks/useSpokenCuePlayback";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, AssistantPersona, CuePlan } from "@/types";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, AssistantPersona, CuePlan, RuntimeCueSelectionResponse } from "@/types";
 import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 
@@ -100,6 +101,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const [isLoadingCuePlan, setIsLoadingCuePlan] = useState(true);
   const [cuePlanError, setCuePlanError] = useState<string | null>(null);
   const [recentlyDeliveredCueIds, setRecentlyDeliveredCueIds] = useState<string[]>([]);
+  const [currentSpokenCue, setCurrentSpokenCue] = useState<(RuntimeCueSelectionResponse & { timestampMs?: number }) | null>(null);
+  const [seekEpoch, setSeekEpoch] = useState(0);
 
 
   const { hapticState } = usePrototypeHapticConnection();
@@ -140,6 +143,15 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     setAnnouncement(msg);
   }, []);
 
+  const handleAudioCueAnnouncement = React.useCallback((text: string) => {
+    const isSpeechSynthAvailable = typeof window !== "undefined" && !!window.speechSynthesis;
+    if (!isSpeechSynthAvailable || assistantMuted) {
+      announce(`Assistant cue: ${text}`);
+    } else {
+      announce("New assistant cue.");
+    }
+  }, [assistantMuted, announce]);
+
   // Hook into the YouTube IFrame player
   const {
     containerRef,
@@ -155,7 +167,59 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     pause,
     seek,
     setPlaybackRate,
+    getVolume,
+    setVolume,
+    isPlayerMuted,
   } = useYouTubePlayer(youtubeId);
+
+  const lastCheckedSecond = useRef<number>(-1);
+
+  const handleSeek = React.useCallback((seconds: number, reason?: string) => {
+    setSeekEpoch((prev) => prev + 1);
+    setCurrentSpokenCue(null);
+
+    if (seconds < currentTime - 1.5) {
+      setRecentlyDeliveredCueIds([]);
+      lastCheckedSecond.current = -1;
+    }
+
+    seek(seconds);
+
+    if (reason) {
+      announce(reason);
+    }
+  }, [currentTime, seek, announce]);
+
+  const handleHapticCueTrigger = React.useCallback((text: string, hapticCueRef: string | null, cueId: string | null) => {
+    if (text) {
+      announce(`Haptic cue requested: ${text}`);
+    }
+
+    const cueType = hapticCueRef || (text ? getCueTypeFromCue(text) : "per_rep_tick");
+    const vibrationId = (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] || `${cueType}_001`;
+    const limbs = ["left_arm", "right_arm"];
+
+    triggerHapticPattern(null, null, 0.7, cueType, vibrationId, limbs)
+      .then((hapticRes) => {
+        announce(`Haptic cue would trigger: ${hapticRes.pattern_name} (dry-run).`);
+        if (sessionId) {
+          recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTime * 1000, {
+            cue_type: cueType,
+            selected_vibration_id: vibrationId,
+            selected_wav: hapticRes.selected_wav,
+            target_limbs: hapticRes.target_limbs,
+            provider: hapticRes.provider,
+            status: hapticRes.status,
+            intensity: 0.7,
+            text: text,
+            cue_id: cueId,
+          }).catch((err) => console.warn("Failed to log haptic cue triggered telemetry:", err));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to trigger haptic cue:", err);
+      });
+  }, [userProfile, sessionId, currentTime, announce]);
 
   // Monitor playback states to populate the screen-reader announcement live region
   const prevIsPlayingAnnouncement = useRef(false);
@@ -442,14 +506,21 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
   const prevTimeRef = useRef<number>(0);
   useEffect(() => {
-    if (currentTime < prevTimeRef.current - 1.5) {
-      setRecentlyDeliveredCueIds([]);
-      lastCheckedSecond.current = -1;
+    const diff = Math.abs(currentTime - prevTimeRef.current);
+    if (diff > 1.5) {
+      setCurrentSpokenCue(null);
+      if (currentTime < prevTimeRef.current - 1.5) {
+        setRecentlyDeliveredCueIds([]);
+        lastCheckedSecond.current = -1;
+      }
     }
     prevTimeRef.current = currentTime;
   }, [currentTime]);
 
-  const lastCheckedSecond = useRef<number>(-1);
+  // Invalidate stale cues on mute or video change
+  useEffect(() => {
+    setCurrentSpokenCue(null);
+  }, [assistantMuted, params.videoId]);
 
   useEffect(() => {
     if (!cuePlan || !isPlaying) return;
@@ -481,36 +552,13 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           }
 
           if (res.modality === "audio" && text) {
-            announce(`Assistant cue: ${text}`);
+            handleAudioCueAnnouncement(text);
+            setCurrentSpokenCue({
+              ...res,
+              timestampMs: currentTime * 1000
+            });
           } else if (res.modality === "haptic") {
-            if (text) {
-              announce(`Haptic cue requested: ${text}`);
-            }
-
-            const cueType = res.haptic_cue_ref || (text ? getCueTypeFromCue(text) : "per_rep_tick");
-            const vibrationId = (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] || `${cueType}_001`;
-            const limbs = ["left_arm", "right_arm"];
-
-            triggerHapticPattern(null, null, 0.7, cueType, vibrationId, limbs)
-              .then((hapticRes) => {
-                announce(`Haptic cue would trigger: ${hapticRes.pattern_name} (dry-run).`);
-                if (sessionId) {
-                  recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTime * 1000, {
-                    cue_type: cueType,
-                    selected_vibration_id: vibrationId,
-                    selected_wav: hapticRes.selected_wav,
-                    target_limbs: hapticRes.target_limbs,
-                    provider: hapticRes.provider,
-                    status: hapticRes.status,
-                    intensity: 0.7,
-                    text: text,
-                    cue_id: res.cue_id,
-                  }).catch((err) => console.warn("Failed to log haptic cue triggered telemetry:", err));
-                }
-              })
-              .catch((err) => {
-                console.error("Failed to trigger haptic cue:", err);
-              });
+            handleHapticCueTrigger(text, res.haptic_cue_ref, res.cue_id);
           }
 
           if (sessionId) {
@@ -524,10 +572,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           }
 
           if (res.recommended_playback_action === "pause_before_speaking") {
-            pause();
+            // Hook useSpokenCuePlayback will handle pausing and resuming playback safely.
             announce("Pausing workout playback for assistant instruction.");
-          } else if (res.recommended_playback_action === "duck_audio") {
-            announce("[Assistant ducks background music]");
           }
         }
       })
@@ -545,7 +591,9 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     userProfile,
     sessionId,
     pause,
-    announce
+    announce,
+    handleAudioCueAnnouncement,
+    handleHapticCueTrigger,
   ]);
 
   // Wire up the assistant cue queue (legacy fallback)
@@ -554,6 +602,30 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     currentTimeMs,
     coexistenceSettings
   );
+
+  // Hook for spoken cue playback
+  useSpokenCuePlayback({
+    cueId: currentSpokenCue?.cue_id,
+    shouldDeliver: currentSpokenCue?.should_deliver,
+    modality: currentSpokenCue?.modality,
+    text: currentSpokenCue?.text,
+    recommendedPlaybackAction: currentSpokenCue?.recommended_playback_action,
+    assistantMuted,
+    audioCoexistenceSettings: coexistenceSettings,
+    voiceSettings: userProfile?.voice_settings,
+    feedbackModalities: userProfile?.feedback_modalities,
+    videoId: params.videoId,
+    sessionId,
+    currentTime,
+    isPlaying,
+    play,
+    pause,
+    getVolume,
+    setVolume,
+    isPlayerMuted,
+    timestampMs: currentSpokenCue?.timestampMs,
+    seekEpoch,
+  });
 
   const [chatMessages, setChatMessages] = useState<Array<{ sender: "assistant" | "user"; text: string }>>([
     { sender: "assistant", text: "Welcome! Stand 6 feet back. We are preparing to assist with your YouTube workout." }
@@ -577,7 +649,18 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
       // Expose as announcement for screen readers
       if (activeCue.modality === "audio") {
-        announce(`Assistant cue: ${activeCue.text}`);
+        handleAudioCueAnnouncement(activeCue.text);
+        setCurrentSpokenCue({
+          cue_id: `legacy-${activeCue.timestamp_ms}-${activeCue.text}`,
+          should_deliver: true,
+          modality: "audio",
+          text: activeCue.text,
+          haptic_cue_ref: null,
+          interruption_policy_hint: null,
+          recommended_playback_action: coexistenceSettings.pause_before_speaking ? "pause_before_speaking" : "none",
+          reason: "Legacy fallback cue",
+          timestampMs: activeCue.timestamp_ms || currentTime * 1000
+        });
       } else if (activeCue.modality === "haptic") {
         announce(`Haptic cue requested: ${activeCue.text}`);
       }
@@ -645,7 +728,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           });
       }
     }
-  }, [activeCue, sessionId, currentTime, userProfile, announce]);
+  }, [activeCue, sessionId, currentTime, userProfile, announce, coexistenceSettings, handleAudioCueAnnouncement]);
 
   const handleRepeatTrainerInstruction = () => {
     if (!manifest || !manifest.trainer_instruction_events) return;
@@ -656,8 +739,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       priorEvents.sort((a, b) => (b.start_ms ?? 0) - (a.start_ms ?? 0));
       const latestEvent = priorEvents[0];
       if (latestEvent.start_ms !== null && latestEvent.start_ms !== undefined) {
-        seek(latestEvent.start_ms / 1000);
-        announce(`Repeating trainer instruction: "${latestEvent.text}"`);
+        handleSeek(latestEvent.start_ms / 1000, `Repeating trainer instruction: "${latestEvent.text}"`);
         if (sessionId) {
           recordPlaybackEvent(sessionId, SESSION_EVENTS.TRAINER_INSTRUCTION_REPEATED, currentTimeMs, {
             text: latestEvent.text,
@@ -676,8 +758,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       (anchor) => anchor.start_time_seconds > currentTime + 1.0
     );
     if (nextAnchor) {
-      seek(nextAnchor.start_time_seconds);
-      announce(`Skipped to section: ${nextAnchor.name}`);
+      handleSeek(nextAnchor.start_time_seconds, `Skipped to section: ${nextAnchor.name}`);
       if (sessionId) {
         recordPlaybackEvent(sessionId, SESSION_EVENTS.SECTION_SKIPPED, currentTimeMs, {
           section_name: nextAnchor.name,
@@ -958,7 +1039,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               currentTime={currentTime}
               playbackRate={playbackRate}
               assistantMuted={assistantMuted}
-              seek={seek}
+              seek={handleSeek}
               setPlaybackRate={setPlaybackRate}
               setAssistantMuted={handleToggleMute}
               handleRepeatTrainerInstruction={handleRepeatTrainerInstruction}

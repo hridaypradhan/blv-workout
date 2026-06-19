@@ -17,6 +17,11 @@ export interface YTPlayer {
   getPlaybackRate(): number;
   getIframe(): HTMLIFrameElement;
   destroy(): void;
+  getVolume(): number;
+  setVolume(volume: number): void;
+  isMuted(): boolean;
+  mute(): void;
+  unMute(): void;
 }
 
 export interface YTPlayerOptions {
@@ -338,6 +343,39 @@ export function useYouTubePlayer(videoId: string | null) {
     }
   };
 
+  const getVolume = () => {
+    if (playerRef.current && isReady && playerRef.current.getVolume) {
+      try {
+        return playerRef.current.getVolume();
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const setVolume = (volume: number) => {
+    if (playerRef.current && isReady && playerRef.current.setVolume) {
+      try {
+        const clamped = Math.max(0, Math.min(100, volume));
+        playerRef.current.setVolume(clamped);
+      } catch {
+        // ignore errors
+      }
+    }
+  };
+
+  const isPlayerMuted = () => {
+    if (playerRef.current && isReady && playerRef.current.isMuted) {
+      try {
+        return playerRef.current.isMuted();
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
   return {
     containerRef,
     isReady,
@@ -352,5 +390,8 @@ export function useYouTubePlayer(videoId: string | null) {
     pause,
     seek,
     setPlaybackRate: setPlaybackRateState,
+    getVolume,
+    setVolume,
+    isPlayerMuted,
   };
 }

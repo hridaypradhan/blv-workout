@@ -58,6 +58,9 @@ class LocalJsonGeneratedArtifactStorage(GeneratedArtifactStorage):
     def delete_cue_plan_diagnostics(self, video_id: str) -> bool:
         return delete_json_store(f"ai_diagnostics/cue_plan_{video_id}.json")
 
+    def save_qna_diagnostics(self, session_or_video_id: str, key_suffix: str, diagnostics: dict) -> None:
+        save_json_store(f"ai_diagnostics/qna_{session_or_video_id}_{key_suffix}.json", diagnostics)
+
     def load_transcript(self, video_id: str) -> Optional[TranscriptArtifact]:
         data = load_json_store(f"transcripts/{video_id}.json")
         if data is None:

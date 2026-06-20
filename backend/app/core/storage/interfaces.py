@@ -193,6 +193,11 @@ class GeneratedArtifactStorage(ABC):
         pass
 
     @abstractmethod
+    def save_qna_diagnostics(self, session_or_video_id: str, key_suffix: str, diagnostics: dict) -> None:
+        """Save QnA diagnostics report to persistence."""
+        pass
+
+    @abstractmethod
     def load_transcript(self, video_id: str) -> Optional[TranscriptArtifact]:
         """Load transcript artifact from persistence."""
         pass

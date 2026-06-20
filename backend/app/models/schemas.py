@@ -8,7 +8,7 @@ original embedded YouTube video.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl
@@ -481,6 +481,17 @@ class MotivationRequest(BaseModel):
     persona: AssistantPersona = AssistantPersona.SUPPORTIVE
 
 
+class RuntimeObservationContext(BaseModel):
+    """Real-time pose and tracking context from the playback client."""
+
+    pose_available: bool = False
+    pose_confidence: float | None = None
+    observation_capability: Literal["not_available", "available", "low_confidence"] = "not_available"
+    latest_form_error: dict[str, Any] | None = None
+    latest_rep_event: dict[str, Any] | None = None
+    notes: str | None = None
+
+
 class QARequest(BaseModel):
     """Request body for a user question to the FitA11y assistant.
 
@@ -489,9 +500,32 @@ class QARequest(BaseModel):
     """
 
     question: str
-    session_context: dict[str, Any] = Field(default_factory=dict)
+    video_id: str | UUID | None = None
+    session_id: str | UUID | None = None
     current_timestamp_ms: float | None = None
     persona: AssistantPersona = AssistantPersona.SUPPORTIVE
+    session_context: dict[str, Any] | None = Field(default_factory=dict)
+    runtime_observation_context: RuntimeObservationContext | None = None
+
+
+class QAResponse(BaseModel):
+    """Response returned from the assistant Q&A engine."""
+
+    answer_text: str
+    answer_kind: Literal["video_grounded", "self_observation_boundary", "general_guidance", "safety_boundary", "fallback"]
+    provider: str
+    model: str | None = None
+    grounding_sources: list[str] = Field(default_factory=list)
+    spoken_safe: bool = True
+    fallback_reason: str | None = None
+    diagnostics_ref: str | None = None
+
+    # Backward compatibility with AssistantCue schema
+    text: str | None = None
+    persona: AssistantPersona | None = None
+    modality: FeedbackModality | None = None
+    priority: str | None = None
+    timestamp_ms: float | None = None
 
 
 class UserSettingsUpdate(BaseModel):

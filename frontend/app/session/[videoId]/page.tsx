@@ -831,6 +831,10 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
       const response = await askAssistant({
         question: query,
+        video_id: params.videoId,
+        session_id: sessionId,
+        current_timestamp_ms: currentTimeMs,
+        persona: userProfile?.assistant_persona || undefined,
         session_context: {
           sessionId,
           videoId: params.videoId,
@@ -842,25 +846,31 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           assistant_voice_muted: assistantMuted,
           youtube_metadata: metadata ? { title: metadata.title } : null
         },
-        current_timestamp_ms: currentTimeMs,
-        persona: userProfile?.assistant_persona || undefined
+        runtime_observation_context: {
+          pose_available: false,
+          pose_confidence: null,
+          observation_capability: "not_available",
+          latest_form_error: null,
+          latest_rep_event: null,
+          notes: "Real-time camera observation is not available."
+        }
       });
 
       setChatMessages((prev) => [
         ...prev,
-        { sender: "assistant", text: response.text }
+        { sender: "assistant", text: response.answer_text }
       ]);
-      announce(`Assistant response received: "${response.text}"`);
+      announce(`Assistant response received: "${response.answer_text}"`);
 
       if (sessionId) {
         recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_ANSWER_DELIVERED, currentTimeMs, {
           question: query,
-          answer: response.text,
+          answer: response.answer_text,
           current_timestamp_ms: currentTimeMs,
           active_exercise: activeExerciseName,
           latest_trainer_instruction: latestInstructionText,
-          source: response.metadata?.source || "prototype",
-          provider: response.metadata?.provider || "prototype_assistant"
+          source: response.provider || "prototype",
+          provider: response.provider || "prototype_assistant"
         }).catch((err) => console.warn("Failed to log assistant_answer_delivered event:", err));
       }
     } catch (err) {

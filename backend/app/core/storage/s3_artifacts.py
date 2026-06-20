@@ -125,6 +125,10 @@ class S3GeneratedArtifactStorage(GeneratedArtifactStorage):
         key = f"diagnostics/cue-plan/{video_id}.json"
         return self._delete_object(key)
 
+    def save_qna_diagnostics(self, session_or_video_id: str, key_suffix: str, diagnostics: dict) -> None:
+        key = f"diagnostics/qna/{session_or_video_id}/{key_suffix}.json"
+        self._save_json(key, diagnostics)
+
     def load_transcript(self, video_id: str) -> Optional[TranscriptArtifact]:
         key = f"transcripts/{video_id}.json"
         data = self._load_json(key)

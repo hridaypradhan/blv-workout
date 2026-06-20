@@ -15,6 +15,7 @@ from app.models.schemas import (
     MotivationRequest,
     PacingRequest,
     QARequest,
+    QAResponse,
     AdaptivePacingRequest,
     AdaptivePacingResponse,
     RhythmPacingRequest,
@@ -24,6 +25,7 @@ from app.models.schemas import (
 )
 from app.services import pacing_service
 from app.prototype import assistant_provider
+from app.services.assistant_qna_service import qna_service
 from app.services.cue_plan_runtime_service import cue_plan_runtime_service, RuntimeCueSelectionResponse
 from typing import Optional, List
 from pydantic import BaseModel
@@ -121,19 +123,14 @@ async def generate_motivation(payload: MotivationRequest) -> AssistantCue:
     )
 
 
-@router.post("/qa", response_model=AssistantCue)
-async def answer_question(payload: QARequest) -> AssistantCue:
+@router.post("/qa", response_model=QAResponse)
+async def answer_question(payload: QARequest) -> QAResponse:
     """Answer a user question with awareness of current playback position.
 
     The assistant pauses or waits for a speaking opportunity before
     responding, respecting audio coexistence settings.
     """
-    return assistant_provider.answer_question(
-        question=payload.question,
-        session_context=payload.session_context,
-        current_timestamp_ms=payload.current_timestamp_ms,
-        persona=payload.persona,
-    )
+    return qna_service.answer_question(payload)
 
 
 @router.get("/form-risk-templates/{exercise_id}", response_model=list[str])

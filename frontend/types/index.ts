@@ -327,11 +327,41 @@ export interface HapticTriggerResponse {
   bhaptics_event_name?: string | null;
 }
 
+export interface RuntimeObservationContext {
+  pose_available: boolean;
+  pose_confidence?: number | null;
+  observation_capability: "not_available" | "available" | "low_confidence";
+  latest_form_error?: Record<string, any> | null;
+  latest_rep_event?: Record<string, any> | null;
+  notes?: string | null;
+}
+
 export interface QARequest {
   question: string;
-  session_context?: Record<string, any>;
+  video_id?: string | null;
+  session_id?: string | null;
   current_timestamp_ms?: number | null;
   persona?: AssistantPersona;
+  session_context?: Record<string, any> | null;
+  runtime_observation_context?: RuntimeObservationContext | null;
+}
+
+export interface QAResponse {
+  answer_text: string;
+  answer_kind: "video_grounded" | "self_observation_boundary" | "general_guidance" | "safety_boundary" | "fallback";
+  provider: string;
+  model?: string | null;
+  grounding_sources: string[];
+  spoken_safe: boolean;
+  fallback_reason?: string | null;
+  diagnostics_ref?: string | null;
+
+  // Backward compatibility with AssistantCue
+  text?: string | null;
+  persona?: AssistantPersona | null;
+  modality?: string | null;
+  priority?: string | null;
+  timestamp_ms?: number | null;
 }
 
 export interface CorrectionRequest {

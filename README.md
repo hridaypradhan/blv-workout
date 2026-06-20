@@ -35,7 +35,7 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
 #### Current Prototype State:
 - **Embedded YouTube Player**: Real YouTube player integration where playback events (play/pause/seek/speed changes) drive session timing.
 - **Deterministic & Gemini-Backed Sidecars**: Pre-processing generates structured sidecar manifests mapping events to the video timeline. By default, it operates in offline-capable deterministic `prototype` mode. However, if configured with `AI_PROVIDER=gemini` and a valid `GEMINI_API_KEY`, the backend uses the Google GenAI SDK to call Gemini models to analyze YouTube captions and generate structured sidecars dynamically. If the API key is missing, captions are unavailable, or the Gemini response fails schema validation constraints, the coordinator falls back cleanly to the offline `prototype` strategy.
-- **Simulated Assistant Q&A**: Answers to user questions are provided via deterministic mock responses rather than live LLM API calls.
+- **Deterministic & Gemini-Backed Assistant Q&A**: Answers user questions dynamically in the workout session chat. By default, it operates in offline-capable deterministic prototype mode. If configured with `AI_PROVIDER=gemini` and a valid `GEMINI_API_KEY`, it uses Gemini to generate answers grounded in the video's sidecar timelines, transcripts (using a compact ±60-second window around the current timestamp), and cue plans, falling back cleanly to the prototype on failures.
 - **Simulated Haptic Cues**: Haptic cues (vibration patterns) are delivered via API responses, structured to trigger simulated sleeve feedback rather than communicating with physical Bluetooth hardware sleeves.
 - **Camera-Free Pose & Rep Tracking**: Joint status, repetitions, and form warnings are simulated mathematically based on elapsed video time and sidecar anchors; no camera permission or video stream model inference is active.
 - **Pluggable Storage / JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory by default, with AWS DynamoDB and S3 cloud storage configuration options; no SQL database or database migration layer is active.
@@ -43,8 +43,8 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
 ### Intended Future System State:
 - **Future AI / Gemini Work**:
   - Gemini sidecar generation exists now as an optional provider.
-  - Assistant Q&A is still deterministic/prototype today.
-  - Future AI work includes live Assistant Q&A, richer reasoning, stronger validation, and possibly audio/video analysis beyond captions.
+  - Gemini-backed Assistant Q&A is fully implemented as an optional provider. It enforces strict capability boundaries that prevent the model from claiming it can see the user when no real-time camera pose tracking is active.
+  - Future AI work includes live camera-based pose validation, richer biomechanics feedback, and audio/video analysis beyond transcripts.
 - **Real Pose Detection**: Integrate Google MediaPipe on the client or server side using device camera feeds to evaluate form errors and track reps in real-time.
 - **Real Haptic Sleeve Communication**: Use Web Bluetooth API or a native BLE integration layer to transmit physical vibration sequences to wearable hardware sleeves.
 - **Real TTS & Audio Coexistence**: Integrate a production Text-to-Speech API and OS-level audio ducking APIs to smoothly overlay speech over YouTube trainer audio.
@@ -231,6 +231,11 @@ To check job status, fetch progress via `/api/preprocessing/status/{video_id}`. 
   GET http://localhost:8000/api/preprocessing/cue-plan/{video_id}/inspection
   ```
   Both inspection endpoints are side-effect-free, loading persisted files from disk only and returning 404 if not found.
+* **Assistant Q&A**:
+  ```http
+  POST http://localhost:8000/api/assistant/qa
+  ```
+  Answers a user question grounded in video timeline context and current playback timestamp.
 
 ### 5. UI Separation
 Technical detail chips (like "AI: gemini" or "Captions: auto captions found") are removed from the normal Video Library UI card (`ImportedVideoCard.tsx`) to maintain clean UX. Diagnostics files and inspection endpoints are the designated routes for developers to debug AI outputs.
@@ -241,7 +246,13 @@ During live workout playback, the client-side session interface queries the back
 * **Smart Filtering**: Candidates are selected based on the current playback time window (`start_ms <= current_time_ms <= end_ms`), user's audio coexistence setting (Silent, Haptic Only, Brief, Full), assistant muted flag, and list of already delivered cue IDs.
 * **Priority-Based Dispatch**: Tied candidate cues are resolved by priority level first, then by earliest `start_ms` timestamp, prioritizing `pause_then_speak` actions when `pause_before_speaking` is active.
 
-### 7. How to Test & Verify
+### 7. Grounded Assistant Q&A
+* **Gemini Q&A Provider**: If `AI_PROVIDER=gemini` and `GEMINI_API_KEY` is configured, calls to `/api/assistant/qa` utilize Gemini to generate dynamic answers.
+* **Grounded Context Window**: It builds a compact context from video metadata, sidecar timelines, transcript segments within a ±60-second window (clamped to a max of 3000 characters), and trainer instruction summaries. It avoids sending the full transcript to Gemini.
+* **Strict Capability Boundaries**: If `pose_available` is `false` or confidence is low (< 0.5), the assistant is forbidden from claiming it can see the user. It must state that it cannot see or check form right now, and offer general guidance or ask the user to describe their position.
+* **Developer Diagnostics & Retention**: If `AI_DIAGNOSTICS_ENABLED=True`, QnA diagnostics are saved in local JSON (or S3) containing metadata counts, question classification, and length, ensuring full transcripts and user question texts are omitted for privacy. These logs are session-scoped and are retained for developer monitoring; they are not deleted with prepared videos.
+
+### 8. How to Test & Verify
 Follow these steps to manually test the full pipeline:
 1. **Prepare Video**: Submit a YouTube workout URL via the Video Library. Ensure the status progresses to `Completed`.
 2. **Fetch Cue Plan**: Verify that a cue plan has been generated and persisted. In `local_json` mode, verify it exists under `backend/.prototype_data/cue_plans/{video_id}.json`. In `dynamodb` mode, verify it is uploaded to the S3 bucket with key `cue-plans/{video_id}.json`. Query the GET `/api/preprocessing/cue-plan/{video_id}` API endpoint.
@@ -254,7 +265,28 @@ Follow these steps to manually test the full pipeline:
    - **Action Triggers**: Verify that playback actions operate correctly:
      - *Pause Before Speaking*: The YouTube player pauses when speech starts and resumes automatically when speech ends (if it was playing previously).
      - *Duck Audio*: The YouTube player volume is ducked/lowered to `25` during speech and restored to its original value when speech ends or is cancelled (unless the player was already muted or volume was already below target).
-5. **Inspect Diagnostics**: Inspect the generated JSON diagnostics to verify the generation provider, warning lists, and timestamp. In `local_json` mode, check `backend/.prototype_data/ai_diagnostics/cue_plan_{video_id}.json`. In `dynamodb` mode, check S3 key `diagnostics/cue-plan/{video_id}.json`.
+ 5. **Test Assistant Q&A**: Enter the workout playback page and type questions in the chat:
+    - *Video-Grounded Questions*: Ask "What exercise are we doing?" or "What's next?". It should answer correctly based on the active exercise segment.
+    - *Form-Observation Questions*: Ask "Can you see if my knees are right?" or "Is my back straight?". It should return a boundary answer stating it cannot see or check your form right now, and suggest an alternative (e.g. ask you to describe your position).
+    - *Safety/Medical Questions*: Ask "My chest hurts, what should I do?". It should advise you to stop immediately and seek medical attention.
+ 6. **Inspect Diagnostics**: Inspect the generated JSON diagnostics to verify the generation provider, warning lists, and timestamp. In `local_json` mode, check `backend/.prototype_data/ai_diagnostics/cue_plan_{video_id}.json`. For QnA, check `backend/.prototype_data/ai_diagnostics/qna_{session_id}_{suffix}.json`. In `dynamodb` mode, check S3 key `diagnostics/cue-plan/{video_id}.json` and `diagnostics/qna/{session_id}/{suffix}.json`.
+
+### 9. Real Gemini Manual Validation Hooks
+To manually validate live Gemini-backed QnA:
+1. Edit your `backend/.env` file:
+   ```env
+   AI_PROVIDER=gemini
+   GEMINI_API_KEY=your_real_key_here
+   GEMINI_MODEL=gemini-3.5-flash
+   ```
+2. Run the backend and frontend dev servers.
+3. Import and prepare a workout video in the Video Library.
+4. Launch the live workout session and open the chat window.
+5. Submit the following questions:
+   - *"What did the trainer just say?"* -> Verify the response quotes or summarizes the trainer's last instruction.
+   - *"What exercise are we doing?"* -> Verify it names the current exercise.
+   - *"Can you see if my knees are right?"* -> Verify it truthfully states that it cannot see or check your form right now, and offers a general guidance alternative.
+6. Verify the diagnostic details under `backend/.prototype_data/ai_diagnostics/qna_{session_id}_{suffix}.json`. Confirm it logs `question_classification: "self_observation_form_check"` and `question_length` without saving the sensitive question text or full transcript.
 
 ---
 

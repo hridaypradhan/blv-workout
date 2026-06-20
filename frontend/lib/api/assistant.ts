@@ -2,6 +2,7 @@ import { API_BASE_URL, checkResponse } from "./client";
 import {
   AssistantCue,
   QARequest,
+  QAResponse,
   CorrectionRequest,
   RuntimeCueSelectionRequest,
   RuntimeCueSelectionResponse,
@@ -12,7 +13,7 @@ import {
 // ============================================================================
 
 /** Ask the assistant a verbal Q&A question in the context of the workout. */
-export async function askAssistant(payload: QARequest): Promise<AssistantCue> {
+export async function askAssistant(payload: QARequest): Promise<QAResponse> {
   console.log("Asking assistant question:", payload.question);
   const res = await fetch(`${API_BASE_URL}/api/assistant/qa`, {
     method: "POST",
@@ -21,7 +22,7 @@ export async function askAssistant(payload: QARequest): Promise<AssistantCue> {
     },
     body: JSON.stringify(payload),
   });
-  return checkResponse<AssistantCue>(res, "Failed to ask assistant");
+  return checkResponse<QAResponse>(res, "Failed to ask assistant");
 }
 
 

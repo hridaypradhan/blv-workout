@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SleeveStatus } from "../../types";
+import { devLogger } from "@/lib/logger";
 
 export function useHapticSleeves() {
   const [sleeveStatus, setSleeveStatus] = useState<SleeveStatus>({
@@ -14,13 +15,13 @@ export function useHapticSleeves() {
   const connectSleeve = (slot: keyof SleeveStatus) => {
     // TODO: Initiate Web Bluetooth pairing for the chosen sleeve/limb slot
     // to deliver tactile assistance cues alongside embedded YouTube video playback.
-    console.log("Connecting Bluetooth haptic device for slot:", slot);
+    devLogger.log("Connecting Bluetooth haptic device for slot:", slot);
     setSleeveStatus((prev) => ({ ...prev, [slot]: true }));
   };
 
   const triggerPattern = (slot: keyof SleeveStatus, patternType: string) => {
     // TODO: Write custom characteristic buffer to trigger vibration cues
-    console.log(`Triggering haptic pattern '${patternType}' on slot:`, slot);
+    devLogger.log(`Triggering haptic pattern '${patternType}' on slot:`, slot);
   };
 
   return {

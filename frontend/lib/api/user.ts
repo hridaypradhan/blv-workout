@@ -1,4 +1,4 @@
-import { User, Session } from "../../types";
+import { User } from "../../types";
 import { API_BASE_URL, checkResponse } from "./client";
 
 // ============================================================================
@@ -29,10 +29,4 @@ export async function updateUserSettings(userId: string, settings: Partial<User>
     body: JSON.stringify(settings),
   });
   return checkResponse<User>(res, "Update user settings failed");
-}
-
-/** Retrieve session history for a specific user. */
-export async function getUserHistory(userId: string): Promise<Session[]> {
-  const res = await fetch(`${API_BASE_URL}/api/user/${userId}/history`);
-  return checkResponse<Session[]>(res, "Retrieve user history failed");
 }

@@ -1,4 +1,4 @@
-import { AssistanceJob, SidecarManifest, CuePlan } from "../../types";
+import { AssistanceJob, SidecarManifest, CuePlan, TranscriptArtifact } from "../../types";
 import { API_BASE_URL, checkResponse } from "./client";
 
 /** Submit a YouTube URL for assistance preparation. Returns the new video_id. */
@@ -49,5 +49,11 @@ export async function getSidecarManifest(videoId: string): Promise<SidecarManife
 export async function getCuePlan(videoId: string): Promise<CuePlan> {
   const res = await fetch(`${API_BASE_URL}/api/preprocessing/cue-plan/${videoId}`);
   return checkResponse<CuePlan>(res, "Cue plan fetch failed");
+}
+
+/** Fetch the prepared transcript artifact for a video. */
+export async function getTranscript(videoId: string): Promise<TranscriptArtifact> {
+  const res = await fetch(`${API_BASE_URL}/api/preprocessing/transcript/${videoId}`);
+  return checkResponse<TranscriptArtifact>(res, "Transcript fetch failed");
 }
 

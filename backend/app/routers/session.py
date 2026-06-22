@@ -2,7 +2,7 @@
 
 Sessions track the user's performance and FitA11y's interventions during
 embedded YouTube playback. The session does not contain a regenerated
-workout — it records what happens while the user watches and follows
+workout - it records what happens while the user watches and follows
 the original trainer's video.
 """
 
@@ -11,13 +11,11 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import (
-    FormErrorCreate,
-    PlaybackEventCreate,
-    RepEventCreate,
     Session,
     SessionStartRequest,
+    SessionFinalizeRequest,
 )
-from app.core.storage import get_session_storage, get_session_event_storage, get_job_storage
+from app.core.storage import get_session_storage, get_job_storage
 
 router = APIRouter()
 
@@ -34,54 +32,27 @@ async def start_session(payload: SessionStartRequest) -> Session:
     )
 
 
-@router.post("/{session_id}/rep", response_model=dict[str, str])
-async def record_rep_completion(session_id: UUID, payload: RepEventCreate) -> dict[str, str]:
-    """Record a tracked repetition event during an assisted playback session."""
-    success = get_session_event_storage().add_rep(
+@router.post("/{session_id}/finalize", response_model=dict[str, str])
+async def finalize_session(session_id: UUID, payload: SessionFinalizeRequest) -> dict[str, str]:
+    """Finalize an assisted playback session, saving all event lists in batch."""
+    # 1. Verify session exists and is active
+    if not get_session_storage().session_exists_and_active(session_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Session not found or already finalized."
+        )
+
+    # 2. Finalize session (persists events, marks ended, updates summaries)
+    success = get_session_storage().finalize_session(
         session_id=session_id,
-        exercise_id=payload.exercise_id,
-        rep_count=payload.rep_count,
-        timestamp=payload.timestamp,
-        metadata=payload.metadata
+        playback_events=payload.playback_events,
+        reps=payload.reps,
+        form_errors=payload.form_errors,
+        ended_at=payload.ended_at
     )
     if not success:
-        raise HTTPException(status_code=400, detail="Failed to record rep. Session not found or already ended.")
-    return {"status": "recorded"}
-
-
-@router.post("/{session_id}/form-error", response_model=dict[str, str])
-async def record_form_error(session_id: UUID, payload: FormErrorCreate) -> dict[str, str]:
-    """Record a detected form error during an assisted playback session."""
-    success = get_session_event_storage().add_form_error(
-        session_id=session_id,
-        form_error=payload.form_error
-    )
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to record form error. Session not found or already ended.")
-    return {"status": "recorded"}
-
-
-@router.post("/{session_id}/playback-event", response_model=dict[str, str])
-async def record_playback_event(session_id: UUID, payload: PlaybackEventCreate) -> dict[str, str]:
-    """Record a playback interaction (pause, play, seek, speed change, assistant cue delivered, user override)."""
-    success = get_session_event_storage().add_playback_event(
-        session_id=session_id,
-        event_type=payload.event_type,
-        timestamp_ms=payload.timestamp_ms,
-        metadata=payload.metadata
-    )
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to record playback event. Session not found or already ended.")
-    return {"status": "recorded"}
-
-
-@router.post("/{session_id}/end", response_model=dict[str, str])
-async def end_session(session_id: UUID) -> dict[str, str]:
-    """End an assisted playback session and generate a summary."""
-    success = get_session_storage().end_session(session_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    return {"status": "ended"}
+        raise HTTPException(status_code=500, detail="Failed to finalize session.")
+    return {"status": "finalized"}
 
 
 @router.get("", response_model=list[Session])

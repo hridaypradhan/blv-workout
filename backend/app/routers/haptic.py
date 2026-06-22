@@ -10,7 +10,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import (
-    HapticPattern,
     HapticTestRequest,
     HapticTestResponse,
     HapticTriggerRequest,
@@ -59,11 +58,6 @@ async def trigger_haptic_pattern(payload: HapticTriggerRequest) -> HapticTrigger
         limbs=payload.limbs,
     )
 
-
-@router.get("/patterns", response_model=dict[str, HapticPattern])
-async def get_haptic_patterns() -> dict[str, HapticPattern]:
-    """Return the available haptic/spatial assistance cue pattern library."""
-    return haptic_provider.get_patterns()
 
 
 @router.get("/vibrations", response_model=list[HapticVibrationCandidate])

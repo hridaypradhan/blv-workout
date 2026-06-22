@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useLayout } from "./LayoutContext";
-import { getActiveUserId, USER_UPDATED_EVENT } from "@/lib/prototypeUser";
-import { getUserProfile } from "@/lib/api";
+import { useUserProfile } from "./UserProfileContext";
 import { useAccessibilityPreferences } from "@/lib/hooks/useAccessibilityPreferences";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
@@ -16,10 +14,11 @@ interface HeaderProps {
 export default function Header({ id = "main-header" }: HeaderProps) {
   const pathname = usePathname();
   const { setSidebarOpen, sidebarCollapsed, setSidebarCollapsed } = useLayout();
+  const { user } = useUserProfile();
 
-  const [userName, setUserName] = useState<string>("Profile");
-  const [avatarInitial, setAvatarInitial] = useState<string>("P");
-  const [ariaLabel, setAriaLabel] = useState<string>("Profile options. Open settings.");
+  const userName = user?.name || "Profile";
+  const avatarInitial = user?.name ? (user.name.charAt(0).toUpperCase() || "P") : "P";
+  const ariaLabel = user?.name ? `Profile for ${user.name}. Open settings.` : "Profile options. Open settings.";
 
   const {
     voiceGuidance,
@@ -28,41 +27,6 @@ export default function Header({ id = "main-header" }: HeaderProps) {
     toggleVoiceGuidance,
     toggleHighContrast,
   } = useAccessibilityPreferences();
-
-  useEffect(() => {
-    const fetchProfile = () => {
-      const activeUserId = getActiveUserId();
-      if (!activeUserId) return;
-
-      getUserProfile(activeUserId)
-        .then((profile) => {
-          if (profile && profile.name) {
-            setUserName(profile.name);
-            setAvatarInitial(profile.name.charAt(0).toUpperCase() || "P");
-            setAriaLabel(`Profile for ${profile.name}. Open settings.`);
-          } else {
-            setUserName("Profile");
-            setAvatarInitial("P");
-            setAriaLabel("Profile options. Open settings.");
-          }
-        })
-        .catch((err) => {
-          console.warn("Failed to load user profile in header:", err);
-          setUserName("Profile");
-          setAvatarInitial("P");
-          setAriaLabel("Profile options. Open settings.");
-        });
-    };
-
-    fetchProfile();
-
-    if (typeof window !== "undefined") {
-      window.addEventListener(USER_UPDATED_EVENT, fetchProfile);
-      return () => {
-        window.removeEventListener(USER_UPDATED_EVENT, fetchProfile);
-      };
-    }
-  }, []);
 
   const pageTitle =
     pathname === "/"

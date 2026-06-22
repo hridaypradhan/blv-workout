@@ -5,50 +5,7 @@ import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { ProcessingStage } from "@/types";
 import { submitVideo, getSSEUrl } from "@/lib/api";
-
-/** Map backend stages to ordered display steps for the progress UI. */
-const PIPELINE_STEPS = [
-  {
-    key: ProcessingStage.SUBMITTED,
-    name: "Submitted",
-    desc: "Your YouTube video has been queued for assistance preparation.",
-  },
-  {
-    key: ProcessingStage.FETCHING_METADATA,
-    name: "Fetching Metadata",
-    desc: "Retrieving channel name, duration, and video metadata.",
-  },
-  {
-    key: ProcessingStage.TRANSCRIBING,
-    name: "Transcribing",
-    desc: "Analyzing the trainer's speech track for alignment.",
-  },
-  {
-    key: ProcessingStage.ANCHORING_TIMELINE,
-    name: "Anchoring Timeline",
-    desc: "Identifying key workout segments and transitions.",
-  },
-  {
-    key: ProcessingStage.CLASSIFYING_TRAINER_INSTRUCTIONS,
-    name: "Classifying Instructions",
-    desc: "Mapping exercise cues, rep calls, and instructions.",
-  },
-  {
-    key: ProcessingStage.ANALYZING_MOVEMENT_WINDOWS,
-    name: "Analyzing Movement",
-    desc: "Determining expected joint angles and rep thresholds.",
-  },
-  {
-    key: ProcessingStage.GENERATING_SIDECAR_MANIFEST,
-    name: "Generating Sidecar Manifest",
-    desc: "Compiling the final sidecar data structure for playback.",
-  },
-  {
-    key: ProcessingStage.COMPLETED,
-    name: "Completed",
-    desc: "Assistance sidecar is ready in your library.",
-  },
-] as const;
+import { PIPELINE_STEPS } from "@/lib/formatters/preprocessingFormatters";
 
 /** Return the ordinal index of a stage within PIPELINE_STEPS (-1 if not found). */
 function stageIndex(stage: ProcessingStage): number {
@@ -61,6 +18,7 @@ export default function ProcessVideo() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false);
+  const [sseWarning, setSseWarning] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   /** Cleanup SSE connection on unmount. */
@@ -84,14 +42,17 @@ export default function ProcessVideo() {
         const stage = data.stage as ProcessingStage;
         setCurrentStage(stage);
 
+        // Clear SSE warning upon receiving any valid update event
+        setSseWarning(null);
+
         if (stage === ProcessingStage.FAILED) {
           setError(data.error || "An unknown error occurred.");
           es.close();
         } else if (stage === ProcessingStage.COMPLETED) {
           es.close();
         }
-      } catch {
-        // Ignore malformed events
+      } catch (err) {
+        console.warn("Received malformed SSE event data:", event.data, err);
       }
     });
 
@@ -103,6 +64,9 @@ export default function ProcessVideo() {
         currentStage === ProcessingStage.FAILED
       ) {
         es.close();
+      } else {
+        // Show connection warning but do not fail the job as SSE auto-reconnects
+        setSseWarning("Connection to preparation updates was interrupted. Reconnecting...");
       }
     };
   }, [currentStage]);
@@ -111,6 +75,7 @@ export default function ProcessVideo() {
   const submitUrl = useCallback(async (url: string) => {
     setError(null);
     setCurrentStage(null);
+    setSseWarning(null);
     setIsSubmitting(true);
 
     try {
@@ -175,7 +140,7 @@ export default function ProcessVideo() {
   function badgeText() {
     if (isFailed) return "Failed";
     if (isCompleted) return "Completed";
-    if (isProcessing) return "Preparing…";
+    if (isProcessing) return "Preparing...";
     return "Idle";
   }
 
@@ -234,9 +199,9 @@ export default function ProcessVideo() {
               id="submit-process-btn"
             >
               {isSubmitting
-                ? "Submitting…"
+                ? "Submitting..."
                 : isProcessing
-                ? "Preparing…"
+                ? "Preparing..."
                 : "Prepare Assistance"}
             </button>
           </form>
@@ -339,6 +304,22 @@ export default function ProcessVideo() {
             )}
           </div>
 
+          {sseWarning && (
+            <div
+              className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-medium rounded-2xl flex items-center gap-3 animate-pulse"
+              role="status"
+              aria-live="polite"
+            >
+              <svg className="w-5 h-5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.228 10H17M4 4h7M4 4v5h5" />
+              </svg>
+              <div>
+                <p className="font-semibold">Connection to preparation updates was interrupted.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Reconnecting...</p>
+              </div>
+            </div>
+          )}
+
           {/* List of steps */}
           <div
             className="space-y-0"
@@ -367,11 +348,11 @@ export default function ProcessVideo() {
                 state === "idle" ? "text-slate-500" : "text-slate-300";
               const statusLabel =
                 state === "completed"
-                  ? " — Done"
+                  ? " - Done"
                   : state === "active"
-                  ? " — In progress"
+                  ? " - In progress"
                   : state === "failed"
-                  ? " — Failed"
+                  ? " - Failed"
                   : "";
 
               return (

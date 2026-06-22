@@ -1,15 +1,10 @@
 import { API_BASE_URL, checkResponse } from "./client";
-import { HapticPattern, HapticTestResponse, HapticTriggerResponse, SleeveSide, HapticVibrationCandidate } from "../../types";
+import { HapticTestResponse, HapticTriggerResponse, SleeveSide, HapticVibrationCandidate } from "../../types";
+import { devLogger } from "../logger";
 
 // ============================================================================
 // Wired API Surface - Haptic Sleeve Calibrations
 // ============================================================================
-
-/** Retrieve the complete haptic pattern library from the backend. */
-export async function getHapticPatterns(): Promise<Record<string, HapticPattern>> {
-  const res = await fetch(`${API_BASE_URL}/api/haptic/patterns`);
-  return checkResponse<Record<string, HapticPattern>>(res, "Failed to get haptic patterns");
-}
 
 /** Retrieve all haptic vibration candidates from the manifest. */
 export async function getHapticVibrations(): Promise<HapticVibrationCandidate[]> {
@@ -19,7 +14,7 @@ export async function getHapticVibrations(): Promise<HapticVibrationCandidate[]>
 
 /** Trigger a test haptic pulse on a sleeve. */
 export async function triggerHapticTest(sleeveSide: SleeveSide): Promise<HapticTestResponse> {
-  console.log("Triggering test haptic pulse on sleeve:", sleeveSide);
+  devLogger.log("Triggering test haptic pulse on sleeve:", sleeveSide);
   const res = await fetch(`${API_BASE_URL}/api/haptic/test`, {
     method: "POST",
     headers: {
@@ -39,7 +34,7 @@ export async function triggerHapticPattern(
   vibrationId?: string,
   limbs?: string[]
 ): Promise<HapticTriggerResponse> {
-  console.log("Triggering haptic pattern:", { sleeveSides, patternName, intensity, cueType, vibrationId, limbs });
+  devLogger.log("Triggering haptic pattern:", { sleeveSides, patternName, intensity, cueType, vibrationId, limbs });
   const res = await fetch(`${API_BASE_URL}/api/haptic/trigger`, {
     method: "POST",
     headers: {

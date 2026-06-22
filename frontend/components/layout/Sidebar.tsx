@@ -192,7 +192,12 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
         }`}>
           <Link
             href="/"
-            onClick={() => setSidebarOpen(false)}
+            onClick={() => {
+              setSidebarOpen(false);
+              if (pathname !== "/") {
+                window.dispatchEvent(new CustomEvent("navigation-start"));
+              }
+            }}
             className="flex items-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 rounded"
             aria-label="FitA11y Home Page"
             title={sidebarCollapsed ? "FitA11y" : undefined}
@@ -237,7 +242,12 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => {
+                  setSidebarOpen(false);
+                  if (!isActive) {
+                    window.dispatchEvent(new CustomEvent("navigation-start"));
+                  }
+                }}
                 title={sidebarCollapsed ? item.name : undefined}
                 className={`flex items-center rounded-xl transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-1 ${
                   sidebarCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3"

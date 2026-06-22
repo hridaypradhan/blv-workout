@@ -382,6 +382,11 @@ class Session(BaseModel):
     form_errors: list[FormError] = Field(default_factory=list)
     playback_events: list[PlaybackEvent] = Field(default_factory=list)
     summary: str | None = None
+    reps_count: int | None = 0
+    form_errors_count: int | None = 0
+    assistant_interactions_count: int | None = 0
+    haptic_cues_count: int | None = 0
+    playback_interactions_count: int | None = 0
 
 
 class SleeveStatus(BaseModel):
@@ -454,6 +459,15 @@ class PlaybackEventCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class SessionFinalizeRequest(BaseModel):
+    """Request body for finalizing an assisted playback session with all telemetry events."""
+
+    playback_events: list[PlaybackEventCreate] = Field(default_factory=list)
+    reps: list[RepEventCreate] = Field(default_factory=list)
+    form_errors: list[FormErrorCreate] = Field(default_factory=list)
+    ended_at: datetime | None = None
+
+
 class CorrectionRequest(BaseModel):
     """Request body for generating supplementary form correction from joint angles."""
 
@@ -464,21 +478,6 @@ class CorrectionRequest(BaseModel):
     current_timestamp_ms: float | None = None
     persona: AssistantPersona = AssistantPersona.SUPPORTIVE
 
-
-class PacingRequest(BaseModel):
-    """Request body for pacing feedback based on repetition timing."""
-
-    session_id: UUID
-    exercise_id: UUID
-    lag_ratio: float
-    persona: AssistantPersona = AssistantPersona.SUPPORTIVE
-
-
-class MotivationRequest(BaseModel):
-    """Request body for low-priority motivational assistant cue."""
-
-    milestone_event: str
-    persona: AssistantPersona = AssistantPersona.SUPPORTIVE
 
 
 class RuntimeObservationContext(BaseModel):
@@ -595,118 +594,6 @@ class HapticTriggerResponse(BaseModel):
     target_limbs: list[HapticLimb] | None = None
     bhaptics_event_name: str | None = None
 
-
-# ---------------------------------------------------------------------------
-# Playback & Pacing Instruction Models
-# ---------------------------------------------------------------------------
-
-
-class PlaybackInstruction(BaseModel):
-    """YouTube IFrame playback adjustment commands (pause, play, seek, set_speed)."""
-
-    action: str  # pause, play, seek, set_speed
-    suggested_speed: float | None = None
-
-
-class HapticInstruction(BaseModel):
-    """Haptic/spatial assistance cue instruction for sleeves."""
-
-    enabled: bool
-    pattern: str | None = None
-    sleeves: list[SleeveSide] = Field(default_factory=list)
-    intensity: float | None = None
-
-
-class RepAdjustment(BaseModel):
-    """Assistant tracking target adjustment recommendation.
-
-    This is a recommendation only — FitA11y never rewrites the trainer's
-    workout. The original video continues unchanged.
-    """
-
-    original_target: int
-    assistant_tracking_target: int
-    reason: str | None = None
-
-
-class PacingMetrics(BaseModel):
-    """Calculated metric inputs for adaptive playback pacing."""
-
-    latest_lag_ratio: float
-    rolling_average_lag_ratio: float
-    sustained_lag: bool
-    recovery_detected: bool
-    form_errors_increasing: bool
-
-
-class AdaptivePacingRequest(BaseModel):
-    """Request body for adaptive playback pacing control."""
-
-    session_id: UUID
-    exercise_id: UUID
-    exercise_name: str
-    expected_rep_duration_seconds: float | None = None
-    rep_durations_seconds: list[float] | None = None
-    recent_lag_ratios: list[float] | None = None
-    completed_reps: int = 0
-    target_reps: int | None = None
-    recent_form_error_counts: list[int] | None = None
-    primary_sleeves: list[SleeveSide] = Field(default_factory=list)
-    current_playback_speed: float = 1.0
-    user_command: str | None = None
-    persona: AssistantPersona = AssistantPersona.SUPPORTIVE
-
-
-class AdaptivePacingResponse(BaseModel):
-    """Structured response body for adaptive playback pacing control.
-
-    Playback actions map to YouTube IFrame commands. Rep adjustments
-    are assistant tracking recommendations only.
-    """
-
-    feature: str = "adaptive_pacing"
-    decision: str
-    assistant_message: str
-    playback: PlaybackInstruction
-    haptic: HapticInstruction
-    rep_adjustment: RepAdjustment | None = None
-    metrics: PacingMetrics
-    reason: str
-
-
-class RhythmMetrics(BaseModel):
-    """Calculated rhythm drift and variance metrics."""
-
-    expected_rep_duration_seconds: float
-    user_average_rep_duration_seconds: float
-    drift_ratio: float
-    drift_percent: float
-    irregularity_score: float
-
-
-class RhythmPacingRequest(BaseModel):
-    """Request body for beat & rhythm pacing assistant."""
-
-    session_id: UUID
-    exercise_id: UUID
-    exercise_name: str
-    beat_timestamps_seconds: list[float] | None = None
-    bpm: float | None = None
-    expected_beats_per_rep: int | None = None
-    expected_rep_duration_seconds: float | None = None
-    rep_timestamps_seconds: list[float] | None = None
-    rep_durations_seconds: list[float] | None = None
-    persona: AssistantPersona = AssistantPersona.SUPPORTIVE
-
-
-class RhythmPacingResponse(BaseModel):
-    """Structured response body for beat & rhythm pacing assistant."""
-
-    feature: str = "rhythm_pacing"
-    decision: str
-    assistant_message: str
-    rhythm: RhythmMetrics
-    reason: str
 
 
 class TranscriptArtifact(BaseModel):

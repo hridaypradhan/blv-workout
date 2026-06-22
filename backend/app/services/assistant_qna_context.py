@@ -17,6 +17,31 @@ def build_qna_context(
     session_context: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Builds a compact grounded context window from job metadata, sidecar, cue plan, and transcript."""
+    if session_context and session_context.get("is_grounded"):
+        logger.info("S3/DynamoDB reads skipped for QnA context due to is_grounded: true")
+        context = {
+            "video_title": session_context.get("video_title"),
+            "current_exercise": session_context.get("current_exercise"),
+            "nearby_exercises": session_context.get("nearby_exercises") or [],
+            "nearby_transcript": session_context.get("nearby_transcript"),
+            "nearby_trainer_instructions": session_context.get("nearby_trainer_instructions") or [],
+            "cue_plan_exercise_description": session_context.get("cue_plan_exercise_description"),
+            "recent_trainer_instruction_summaries": session_context.get("recent_trainer_instruction_summaries") or [],
+        }
+
+        session_ctx_compact = {}
+        if session_context.get("active_exercise"):
+            session_ctx_compact["active_exercise"] = session_context.get("active_exercise")
+        if session_context.get("latest_trainer_instruction"):
+            session_ctx_compact["latest_trainer_instruction"] = session_context.get("latest_trainer_instruction")
+        if session_context.get("audio_coexistence"):
+            session_ctx_compact["audio_coexistence_settings"] = session_context.get("audio_coexistence")
+        if "assistant_voice_muted" in session_context:
+            session_ctx_compact["assistant_muted_state"] = session_context.get("assistant_voice_muted")
+
+        context["session_context"] = session_ctx_compact
+        return context
+
     context = {
         "video_title": None,
         "current_exercise": None,

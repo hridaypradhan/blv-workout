@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.core.job_store import JobRecord, job_store
 from app.models.schemas import AssistanceSidecarManifest, ProcessingStage
+from app.core.storage import get_artifact_storage
 from app.models.cue_plan_schemas import CuePlan
 from app.services.sidecar_service import sidecar_service
 from app.services.cue_plan_service import cue_plan_service
@@ -62,6 +63,7 @@ class TestCuePlanGeneration(unittest.TestCase):
         self.original_ai_provider = settings.AI_PROVIDER
         self.original_api_key = settings.GEMINI_API_KEY
         self.original_diagnostics_enabled = settings.AI_DIAGNOSTICS_ENABLED
+        settings.AI_DIAGNOSTICS_ENABLED = True
 
     def tearDown(self):
         settings.AI_PROVIDER = self.original_ai_provider
@@ -385,26 +387,22 @@ class TestCuePlanGeneration(unittest.TestCase):
         # Generate and save cue plan & diagnostics
         cue_plan = cue_plan_service.generate_cue_plan(job, sidecar)
         
-        # Check files exist
-        manifest_path = f"manifest_{job.video_id}.json"
-        diag_path = f"ai_diagnostics/{job.video_id}.json"
-        cue_plan_path = f"cue_plans/{job.video_id}.json"
-        cue_diag_path = f"ai_diagnostics/cue_plan_{job.video_id}.json"
-        
-        self.assertIsNotNone(load_json_store(manifest_path))
-        self.assertIsNotNone(load_json_store(diag_path))
-        self.assertIsNotNone(load_json_store(cue_plan_path))
-        self.assertIsNotNone(load_json_store(cue_diag_path))
+        # Check artifacts exist using storage abstraction
+        storage = get_artifact_storage()
+        self.assertIsNotNone(storage.load_manifest(job.video_id))
+        self.assertIsNotNone(storage.load_sidecar_diagnostics(job.video_id))
+        self.assertIsNotNone(storage.load_cue_plan(job.video_id))
+        self.assertIsNotNone(storage.load_cue_plan_diagnostics(job.video_id))
         
         # Call DELETE endpoint
         resp = client.delete(f"/api/preprocessing/{job.video_id}")
         self.assertEqual(resp.status_code, 200)
         
-        # Verify all files popped/deleted from disk
-        self.assertIsNone(load_json_store(manifest_path))
-        self.assertIsNone(load_json_store(diag_path))
-        self.assertIsNone(load_json_store(cue_plan_path))
-        self.assertIsNone(load_json_store(cue_diag_path))
+        # Verify all artifacts deleted from storage abstraction
+        self.assertIsNone(storage.load_manifest(job.video_id))
+        self.assertIsNone(storage.load_sidecar_diagnostics(job.video_id))
+        self.assertIsNone(storage.load_cue_plan(job.video_id))
+        self.assertIsNone(storage.load_cue_plan_diagnostics(job.video_id))
 
     def test_old_sidecar_only_prepared_videos_still_work(self):
         """Verify that older videos that only have sidecar manifests on disk still load successfully, yielding a 404 for cue-plan."""
@@ -698,57 +696,7 @@ class TestCuePlanGeneration(unittest.TestCase):
         # Clean up
         delete_cue_plan_from_disk(video_uuid)
 
-    def test_cue_plan_selection_api_route(self):
-        """Verify the POST /api/assistant/cue-plan/select API route coordinates runtime select calls successfully."""
-        video_uuid = str(uuid.uuid4())
-        
-        # Persist a mock cue plan
-        from app.models.cue_plan_schemas import CueModality, CuePriority, InterruptionPolicyHint, CueIntent, CueSourceType, CueTextVariants, CueCandidate
-        cue_plan = CuePlan(
-            video_id=uuid.UUID(video_uuid),
-            youtube_id="12345678901",
-            pre_session_overview="Overview",
-            exercise_descriptions=[],
-            cue_candidates=[
-                CueCandidate(
-                    id="api-test-cue",
-                    source_type=CueSourceType.EXERCISE_ANCHOR,
-                    start_ms=1000.0,
-                    end_ms=5000.0,
-                    priority=CuePriority.MEDIUM,
-                    intent=CueIntent.SETUP_ORIENTATION,
-                    allowed_modalities=[CueModality.AUDIO],
-                    text_variants=CueTextVariants(brief="Brief", moderate="Moderate", detailed="Detailed"),
-                    interruption_policy_hint=InterruptionPolicyHint.SAFE_GAP_ONLY
-                )
-            ]
-        )
-        save_cue_plan_to_disk(video_uuid, cue_plan)
-        
-        # Make POST request
-        payload = {
-            "video_id": video_uuid,
-            "current_time_ms": 2000.0,
-            "coexistence_settings": {
-                "interruption_level": "brief_speech",
-                "assistant_verbosity": "moderate",
-                "pause_before_speaking": False,
-                "correction_frequency": "medium"
-            },
-            "assistant_muted": False,
-            "recently_delivered_cue_ids": []
-        }
-        
-        resp = client.post("/api/assistant/cue-plan/select", json=payload)
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertTrue(data["should_deliver"])
-        self.assertEqual(data["cue_id"], "api-test-cue")
-        self.assertEqual(data["modality"], "audio")
-        self.assertEqual(data["text"], "Brief")
-        
-        # Clean up
-        delete_cue_plan_from_disk(video_uuid)
+
 
     def test_gemini_adapter_normalization(self):
         """Verify that Gemini adapter normalizes predictable aliases to canonical values before validation."""

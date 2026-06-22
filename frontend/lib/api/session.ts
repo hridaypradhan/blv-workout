@@ -19,35 +19,35 @@ export async function startSession(videoId: string, userId?: string): Promise<Se
   return checkResponse(res, "Start session failed");
 }
 
-/** Record a user interaction or assistant event in a session. */
-export async function recordPlaybackEvent(
+/** Finalize the session, saving all buffered events in batch and ending the session. */
+export async function finalizeSession(
   sessionId: string,
-  eventType: string,
-  timestampMs: number | null,
-  metadata?: object
-): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}/playback-event`, {
+  playbackEvents: Array<{ event_type: string; timestamp_ms: number | null; metadata?: object }>,
+  reps: Array<{ exercise_id: string; rep_count: number; timestamp: string; metadata?: object }>,
+  formErrors: Array<{
+    exercise_id: string;
+    form_error: {
+      joint: string;
+      observed_angle: number;
+      expected_range: [number, number];
+      severity: string;
+      message?: string | null;
+    };
+    timestamp: string;
+  }>,
+  endedAt?: string
+): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}/finalize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      event_type: eventType,
-      timestamp_ms: timestampMs,
-      metadata: metadata || {},
+      playback_events: playbackEvents,
+      reps,
+      form_errors: formErrors,
+      ended_at: endedAt || new Date().toISOString(),
     }),
   });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    const detail = typeof body.detail === "string" ? body.detail : undefined;
-    throw new Error(detail || `Failed to record playback event (${res.status})`);
-  }
-}
-
-/** End the current session and get a final report status. */
-export async function endSession(sessionId: string): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}/end`, {
-    method: "POST",
-  });
-  return checkResponse(res, "End session failed");
+  return checkResponse(res, "Finalize session failed");
 }
 
 /** Get a list of past sessions for a user. */
@@ -61,52 +61,3 @@ export async function getSession(sessionId: string): Promise<Session> {
   const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}`);
   return checkResponse(res, "Fetch session failed");
 }
-
-/** Record a rep completion event in a session. */
-export async function recordRepCompletion(
-  sessionId: string,
-  exerciseId: string,
-  repCount: number,
-  metadata?: object
-): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}/rep`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      exercise_id: exerciseId,
-      rep_count: repCount,
-      timestamp: new Date().toISOString(),
-      metadata: metadata || {},
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to record rep completion (${res.status})`);
-  }
-}
-
-/** Record a form error event in a session. */
-export async function recordFormError(
-  sessionId: string,
-  exerciseId: string,
-  formError: {
-    joint: string;
-    observed_angle: number;
-    expected_range: [number, number];
-    severity: string;
-    message?: string | null;
-  }
-): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/session/${sessionId}/form-error`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      exercise_id: exerciseId,
-      form_error: formError,
-      timestamp: new Date().toISOString(),
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to record form error (${res.status})`);
-  }
-}
-

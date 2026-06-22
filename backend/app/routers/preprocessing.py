@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from app.core.config import settings
 from app.core.job_store import JobRecord
 from app.core.storage import get_job_storage, get_artifact_storage
-from app.models.schemas import AssistanceSidecarManifest, ProcessingStage, YouTubeURL
+from app.models.schemas import AssistanceSidecarManifest, ProcessingStage, YouTubeURL, TranscriptArtifact
 from app.services.preprocessing_service import run_assistance_preparation
 from app.services.sidecar_service import sidecar_service
 from app.models.cue_plan_schemas import CuePlan
@@ -287,6 +287,15 @@ async def get_cue_plan(video_id: UUID) -> CuePlan:
     if cue_plan is None:
         raise HTTPException(status_code=404, detail="Cue plan not found on disk.")
     return cue_plan
+
+
+@router.get("/transcript/{video_id}", response_model=TranscriptArtifact)
+async def get_transcript(video_id: UUID) -> TranscriptArtifact:
+    """Return the raw and segmented transcript artifact for a prepared YouTube video."""
+    transcript = get_artifact_storage().load_transcript(str(video_id))
+    if transcript is None:
+        raise HTTPException(status_code=404, detail="Transcript artifact not found.")
+    return transcript
 
 
 @router.get("/cue-plan/{video_id}/inspection", response_model=dict)

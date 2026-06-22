@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
+import { Suspense } from "react";
+import NavigationProgress from "@/components/layout/NavigationProgress";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -20,6 +22,7 @@ export const metadata: Metadata = {
 };
 
 import { LayoutProvider } from "@/components/layout/LayoutContext";
+import { UserProfileProvider } from "@/components/layout/UserProfileContext";
 
 export default function RootLayout({
   children,
@@ -41,15 +44,21 @@ export default function RootLayout({
         </a>
 
         {/* Layout container wrapped in provider */}
-        <LayoutProvider>
-          <div className="relative min-h-screen">
-            {/* Global Sidebar */}
-            <Sidebar id="global-sidebar" />
+        <UserProfileProvider>
+          <LayoutProvider>
+            <div className="relative min-h-screen">
+              {/* Global Sidebar */}
+              <Sidebar id="global-sidebar" />
 
-            {/* Children views */}
-            {children}
-          </div>
-        </LayoutProvider>
+              <Suspense fallback={null}>
+                <NavigationProgress />
+              </Suspense>
+
+              {/* Children views */}
+              {children}
+            </div>
+          </LayoutProvider>
+        </UserProfileProvider>
       </body>
     </html>
   );

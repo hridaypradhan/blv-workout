@@ -9,7 +9,6 @@ from app.core.storage.dynamodb import (
     DynamoDBUserStorage,
     DynamoDBJobStorage,
     DynamoDBSessionStorage,
-    DynamoDBSessionEventStorage,
     PROTOTYPE_USER_ID,
 )
 from app.models.schemas import (
@@ -204,44 +203,78 @@ class TestDynamoDBStorage(unittest.TestCase):
         self.assertEqual(len(session.reps), 1)
         self.assertEqual(session.reps[0].rep_count, 3)
 
-    def test_session_event_storage_adding_events(self) -> None:
-        storage = DynamoDBSessionEventStorage()
+    def test_session_storage_finalize_session(self) -> None:
+        storage = DynamoDBSessionStorage()
         session_id = uuid4()
+        user_id = uuid4()
+        video_id = uuid4()
         exercise_id = uuid4()
 
-        active_session = Session(
-            id=session_id,
-            user_id=uuid4(),
-            video_id=uuid4(),
-            started_at=datetime.now(timezone.utc),
-            ended_at=None,
-            reps=[],
-            form_errors=[],
-            playback_events=[],
-            summary=None
-        )
+        session_data = {
+            "session_id": str(session_id),
+            "user_id": str(user_id),
+            "video_id": str(video_id),
+            "video_title": "Active Workout Session",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "ended_at": None,
+            "summary": None,
+        }
+        self.mock_table.get_item.return_value = {"Item": session_data}
 
-        with patch.object(storage.session_storage, "get_session", return_value=active_session):
-            # Add rep
-            res = storage.add_rep(session_id, exercise_id, 5)
-            self.assertTrue(res)
-            self.mock_events_table.put_item.assert_called_once()
-            
-            # Add form error
-            err = FormError(
-                joint="hip",
-                observed_angle=25.0,
-                expected_range=(10.0, 20.0),
-                severity="medium",
-                message="Stand taller"
-            )
-            res_err = storage.add_form_error(session_id, err)
-            self.assertTrue(res_err)
-            
-            # Add playback event
-            res_pb = storage.add_playback_event(session_id, "play", 1500.0)
-            self.assertTrue(res_pb)
-            self.assertEqual(self.mock_events_table.put_item.call_count, 3)
+        # Set up mock batch writer
+        mock_batch = MagicMock()
+        mock_batch.__enter__.return_value = mock_batch
+        self.mock_events_table.batch_writer.return_value = mock_batch
+
+        reps = [
+            {"exercise_id": str(exercise_id), "rep_count": 1, "timestamp": datetime.now(timezone.utc).isoformat(), "metadata": {}},
+        ]
+        form_errors = [
+            {
+                "exercise_id": str(exercise_id),
+                "form_error": {
+                    "joint": "left_knee",
+                    "observed_angle": 120.0,
+                    "expected_range": [0.0, 90.0],
+                    "severity": "warning",
+                    "message": "Knee alignment error"
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+        playback_events = [
+            {"event_type": "play", "timestamp_ms": 100.0, "metadata": {}},
+        ]
+
+        success = storage.finalize_session(session_id, playback_events, reps, form_errors)
+        self.assertTrue(success)
+        self.assertEqual(mock_batch.put_item.call_count, 3)
+
+    def test_session_exists_and_active(self) -> None:
+        storage = DynamoDBSessionStorage()
+        session_id = uuid4()
+
+        # 1. Missing session
+        self.mock_table.get_item.return_value = {}
+        self.assertFalse(storage.session_exists_and_active(session_id))
+
+        # 2. Active session
+        self.mock_table.get_item.return_value = {
+            "Item": {
+                "session_id": str(session_id),
+                "ended_at": None
+            }
+        }
+        self.assertTrue(storage.session_exists_and_active(session_id))
+
+        # 3. Ended session
+        self.mock_table.get_item.return_value = {
+            "Item": {
+                "session_id": str(session_id),
+                "ended_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+        self.assertFalse(storage.session_exists_and_active(session_id))
 
     def test_user_decimal_serialization(self) -> None:
         storage = DynamoDBUserStorage()
@@ -337,47 +370,45 @@ class TestDynamoDBStorage(unittest.TestCase):
         self.assertEqual(retrieved.playback_events[0].timestamp_ms, 1500.5)
         self.assertEqual(retrieved.playback_events[0].metadata["speed"], 1.25)
 
-    def test_session_event_storage_missing_or_ended_session_fails(self) -> None:
-        event_storage = DynamoDBSessionEventStorage()
+    def test_session_storage_finalize_session_missing_fails(self) -> None:
+        storage = DynamoDBSessionStorage()
         session_id = uuid4()
-        exercise_id = uuid4()
 
-        # Mock session_storage.get_session to return None (missing)
-        with patch.object(event_storage.session_storage, "get_session", return_value=None):
-            res_rep = event_storage.add_rep(session_id, exercise_id, 3)
-            self.assertFalse(res_rep)
-            
-            err = FormError(
-                joint="hip",
-                observed_angle=25.0,
-                expected_range=(10.0, 20.0),
-                severity="medium",
-                message="Stand taller"
-            )
-            res_err = event_storage.add_form_error(session_id, err)
-            self.assertFalse(res_err)
-            
-            res_pb = event_storage.add_playback_event(session_id, "play", 1500.0)
-            self.assertFalse(res_pb)
+        # Mock table get_item to return None to simulate missing session
+        self.mock_table.get_item.return_value = {}
 
-        # Mock session_storage.get_session to return ended session
-        ended_session = Session(
-            id=session_id,
-            user_id=uuid4(),
-            video_id=uuid4(),
-            started_at=datetime.now(timezone.utc),
-            ended_at=datetime.now(timezone.utc),
-            reps=[],
-            form_errors=[],
-            playback_events=[],
-            summary="Ended workout"
-        )
-        with patch.object(event_storage.session_storage, "get_session", return_value=ended_session):
-            res_rep = event_storage.add_rep(session_id, exercise_id, 3)
-            self.assertFalse(res_rep)
-            
-            res_err = event_storage.add_form_error(session_id, err)
-            self.assertFalse(res_err)
-            
-            res_pb = event_storage.add_playback_event(session_id, "play", 1500.0)
-            self.assertFalse(res_pb)
+        success = storage.finalize_session(session_id, [], [], [])
+        self.assertFalse(success)
+
+    def test_list_sessions_optimized(self) -> None:
+        storage = DynamoDBSessionStorage()
+        user_id = uuid4()
+
+        # Mock database response for GSI query
+        self.mock_table.query.return_value = {
+            "Items": [
+                {
+                    "session_id": str(uuid4()),
+                    "user_id": str(user_id),
+                    "video_id": str(uuid4()),
+                    "video_title": "Optimized Session 1",
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "ended_at": datetime.now(timezone.utc).isoformat(),
+                    "summary": "Completed session summary.",
+                    "reps_count": 5,
+                    "form_errors_count": 2,
+                    "assistant_interactions_count": 3,
+                    "haptic_cues_count": 4,
+                    "playback_interactions_count": 10
+                }
+            ]
+        }
+
+        sessions = storage.list_sessions(user_id)
+        self.assertEqual(len(sessions), 1)
+        session = sessions[0]
+        self.assertEqual(session.video_title, "Optimized Session 1")
+        self.assertEqual(session.reps_count, 5)
+        self.assertEqual(session.form_errors_count, 2)
+        # Verify that events table was NOT queried
+        self.mock_events_table.query.assert_not_called()

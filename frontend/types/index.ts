@@ -173,6 +173,11 @@ export interface Session {
   form_errors?: FormError[];
   playback_events?: PlaybackEvent[];
   summary?: string | null;
+  reps_count?: number | null;
+  form_errors_count?: number | null;
+  assistant_interactions_count?: number | null;
+  haptic_cues_count?: number | null;
+  playback_interactions_count?: number | null;
 }
 
 export enum TrainerInstructionEventType {
@@ -484,5 +489,16 @@ export interface RuntimeCueSelectionResponse {
 }
 
 
+export interface TranscriptSegment {
+  text: string;
+  start_ms?: number | null;
+  end_ms?: number | null;
+}
 
-
+export interface TranscriptArtifact {
+  video_id: string;
+  caption_status: string;
+  transcript: string;
+  transcript_segments: TranscriptSegment[];
+  created_at: string;
+}

@@ -46,7 +46,7 @@ export default function MovementCorrectionLog({ session }: MovementCorrectionLog
                       {err.severity}
                     </span>
                   </div>
-                  <p className="text-slate-300 italic">Observed: {err.observed_angle}° (Expected: {err.expected_range?.[0]}° - {err.expected_range?.[1]}°)</p>
+                  <p className="text-slate-300 italic">Observed: {err.observed_angle}{"\u00b0"} (Expected: {err.expected_range?.[0]}{"\u00b0"} - {err.expected_range?.[1]}{"\u00b0"})</p>
                   {err.message && <p className="text-slate-400">{err.message}</p>}
                 </div>
               ))}

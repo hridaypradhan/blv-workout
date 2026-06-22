@@ -88,66 +88,6 @@ def generate_correction(
     )
 
 
-def generate_motivation(
-    milestone_event: str,
-    persona: AssistantPersona,
-) -> AssistantCue:
-    """Generate a low-priority, supplementary motivational encouragement cue."""
-    event_clean = milestone_event.replace("_", " ").lower()
-
-    motivation_phrases = {
-        AssistantPersona.SUPPORTIVE: {
-            "halfway": "You're halfway through this exercise! Splendid effort, keep it up!",
-            "rep_10": "Double digits! 10 repetitions down. You are doing fantastic!",
-            "streak_5": "Five clean repetitions in a row! Excellent form consistency.",
-            "session_start": "Welcome to your assisted playback session. Follow the trainer's voice and let's get moving!",
-            "session_end": "Workout completed! Wonderful dedication. Rest and hydrate.",
-            "default": f"Amazing job reaching the {event_clean} milestone! Keep going!",
-        },
-        AssistantPersona.DIRECT: {
-            "halfway": "Halfway milestone reached. Maintain form.",
-            "rep_10": "10 repetitions completed. Continue routine.",
-            "streak_5": "Form consistency streak at 5 reps.",
-            "session_start": "Session started. Listen to primary trainer cues.",
-            "session_end": "Session completed. Good job.",
-            "default": f"Milestone: {event_clean} completed.",
-        },
-        AssistantPersona.ENERGETIC: {
-            "halfway": "Halfway there! Keep that fire burning, let's crush the rest!",
-            "rep_10": "Boom! 10 reps in the books! You are absolutely killing it!",
-            "streak_5": "5 in a row! That is what I call flawless form! Let's go!",
-            "session_start": "Session active! Let's bring the hype and smash this workout!",
-            "session_end": "Booya! You finished the entire session! High five!",
-            "default": f"Aw yeah! {event_clean} down! Let's keep this momentum!",
-        },
-        AssistantPersona.CALM: {
-            "halfway": "Halfway complete. Feel the rhythm of your movement.",
-            "rep_10": "10 repetitions. Stay centered and continue breathing deeply.",
-            "streak_5": "Five steady reps. Appreciate the alignment of your body.",
-            "session_start": "Beginning session. Find a comfortable pace alongside the trainer.",
-            "session_end": "Session concluded. Take a deep breath and relax.",
-            "default": f"Mindfully acknowledging the {event_clean} milestone.",
-        },
-    }
-
-    persona_phrases = motivation_phrases.get(persona, motivation_phrases[AssistantPersona.SUPPORTIVE])
-    text = persona_phrases.get(milestone_event, persona_phrases["default"])
-
-    return AssistantCue(
-        text=text,
-        persona=persona,
-        modality=FeedbackModality.AUDIO,
-        priority="low",  # Low-priority supplementary encouragement
-        timestamp_ms=None,
-        metadata={
-            "source": "prototype",
-            "provider": "prototype_assistant",
-            "replace_with": "ai_assistant_provider",
-            "milestone_event": milestone_event,
-        },
-    )
-
-
 def answer_question(
     question: str,
     session_context: dict[str, Any],
@@ -220,17 +160,3 @@ def answer_question(
         timestamp_ms=current_timestamp_ms,
         metadata=metadata,
     )
-
-
-def get_form_risk_templates(exercise_id: UUID) -> list[str]:
-    """Return a deterministic list of form risk warning templates for the exercise.
-
-    These are supplementary cues to help blind users anticipate form challenges.
-    """
-    # A generic but highly useful set of risk warnings since we don't have DB persistence
-    return [
-        "Lower back arching: Focus on bracing the abdominal wall.",
-        "Knees collapsing inward: Press knees outward to engage the glutes.",
-        "Weight shift to toes: Press heels down to stabilize base of support.",
-        "Excessive pacing lag: Follow the trainer's counting beat.",
-    ]

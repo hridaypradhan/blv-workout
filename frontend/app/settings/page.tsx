@@ -3,13 +3,15 @@
 import React, { useState, useEffect } from "react";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { getActiveUserId, notifyActiveUserUpdated } from "@/lib/prototypeUser";
-import { getUserProfile, updateUserSettings, getHapticVibrations } from "@/lib/api";
+import { updateUserSettings, getHapticVibrations } from "@/lib/api";
 import { mergeUserPreferences } from "@/lib/userPreferences";
 import { AssistantPersona, InterruptionLevel, AssistantVerbosity, HapticVibrationCandidate, HapticPreferences } from "@/types";
+import { useUserProfile } from "@/components/layout/UserProfileContext";
 
 export default function Settings() {
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, loading } = useUserProfile();
   const [activeUserId, setActiveUserId] = useState("");
+  const [isVibrationsLoading, setIsVibrationsLoading] = useState(true);
 
   // Settings state variables
   const [name, setName] = useState("");
@@ -40,61 +42,60 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    async function loadSettings() {
-      const activeId = getActiveUserId();
-      setActiveUserId(activeId);
+    async function loadVibrations() {
       try {
-        const user = await getUserProfile(activeId);
-        const prefs = mergeUserPreferences(user);
-        setName(prefs.name || "");
-        if (prefs.assistant_persona) {
-          setAssistantPersona(prefs.assistant_persona);
-        }
-        if (prefs.voice_settings) {
-          const vs = prefs.voice_settings as Record<string, string | number | boolean>;
-          if (typeof vs.tts_rate === "number") {
-            setTtsSpeed(vs.tts_rate);
-          }
-          if (typeof vs.voice_id === "string") {
-            setVoiceSelect(vs.voice_id);
-          }
-          if (typeof vs.spatial_audio === "boolean") {
-            setSpatialAudio(vs.spatial_audio);
-          }
-          if (typeof vs.haptic_first === "boolean") {
-            setHapticFirst(vs.haptic_first);
-          }
-          if (typeof vs.vision_loss === "string") {
-            setVisionLoss(vs.vision_loss);
-          }
-          if (typeof vs.screen_reader === "string") {
-            setScreenReader(vs.screen_reader);
-          }
-        }
-        if (prefs.audio_coexistence) {
-          setInterruptionLevel(prefs.audio_coexistence.interruption_level ?? "brief_speech");
-          setAssistantVerbosity(prefs.audio_coexistence.assistant_verbosity ?? "moderate");
-          setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking !== false);
-        }
-        if (prefs.haptic_preferences) {
-          setHapticPreferences(prefs.haptic_preferences);
-        }
-
-        // Load available haptic vibrations manifest
-        try {
-          const vList = await getHapticVibrations();
-          setVibrations(vList);
-        } catch (vErr) {
-          console.error("Failed to load haptic vibrations manifest:", vErr);
-        }
-      } catch (err) {
-        console.error("Failed to load user profile in settings:", err);
+        const vList = await getHapticVibrations();
+        setVibrations(vList);
+      } catch (vErr) {
+        console.error("Failed to load haptic vibrations manifest:", vErr);
       } finally {
-        setIsLoading(false);
+        setIsVibrationsLoading(false);
       }
     }
-    loadSettings();
+    loadVibrations();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setActiveUserId(user.id || getActiveUserId());
+      const prefs = mergeUserPreferences(user);
+      setName(prefs.name || "");
+      if (prefs.assistant_persona) {
+        setAssistantPersona(prefs.assistant_persona);
+      }
+      if (prefs.voice_settings) {
+        const vs = prefs.voice_settings as Record<string, string | number | boolean>;
+        if (typeof vs.tts_rate === "number") {
+          setTtsSpeed(vs.tts_rate);
+        }
+        if (typeof vs.voice_id === "string") {
+          setVoiceSelect(vs.voice_id);
+        }
+        if (typeof vs.spatial_audio === "boolean") {
+          setSpatialAudio(vs.spatial_audio);
+        }
+        if (typeof vs.haptic_first === "boolean") {
+          setHapticFirst(vs.haptic_first);
+        }
+        if (typeof vs.vision_loss === "string") {
+          setVisionLoss(vs.vision_loss);
+        }
+        if (typeof vs.screen_reader === "string") {
+          setScreenReader(vs.screen_reader);
+        }
+      }
+      if (prefs.audio_coexistence) {
+        setInterruptionLevel(prefs.audio_coexistence.interruption_level ?? "brief_speech");
+        setAssistantVerbosity(prefs.audio_coexistence.assistant_verbosity ?? "moderate");
+        setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking !== false);
+      }
+      if (prefs.haptic_preferences) {
+        setHapticPreferences(prefs.haptic_preferences);
+      }
+    }
+  }, [user]);
+
+  const isLoading = loading || isVibrationsLoading;
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();

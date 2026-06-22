@@ -4,12 +4,14 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { registerUser, getUserProfile } from "@/lib/api";
+import { registerUser } from "@/lib/api";
 import { getActiveUserId, setActiveUserId } from "@/lib/prototypeUser";
 import { mergeUserPreferences, DEFAULT_USER_PREFERENCES } from "@/lib/userPreferences";
+import { useUserProfile } from "@/components/layout/UserProfileContext";
 
 export default function Onboarding() {
   const router = useRouter();
+  const { user } = useUserProfile();
   const [name, setName] = useState("");
   const [visionLoss, setVisionLoss] = useState("vl-blind");
   const [screenReader, setScreenReader] = useState("none");
@@ -19,29 +21,23 @@ export default function Onboarding() {
   const [pairedSleeves, setPairedSleeves] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    async function loadUser() {
-      const activeId = getActiveUserId();
-      try {
-        const user = await getUserProfile(activeId);
-        setName(user.name || "");
-        const prefs = mergeUserPreferences(user);
-        if (prefs.voice_settings) {
-          const vs = prefs.voice_settings as Record<string, string | number | boolean>;
-          if (typeof vs.vision_loss === "string") {
-            setVisionLoss(vs.vision_loss);
-          }
-          if (typeof vs.screen_reader === "string") {
-            setScreenReader(vs.screen_reader);
-          }
+    if (user) {
+      setName(user.name || "");
+      const prefs = mergeUserPreferences(user);
+      if (prefs.voice_settings) {
+        const vs = prefs.voice_settings as Record<string, string | number | boolean>;
+        if (typeof vs.vision_loss === "string") {
+          setVisionLoss(vs.vision_loss);
         }
-      } catch (err) {
-        console.warn("Could not load existing profile, using defaults:", err);
-        setVisionLoss(DEFAULT_USER_PREFERENCES.voice_settings.vision_loss);
-        setScreenReader(DEFAULT_USER_PREFERENCES.voice_settings.screen_reader);
+        if (typeof vs.screen_reader === "string") {
+          setScreenReader(vs.screen_reader);
+        }
       }
+    } else {
+      setVisionLoss(DEFAULT_USER_PREFERENCES.voice_settings.vision_loss);
+      setScreenReader(DEFAULT_USER_PREFERENCES.voice_settings.screen_reader);
     }
-    loadUser();
-  }, []);
+  }, [user]);
 
   const handleSubmitProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +73,7 @@ export default function Onboarding() {
       setStatusMessage("Profile settings saved successfully! Redirecting...");
 
       setTimeout(() => {
+        window.dispatchEvent(new Event("navigation-start"));
         router.push("/video-library");
       }, 800);
     } catch (err) {

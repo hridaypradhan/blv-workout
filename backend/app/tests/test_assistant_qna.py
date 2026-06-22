@@ -393,3 +393,43 @@ class TestAssistantQnA(unittest.TestCase):
         from app.services.assistant_qna_providers.gemini_qna.prompt import SYSTEM_INSTRUCTION
         self.assertNotIn("simulation data", SYSTEM_INSTRUCTION.lower())
         self.assertIn("runtime observation context, if real reliable pose/form observation is available", SYSTEM_INSTRUCTION.lower())
+
+    def test_qna_diagnostics_disabled(self):
+        """Verify no Q&A diagnostics are written when AI_DIAGNOSTICS_ENABLED is False."""
+        settings.AI_PROVIDER = "prototype"
+        settings.AI_DIAGNOSTICS_ENABLED = False
+
+        video_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
+
+        request = QARequest(
+            question="How is my form?",
+            video_id=video_id,
+            session_id=session_id,
+            current_timestamp_ms=500.0
+        )
+
+        with patch.object(get_artifact_storage(), "save_qna_diagnostics") as mock_save:
+            response = qna_service.answer_question(request)
+            self.assertIsNone(response.diagnostics_ref)
+            mock_save.assert_not_called()
+
+    def test_qna_diagnostics_enabled(self):
+        """Verify Q&A diagnostics are written when AI_DIAGNOSTICS_ENABLED is True."""
+        settings.AI_PROVIDER = "prototype"
+        settings.AI_DIAGNOSTICS_ENABLED = True
+
+        video_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
+
+        request = QARequest(
+            question="How is my form?",
+            video_id=video_id,
+            session_id=session_id,
+            current_timestamp_ms=500.0
+        )
+
+        with patch.object(get_artifact_storage(), "save_qna_diagnostics") as mock_save:
+            response = qna_service.answer_question(request)
+            self.assertIsNotNone(response.diagnostics_ref)
+            mock_save.assert_called_once()

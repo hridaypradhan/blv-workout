@@ -2,14 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { startSession, getUserProfile, triggerHapticTest, recordPlaybackEvent } from "@/lib/api";
+import { startSession, triggerHapticTest, askAssistant } from "@/lib/api";
 import { getActiveUserId, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
 import { mergeUserPreferences } from "@/lib/userPreferences";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
-import { SleeveSide } from "@/types";
-import { SESSION_EVENTS } from "@/lib/sessionEvents";
+import { SleeveSide, AssistantPersona, QARequest, InterruptionLevel, AudioCoexistenceSettings, AssistantVerbosity } from "@/types";
+import { useUserProfile } from "@/components/layout/UserProfileContext";
+import { useSessionArtifacts } from "@/lib/hooks/useSessionArtifacts";
+import { buildFrontendQnAContext } from "@/lib/qnaContextBuilder";
 
 interface SetupPageProps {
   params: {
@@ -21,6 +24,16 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
+  const { user } = useUserProfile();
+
+  const {
+    job,
+    manifest,
+    cuePlan,
+    transcript,
+    isLoading: isLoadingArtifacts,
+    error: artifactsError,
+  } = useSessionArtifacts(params.videoId);
 
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +46,9 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [askInput, setAskInput] = useState("");
   const [assistantResponse, setAssistantResponse] = useState<string | null>(null);
   const [askAnnouncement, setAskAnnouncement] = useState("");
+  const [persona, setPersona] = useState<AssistantPersona | undefined>(undefined);
+  const [isPending, setIsPending] = useState(false);
+  const [qaError, setQaError] = useState<string | null>(null);
 
   // Haptic test states
   const [testingSleeves, setTestingSleeves] = useState<Record<string, boolean>>({});
@@ -42,37 +58,136 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const { hapticState } = usePrototypeHapticConnection();
 
   useEffect(() => {
-    const activeId = getActiveUserId();
-    setActiveUserId(activeId);
-
-    async function fetchUserSettings() {
-      try {
-        const user = await getUserProfile(activeId);
-        const prefs = mergeUserPreferences(user);
-        if (prefs.audio_coexistence) {
-          if (prefs.audio_coexistence.interruption_level) {
-            setInterruptionLevel(prefs.audio_coexistence.interruption_level);
-          }
-          if (prefs.audio_coexistence.pause_before_speaking !== undefined) {
-            setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking);
-          }
+    if (user) {
+      setActiveUserId(user.id || getActiveUserId());
+      if (user.assistant_persona) {
+        setPersona(user.assistant_persona);
+      }
+      const prefs = mergeUserPreferences(user);
+      if (prefs.audio_coexistence) {
+        if (prefs.audio_coexistence.interruption_level) {
+          setInterruptionLevel(prefs.audio_coexistence.interruption_level);
         }
-      } catch (err) {
-        console.warn("Could not load user profile in setup, using default defaults:", err);
+        if (prefs.audio_coexistence.pause_before_speaking !== undefined) {
+          setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking);
+        }
       }
     }
-    fetchUserSettings();
-  }, []);
+  }, [user]);
 
-  const handleAskQuestion = (e: React.FormEvent) => {
+  if (isLoadingArtifacts) {
+    return (
+      <PageWrapper id="session-setup-loading">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6">
+          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
+          <h1 className="text-xl font-bold text-white mb-2">Loading workout settings...</h1>
+          <p className="text-slate-400 text-sm">Preloading manifest, cue plan, and transcript for camera-free playback.</p>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (artifactsError) {
+    return (
+      <PageWrapper id="session-setup-error">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 max-w-md mx-auto">
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-full mb-4 text-red-400">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-white mb-2">Failed to load session settings</h1>
+          <p className="text-slate-400 text-sm mb-6">{artifactsError}</p>
+          <Link href="/onboarding" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-bold text-white rounded-lg border border-slate-700">
+            Back to Home
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  const handleAskQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     const query = askInput.trim();
-    if (!query) return;
+    if (!query || isPending) return;
 
-    const response = `Prototype assistant noted your question: "${query}". Live guidance will be available during assisted playback.`;
-    setAssistantResponse(response);
-    setAskAnnouncement(response);
-    setAskInput("");
+    setIsPending(true);
+    setQaError(null);
+    setAssistantResponse(null);
+    setAskAnnouncement("Assistant is responding.");
+
+    try {
+      const coexistenceSettings: AudioCoexistenceSettings = {
+        interruption_level: interruptionLevel as InterruptionLevel,
+        assistant_verbosity: user?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
+        pause_before_speaking: pauseBeforeSpeaking,
+        correction_frequency: user?.audio_coexistence?.correction_frequency || "medium",
+      };
+
+      let groundedSessionContext: Record<string, unknown>;
+      if (manifest && cuePlan && transcript) {
+        groundedSessionContext = buildFrontendQnAContext({
+          videoTitle: job?.title || null,
+          currentTimeMs: 0,
+          manifest,
+          cuePlan,
+          transcript,
+          audioCoexistence: coexistenceSettings,
+          assistantVoiceMuted: false,
+        });
+      } else {
+        groundedSessionContext = {
+          is_grounded: false,
+          audio_coexistence: coexistenceSettings,
+          assistant_voice_muted: false,
+          youtube_metadata: job ? { title: job.title } : null,
+        };
+      }
+
+      const fullContext: Record<string, unknown> = {
+        ...groundedSessionContext,
+        phase: "pre_session_setup",
+        sessionId: sessionId || undefined,
+        videoId: params.videoId,
+        currentTimeSeconds: 0,
+        currentTimeMs: 0,
+        setup_options: {
+          interruption_level: interruptionLevel,
+          pause_before_speaking: pauseBeforeSpeaking,
+          difficulty
+        },
+        note: "No live playback has started yet",
+      };
+
+      const payload: QARequest = {
+        question: query,
+        video_id: params.videoId,
+        session_id: sessionId || undefined,
+        current_timestamp_ms: 0,
+        persona: persona || undefined,
+        runtime_observation_context: {
+          pose_available: false,
+          pose_confidence: null,
+          observation_capability: "not_available",
+          latest_form_error: null,
+          latest_rep_event: null,
+          notes: "Pre-session setup does not have camera or pose observation available."
+        },
+        session_context: fullContext
+      };
+
+      const response = await askAssistant(payload);
+      setAssistantResponse(response.answer_text);
+      setAskAnnouncement(`Assistant response received: ${response.answer_text}`);
+      setAskInput("");
+    } catch (err) {
+      console.error("Assistant Q&A failed in setup:", err);
+      const errMsg = err instanceof Error ? err.message : "Failed to get response from assistant.";
+      setQaError(errMsg);
+      setAskAnnouncement(`Assistant response failed: ${errMsg}`);
+    } finally {
+      setIsPending(false);
+    }
   };
 
   const handleTestSleeve = async (sleeveKey: string, name: string) => {
@@ -81,13 +196,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
     setSleeveResults((prev) => ({ ...prev, [sleeveKey]: "" }));
     setSleeveAnnouncement(`Testing ${name} haptic cue...`);
 
-    if (sessionId) {
-      recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_TEST_REQUESTED, null, {
-        sleeve_side: side,
-        sleeve_key: sleeveKey,
-        sleeve_name: name
-      }).catch((err) => console.warn("Failed to log haptic_test_requested event:", err));
-    }
+    // Note: Setup haptic tests are intentionally non-persistent. They trigger local UI/hardware feedback only
+    // and do not write telemetry to the backend events history database to avoid cluttering workout reports.
 
     try {
       const response = await triggerHapticTest(side as SleeveSide);
@@ -119,6 +229,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
       queryParams.set("overridePause", String(pauseBeforeSpeaking));
       queryParams.set("overrideDifficulty", difficulty);
 
+      window.dispatchEvent(new Event("navigation-start"));
       router.push(`/session/${params.videoId}?${queryParams.toString()}`);
     } catch (err) {
       console.error("Failed to start session:", err);
@@ -375,16 +486,46 @@ export default function SessionSetup({ params }: SetupPageProps) {
               />
               <button
                 type="submit"
-                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+                disabled={isPending}
+                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all min-w-[80px] flex items-center justify-center"
                 id="setup-ask-btn"
+                aria-label={isPending ? "Assistant is responding" : undefined}
               >
-                Send
+                {isPending ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-slate-200 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                    <span className="sr-only">Assistant is responding</span>
+                  </>
+                ) : (
+                  "Send"
+                )}
               </button>
             </form>
 
+            {qaError && (
+              <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 font-medium flex items-center gap-2" role="alert">
+                <svg
+                  className="w-5 h-5 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>{qaError}</span>
+              </div>
+            )}
+
             {assistantResponse && (
               <div className="mt-4 p-4 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200">
-                <span className="font-bold text-yellow-400 block mb-1">Assistant Response (Prototype):</span>
+                <span className="font-bold text-yellow-400 block mb-1">Assistant Response:</span>
                 <p>{assistantResponse}</p>
               </div>
             )}

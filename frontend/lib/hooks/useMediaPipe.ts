@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { ExerciseTimelineAnchor, FormError, RepEvent } from "../../types";
+import { devLogger } from "@/lib/logger";
 
 export interface UseMediaPipeProps {
   currentTimeMs: number;
@@ -34,7 +35,7 @@ export function useMediaPipe({
   const [trackingStatusLabel, setTrackingStatusLabel] = useState("Prototype pose runtime offline");
 
   const startCamera = () => {
-    console.log("Starting prototype camera tracking...");
+    devLogger.log("Starting prototype camera tracking...");
     setIsReady(true);
     setIsPrototypeTracking(true);
     setTrackingStatusLabel("Prototype Pose Runtime Active");
@@ -42,7 +43,7 @@ export function useMediaPipe({
   };
 
   const stopCamera = () => {
-    console.log("Stopping prototype camera tracking...");
+    devLogger.log("Stopping prototype camera tracking...");
     setIsReady(false);
     setIsPrototypeTracking(false);
     setTrackingStatusLabel("Prototype pose runtime offline");
@@ -148,7 +149,7 @@ export function useMediaPipe({
             observed_angle: observed,
             expected_range: [minVal, maxVal],
             severity,
-            message: `Observed ${joint.replace("_", " ")} angle (${observed.toFixed(0)}°) is outside range [${minVal}°, ${maxVal}°].`,
+            message: `Observed ${joint.replace("_", " ")} angle (${observed.toFixed(0)}\u00b0) is outside range [${minVal}\u00b0, ${maxVal}\u00b0].`,
           });
           lastErrorRepRef.current = repCount;
         }

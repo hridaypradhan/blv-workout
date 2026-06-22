@@ -5,8 +5,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 
-from app.models.schemas import Session, User, UserSettingsUpdate
-from app.core.storage import get_user_storage, get_session_storage
+from app.models.schemas import User, UserSettingsUpdate
+from app.core.storage import get_user_storage
 
 router = APIRouter()
 
@@ -33,29 +33,4 @@ async def update_user_settings(user_id: UUID, payload: UserSettingsUpdate) -> Us
     if user is None:
         raise HTTPException(status_code=404, detail="User profile not found")
     return user
-
-
-@router.get("/{user_id}/history", response_model=list[Session])
-async def get_user_history(user_id: UUID) -> list[Session]:
-    """Return a user's past assisted playback sessions."""
-    user = get_user_storage().get_user(user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User profile not found")
-    return get_session_storage().list_sessions(user_id)
-
-
-@router.get("/{user_id}/progress/{exercise_id}", response_model=dict[str, Any])
-async def get_exercise_progress(user_id: UUID, exercise_id: UUID) -> dict[str, Any]:
-    """Return per-exercise tracked performance data for a user."""
-    user = get_user_storage().get_user(user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User profile not found")
-    return {
-        "user_id": user_id,
-        "exercise_id": exercise_id,
-        "total_completed_reps": 0,
-        "completed_sets": 0,
-        "average_accuracy_percentage": 100.0,
-        "last_performed_at": None,
-    }
 

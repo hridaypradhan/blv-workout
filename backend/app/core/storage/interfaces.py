@@ -87,45 +87,25 @@ class SessionStorage(ABC):
         pass
 
     @abstractmethod
-    def end_session(self, session_id: UUID) -> bool:
-        """End a session, generating a summary."""
+    def finalize_session(
+        self,
+        session_id: UUID,
+        playback_events: List[Any],
+        reps: List[Any],
+        form_errors: List[Any],
+        ended_at: Optional[datetime] = None
+    ) -> bool:
+        """Finalize the session, saving all event lists in batch and updating status & summary."""
+        pass
+
+    @abstractmethod
+    def session_exists_and_active(self, session_id: UUID) -> bool:
+        """Lightweight check to see if session exists and is not ended."""
         pass
 
     @abstractmethod
     def list_sessions(self, user_id: UUID, include_active: bool = False) -> List[Session]:
         """List all sessions for a user, sorted newest first."""
-        pass
-
-
-class SessionEventStorage(ABC):
-    """Interface for recording telemetry events during workout playback."""
-
-    @abstractmethod
-    def add_rep(
-        self,
-        session_id: UUID,
-        exercise_id: UUID,
-        rep_count: int,
-        timestamp: Optional[datetime] = None,
-        metadata: Optional[dict] = None
-    ) -> bool:
-        """Record a completed rep count for an exercise."""
-        pass
-
-    @abstractmethod
-    def add_form_error(self, session_id: UUID, form_error: FormError) -> bool:
-        """Record a form warning or correction warning."""
-        pass
-
-    @abstractmethod
-    def add_playback_event(
-        self,
-        session_id: UUID,
-        event_type: str,
-        timestamp_ms: Optional[float] = None,
-        metadata: Optional[dict] = None
-    ) -> bool:
-        """Record a playback interaction or intervention event."""
         pass
 
 

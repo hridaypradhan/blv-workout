@@ -2,34 +2,31 @@
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { useYouTubePlayer } from "@/lib/hooks/useYouTubePlayer";
-import { usePreparedVideo } from "@/lib/hooks/usePreparedVideo";
+import { useSessionArtifacts } from "@/lib/hooks/useSessionArtifacts";
 import { ProcessingStage } from "@/types";
 import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
 import {
-  endSession,
-  getUserProfile,
-  recordPlaybackEvent,
-  askAssistant,
   triggerHapticPattern,
-  recordRepCompletion,
-  recordFormError,
-  generateCorrection,
-  getCuePlan,
-  selectCueCandidate,
 } from "@/lib/api";
-import { getActiveUserId } from "@/lib/prototypeUser";
-import { useSidecarManifest } from "@/lib/hooks/useSidecarManifest";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { useSpokenCuePlayback } from "@/lib/hooks/useSpokenCuePlayback";
 import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, User, AssistantPersona, CuePlan, RuntimeCueSelectionResponse } from "@/types";
-import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
+import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, RuntimeCueSelectionResponse } from "@/types";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
+import { useAutomaticCue } from "@/lib/hooks/useAutomaticCue";
+import { useQnAChat } from "@/lib/hooks/useQnAChat";
+import { useUserProfile } from "@/components/layout/UserProfileContext";
+import CurrentAutomaticCuePanel from "@/components/session/CurrentAutomaticCuePanel";
+import QnAChatPanel from "@/components/session/QnAChatPanel";
+import PerformanceSummaryPanel from "@/components/session/PerformanceSummaryPanel";
+import { useSessionEnd } from "@/lib/hooks/useSessionEnd";
+import { useLiveCueDelivery } from "@/lib/hooks/useLiveCueDelivery";
+import { usePrototypePoseSessionEvents } from "@/lib/hooks/usePrototypePoseSessionEvents";
 
 interface LiveSessionProps {
   params: {
@@ -46,28 +43,6 @@ function formatTime(seconds: number): string {
 }
 
 
-
-/** Maps a tracked anatomical joint to logical limb targets for dry-run triggering. */
-function getLimbsForJoint(joint?: string): string[] {
-  const j = joint?.toLowerCase() || "";
-  const limbs: string[] = [];
-
-  const isLeft = j.includes("left");
-  const isRight = j.includes("right");
-  const isArm = j.includes("arm") || j.includes("shoulder") || j.includes("elbow") || j.includes("wrist");
-  const isLeg = j.includes("leg") || j.includes("hip") || j.includes("knee") || j.includes("ankle");
-
-  if (isLeft && isArm) limbs.push("left_arm");
-  else if (isRight && isArm) limbs.push("right_arm");
-  else if (isLeft && isLeg) limbs.push("left_leg");
-  else if (isRight && isLeg) limbs.push("right_leg");
-  else {
-    if (isArm) limbs.push("left_arm", "right_arm");
-    else if (isLeg) limbs.push("left_leg", "right_leg");
-    else limbs.push("left_arm", "right_arm");
-  }
-  return limbs;
-}
 
 /** Inferred mapping of cue description text to haptic vibration category types. */
 function getCueTypeFromCue(text: string, metadata?: Record<string, unknown> | null): string {
@@ -88,53 +63,28 @@ function getCueTypeFromCue(text: string, metadata?: Record<string, unknown> | nu
 function LiveSessionContent({ params }: LiveSessionProps) {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
-  const router = useRouter();
 
-  const { isLoading: isLoadingJob, error: jobError, youtubeId, metadata, stage: jobStage } = usePreparedVideo(params.videoId);
+  const {
+    job,
+    manifest,
+    cuePlan,
+    transcript,
+    isLoading: isLoadingArtifacts,
+    error: artifactsError,
+  } = useSessionArtifacts(params.videoId);
+
+  const youtubeId = job?.youtube_id || null;
+  const metadata = job;
+  const jobStage = job?.stage || null;
 
   const [assistantMuted, setAssistantMuted] = useState(false);
   const [announcement, setAnnouncement] = useState("");
-  const [isEnding, setIsEnding] = useState(false);
-  const [endError, setEndError] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<User | null>(null);
-  const [cuePlan, setCuePlan] = useState<CuePlan | null>(null);
-  const [isLoadingCuePlan, setIsLoadingCuePlan] = useState(true);
-  const [cuePlanError, setCuePlanError] = useState<string | null>(null);
+  const { user: userProfile } = useUserProfile();
   const [recentlyDeliveredCueIds, setRecentlyDeliveredCueIds] = useState<string[]>([]);
   const [currentSpokenCue, setCurrentSpokenCue] = useState<(RuntimeCueSelectionResponse & { timestampMs?: number }) | null>(null);
   const [seekEpoch, setSeekEpoch] = useState(0);
 
-
   const { hapticState } = usePrototypeHapticConnection();
-
-  useEffect(() => {
-    const userId = getActiveUserId();
-    getUserProfile(userId)
-      .then((profile) => {
-        setUserProfile(profile);
-      })
-      .catch((err) => {
-        console.warn("Failed to fetch user settings for live session:", err);
-      });
-  }, []);
-
-  useEffect(() => {
-    if (jobStage === ProcessingStage.COMPLETED) {
-      setIsLoadingCuePlan(true);
-      getCuePlan(params.videoId)
-        .then((plan) => {
-          setCuePlan(plan);
-          setCuePlanError(null);
-          setIsLoadingCuePlan(false);
-          console.log("Successfully loaded assistance cue plan for video:", params.videoId);
-        })
-        .catch((err) => {
-          console.warn("Failed to load cue plan, will fallback to legacy timeline cue delivery:", err);
-          setCuePlanError(err instanceof Error ? err.message : String(err));
-          setIsLoadingCuePlan(false);
-        });
-    }
-  }, [params.videoId, jobStage]);
 
 
 
@@ -172,6 +122,23 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     isPlayerMuted,
   } = useYouTubePlayer(youtubeId);
 
+  // Session playback interaction telemetry hook
+  const { logSessionEvent, getBufferedEvents } = useSessionTelemetry({
+    sessionId,
+    isReady,
+    isPlaying,
+    hasEnded,
+    currentTime,
+    playbackRate,
+  });
+
+  const currentTimeRef = useRef(currentTime);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  const { latestAutomaticCue, updateLatestAutomaticCue } = useAutomaticCue(currentTimeRef);
+
   const lastCheckedSecond = useRef<number>(-1);
 
   const handleSeek = React.useCallback((seconds: number, reason?: string) => {
@@ -202,24 +169,22 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     triggerHapticPattern(null, null, 0.7, cueType, vibrationId, limbs)
       .then((hapticRes) => {
         announce(`Haptic cue would trigger: ${hapticRes.pattern_name} (dry-run).`);
-        if (sessionId) {
-          recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTime * 1000, {
-            cue_type: cueType,
-            selected_vibration_id: vibrationId,
-            selected_wav: hapticRes.selected_wav,
-            target_limbs: hapticRes.target_limbs,
-            provider: hapticRes.provider,
-            status: hapticRes.status,
-            intensity: 0.7,
-            text: text,
-            cue_id: cueId,
-          }).catch((err) => console.warn("Failed to log haptic cue triggered telemetry:", err));
-        }
+        logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTime * 1000, {
+          cue_type: cueType,
+          selected_vibration_id: vibrationId,
+          selected_wav: hapticRes.selected_wav,
+          target_limbs: hapticRes.target_limbs,
+          provider: hapticRes.provider,
+          status: hapticRes.status,
+          intensity: 0.7,
+          text: text,
+          cue_id: cueId,
+        });
       })
       .catch((err) => {
         console.error("Failed to trigger haptic cue:", err);
       });
-  }, [userProfile, sessionId, currentTime, announce]);
+  }, [userProfile, currentTime, announce, logSessionEvent]);
 
   // Monitor playback states to populate the screen-reader announcement live region
   const prevIsPlayingAnnouncement = useRef(false);
@@ -242,21 +207,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     prevIsPlayingAnnouncement.current = isPlaying;
   }, [isReady, isPlaying, isBuffering, hasEnded, playerError, youtubeId, announce]);
 
-  // Session playback interaction telemetry hook
-  useSessionTelemetry({
-    sessionId,
-    isReady,
-    isPlaying,
-    hasEnded,
-    currentTime,
-    playbackRate,
-  });
-
-  // Load assistance sidecar manifest
-  const { manifest, isLoading: isLoadingManifest, error: manifestError } = useSidecarManifest(
-    params.videoId,
-    jobStage === ProcessingStage.COMPLETED
-  );
 
   const currentExercise = manifest?.exercise_timeline_anchors.find(
     (anchor) => currentTime >= anchor.start_time_seconds && currentTime <= anchor.end_time_seconds
@@ -264,227 +214,43 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
   const currentTimeMs = currentTime * 1000;
 
-  // Setup the prototype pose runtime hook
+  // Setup the prototype pose runtime hook and buffer reps & form errors locally
   const {
-    startCamera: startPoseTracking,
-    stopCamera: stopPoseTracking,
+    startPoseTracking,
+    stopPoseTracking,
     isPrototypeTracking,
     currentAngles,
-    latestRepEvent,
-    latestFormError,
     trackingStatusLabel,
-  } = useMediaPipe({
+    latestRepCount,
+    repsBufferRef,
+    formErrorsBufferRef,
+  } = usePrototypePoseSessionEvents({
+    sessionId,
     currentTimeMs,
-    activeAnchor: currentExercise,
+    currentExercise,
     isPlaying,
+    userProfile,
+    announce,
+    updateLatestAutomaticCue,
+    logSessionEvent,
   });
 
-  // Automatically start prototype pose tracking simulation
+  // Monitor session artifacts loading updates
+  const prevIsLoadingArtifacts = useRef(false);
+  const prevArtifactsError = useRef<string | null>(null);
   useEffect(() => {
-    if (sessionId && !isPrototypeTracking) {
-      startPoseTracking();
+    if (isLoadingArtifacts && !prevIsLoadingArtifacts.current) {
+      announce("Assisted playback session artifacts are loading.");
     }
-  }, [sessionId, isPrototypeTracking, startPoseTracking]);
-
-  // Handle prototype repetition events
-  const lastHandledRepRef = useRef<number>(-1);
-  useEffect(() => {
-    if (latestRepEvent && latestRepEvent.rep_count > lastHandledRepRef.current) {
-      const repCount = latestRepEvent.rep_count;
-      lastHandledRepRef.current = repCount;
-
-      const exerciseId = currentExercise ? currentExercise.id : "00000000-0000-0000-0000-000000000000";
-      const exerciseName = currentExercise ? currentExercise.name : "Workout";
-
-      announce(`Repetition ${repCount} completed.`);
-
-      if (sessionId) {
-        recordRepCompletion(sessionId, exerciseId, repCount, {
-          source: "prototype",
-          provider: "prototype_pose",
-          replace_with: "mediapipe_service",
-          exercise_name: exerciseName,
-        }).catch((err) => console.warn("Failed to log rep completion telemetry:", err));
-
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.PROTOTYPE_REP_DETECTED, currentTimeMs, {
-          rep_count: repCount,
-          exercise_name: exerciseName,
-        }).catch((err) => console.warn("Failed to log rep event to timeline:", err));
-      }
-
-      const vibrationId = userProfile?.haptic_preferences?.per_rep_tick || "per_rep_tick_001";
-      const limbs = ["left_arm", "right_arm"];
-
-      if (sessionId) {
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_REQUESTED, currentTimeMs, {
-          cue_type: "per_rep_tick",
-          selected_vibration_id: vibrationId,
-          target_limbs: limbs,
-          intensity: 0.6,
-          purpose: "Rep completion feedback",
-        }).catch((err) => console.warn("Failed to log haptic cue requested:", err));
-      }
-
-      triggerHapticPattern(null, null, 0.6, "per_rep_tick", vibrationId, limbs)
-        .then((res) => {
-          announce(`Haptic cue would trigger: ${res.pattern_name} (dry-run).`);
-          if (sessionId) {
-            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
-              cue_type: "per_rep_tick",
-              selected_vibration_id: vibrationId,
-              selected_wav: res.selected_wav,
-              target_limbs: res.target_limbs,
-              provider: res.provider,
-              status: res.status,
-              intensity: 0.6,
-            }).catch((err) => console.warn("Failed to log haptic cue triggered:", err));
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to trigger rep haptic cue:", err);
-          if (sessionId) {
-            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
-              cue_type: "per_rep_tick",
-              selected_vibration_id: vibrationId,
-              intensity: 0.6,
-              error: err instanceof Error ? err.message : String(err),
-            }).catch((err) => console.warn("Failed to log haptic cue failed:", err));
-          }
-        });
+    if (!isLoadingArtifacts && prevIsLoadingArtifacts.current && manifest) {
+      announce("Assisted playback session artifacts loaded successfully.");
     }
-  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs, userProfile, announce]);
-
-  // Handle prototype form error events
-  const lastHandledErrorRepRef = useRef<number>(-1);
-  useEffect(() => {
-    if (latestFormError) {
-      const repCount = Math.floor(currentTimeMs / 4000);
-      if (repCount <= lastHandledErrorRepRef.current) return;
-      lastHandledErrorRepRef.current = repCount;
-
-      const exerciseId = currentExercise ? currentExercise.id : "00000000-0000-0000-0000-000000000000";
-      const exerciseName = currentExercise ? currentExercise.name : "Workout";
-
-      announce(`Form warning: ${latestFormError.message}`);
-
-      if (sessionId) {
-        recordFormError(sessionId, exerciseId, {
-          joint: latestFormError.joint,
-          observed_angle: latestFormError.observed_angle,
-          expected_range: latestFormError.expected_range,
-          severity: latestFormError.severity,
-          message: latestFormError.message,
-        }).catch((err) => console.warn("Failed to log form error telemetry:", err));
-
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED, currentTimeMs, {
-          joint: latestFormError.joint,
-          observed_angle: latestFormError.observed_angle,
-          expected_range: latestFormError.expected_range,
-          severity: latestFormError.severity,
-          message: latestFormError.message,
-        }).catch((err) => console.warn("Failed to log form error event to timeline:", err));
-      }
-
-      // 1. Fetch form correction cue from assistant API
-      const correctionPayload = {
-        exercise_id: exerciseId,
-        exercise_name: exerciseName,
-        joint: latestFormError.joint,
-        angle: latestFormError.observed_angle,
-        current_timestamp_ms: currentTimeMs,
-        persona: userProfile?.assistant_persona || AssistantPersona.SUPPORTIVE,
-      };
-
-      if (sessionId) {
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_CORRECTION_REQUESTED, currentTimeMs, {
-          joint: latestFormError.joint,
-          observed_angle: latestFormError.observed_angle,
-        }).catch((err) => console.warn("Failed to log correction request telemetry:", err));
-      }
-
-      generateCorrection(correctionPayload)
-        .then((response) => {
-          setChatMessages((prev) => [
-            ...prev,
-            { sender: "assistant", text: response.text },
-          ]);
-          announce(`Assistant correction: ${response.text}`);
-
-          if (sessionId) {
-            recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_CORRECTION_DELIVERED, currentTimeMs, {
-              text: response.text,
-              joint: latestFormError.joint,
-              modality: response.modality,
-              priority: response.priority,
-              persona: response.persona,
-              source: response.metadata?.source,
-              provider: response.metadata?.provider,
-            }).catch((err) => console.warn("Failed to log correction cue delivered telemetry:", err));
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to generate correction cue:", err);
-        });
-
-      // 2. Trigger corrective haptic feedback on target limbs
-      const limbs = getLimbsForJoint(latestFormError.joint);
-      const vibrationId = userProfile?.haptic_preferences?.form_warning_above || "form_warning_above_001";
-
-      if (sessionId) {
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_REQUESTED, currentTimeMs, {
-          cue_type: "form_warning_above",
-          selected_vibration_id: vibrationId,
-          target_limbs: limbs,
-          intensity: 0.8,
-          purpose: "Form correction warning",
-        }).catch((err) => console.warn("Failed to log haptic cue requested:", err));
-      }
-
-      triggerHapticPattern(null, null, 0.8, "form_warning_above", vibrationId, limbs)
-        .then((res) => {
-          announce(`Haptic cue would trigger on limbs ${limbs.join(", ")} (dry-run).`);
-          if (sessionId) {
-            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
-              cue_type: "form_warning_above",
-              selected_vibration_id: vibrationId,
-              selected_wav: res.selected_wav,
-              target_limbs: res.target_limbs,
-              provider: res.provider,
-              status: res.status,
-              intensity: 0.8,
-            }).catch((err) => console.warn("Failed to log haptic cue triggered:", err));
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to trigger corrective haptic cue:", err);
-          if (sessionId) {
-            recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
-              cue_type: "form_warning_above",
-              selected_vibration_id: vibrationId,
-              intensity: 0.8,
-              error: err instanceof Error ? err.message : String(err),
-            }).catch((err) => console.warn("Failed to log haptic cue failed:", err));
-          }
-        });
+    if (artifactsError && artifactsError !== prevArtifactsError.current) {
+      announce(`Failed to load assisted playback artifacts: ${artifactsError}`);
     }
-  }, [latestFormError, sessionId, currentExercise, currentTimeMs, userProfile, announce]);
-
-  // Monitor manifest loading updates
-  const prevIsLoadingManifest = useRef(false);
-  const prevManifestError = useRef<string | null>(null);
-  useEffect(() => {
-    if (isLoadingManifest && !prevIsLoadingManifest.current) {
-      announce("Assisted playback manifest is loading.");
-    }
-    if (!isLoadingManifest && prevIsLoadingManifest.current && manifest) {
-      announce("Assisted playback manifest loaded successfully.");
-    }
-    if (manifestError && manifestError !== prevManifestError.current) {
-      announce(`Failed to load assisted playback manifest: ${manifestError}`);
-    }
-    prevIsLoadingManifest.current = isLoadingManifest;
-    prevManifestError.current = manifestError;
-  }, [isLoadingManifest, manifest, manifestError, announce]);
+    prevIsLoadingArtifacts.current = isLoadingArtifacts;
+    prevArtifactsError.current = artifactsError;
+  }, [isLoadingArtifacts, manifest, artifactsError, announce]);
 
   const searchLevel = searchParams.get("overrideLevel");
   const searchPause = searchParams.get("overridePause");
@@ -522,79 +288,22 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     setCurrentSpokenCue(null);
   }, [assistantMuted, params.videoId]);
 
-  useEffect(() => {
-    if (!cuePlan || !isPlaying) return;
-
-    const currentSecond = Math.floor(currentTime);
-    if (currentSecond === lastCheckedSecond.current) return;
-    lastCheckedSecond.current = currentSecond;
-
-    const payload = {
-      video_id: params.videoId,
-      current_time_ms: currentTime * 1000,
-      coexistence_settings: coexistenceSettings,
-      assistant_muted: assistantMuted,
-      recently_delivered_cue_ids: recentlyDeliveredCueIds,
-    };
-
-    selectCueCandidate(payload)
-      .then((res) => {
-        if (res.should_deliver && res.cue_id) {
-          setRecentlyDeliveredCueIds((prev) => [...prev, res.cue_id!]);
-
-          const text = res.text || "";
-
-          if (text) {
-            setChatMessages((prev) => [
-              ...prev,
-              { sender: "assistant", text: text },
-            ]);
-          }
-
-          if (res.modality === "audio" && text) {
-            handleAudioCueAnnouncement(text);
-            setCurrentSpokenCue({
-              ...res,
-              timestampMs: currentTime * 1000
-            });
-          } else if (res.modality === "haptic") {
-            handleHapticCueTrigger(text, res.haptic_cue_ref, res.cue_id);
-          }
-
-          if (sessionId) {
-            recordPlaybackEvent(sessionId, res.modality === "haptic" ? SESSION_EVENTS.HAPTIC_CUE_REQUESTED : SESSION_EVENTS.ASSISTANT_CUE_DELIVERED, currentTime * 1000, {
-              text: text,
-              modality: res.modality,
-              priority: "normal",
-              cue_id: res.cue_id,
-              reason: res.reason,
-            }).catch((err) => console.warn("Failed to log cue delivery telemetry:", err));
-          }
-
-          if (res.recommended_playback_action === "pause_before_speaking") {
-            // Hook useSpokenCuePlayback will handle pausing and resuming playback safely.
-            announce("Pausing workout playback for assistant instruction.");
-          }
-        }
-      })
-      .catch((err) => {
-        console.warn("Failed to select cue candidate:", err);
-      });
-  }, [
+  // Live cue plan candidate selection and delivery orchestration
+  useLiveCueDelivery({
+    cuePlan,
     currentTime,
     isPlaying,
-    cuePlan,
     coexistenceSettings,
     assistantMuted,
     recentlyDeliveredCueIds,
-    params.videoId,
-    userProfile,
-    sessionId,
-    pause,
-    announce,
+    setRecentlyDeliveredCueIds,
+    updateLatestAutomaticCue,
     handleAudioCueAnnouncement,
     handleHapticCueTrigger,
-  ]);
+    logSessionEvent,
+    announce,
+    setCurrentSpokenCue,
+  });
 
   // Wire up the assistant cue queue (legacy fallback)
   const { activeCue } = useAssistantCueQueue(
@@ -627,12 +336,31 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     seekEpoch,
   });
 
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: "assistant" | "user"; text: string }>>([
-    { sender: "assistant", text: "Welcome! Stand 6 feet back. We are preparing to assist with your YouTube workout." }
-  ]);
-  const [chatInput, setChatInput] = useState("");
-  const [isPending, setIsPending] = useState(false);
-  const [qaError, setQaError] = useState<string | null>(null);
+
+
+  const {
+    qaMessages,
+    chatInput,
+    setChatInput,
+    isPending,
+    qaError,
+    handleSendMessage,
+  } = useQnAChat({
+    sessionId,
+    videoId: params.videoId,
+    currentTime,
+    currentTimeMs,
+    currentExercise,
+    manifest,
+    cuePlan,
+    transcript,
+    coexistenceSettings,
+    assistantMuted,
+    metadata: metadata ? { title: metadata.title } : null,
+    userProfile,
+    announce,
+    logSessionEvent,
+  });
 
   // Append new cues to the message feed as they trigger
   const lastRecordedCueKey = useRef<string | null>(null);
@@ -642,10 +370,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       if (lastRecordedCueKey.current === cueKey) return;
       lastRecordedCueKey.current = cueKey;
 
-      setChatMessages((prev) => [
-        ...prev,
-        { sender: "assistant", text: activeCue.text }
-      ]);
+      updateLatestAutomaticCue(activeCue.text, "legacy");
 
       // Expose as announcement for screen readers
       if (activeCue.modality === "audio") {
@@ -667,14 +392,13 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
       const isHaptic = activeCue.modality === "haptic";
 
-      if (sessionId) {
-        const eventType = isHaptic ? SESSION_EVENTS.HAPTIC_CUE_REQUESTED : SESSION_EVENTS.ASSISTANT_CUE_DELIVERED;
-        recordPlaybackEvent(sessionId, eventType, activeCue.timestamp_ms, {
+      if (!isHaptic) {
+        logSessionEvent(SESSION_EVENTS.ASSISTANT_CUE_DELIVERED, activeCue.timestamp_ms || currentTime * 1000, {
           text: activeCue.text,
           modality: activeCue.modality,
           priority: activeCue.priority,
           persona: activeCue.persona
-        }).catch((err) => console.warn(`Failed to log ${eventType} event:`, err));
+        });
       }
 
       if (isHaptic) {
@@ -696,39 +420,35 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         triggerHapticPattern(null, null, intensity, cueType, vibrationId, limbs)
           .then((res) => {
             announce(`Haptic cue would trigger: ${res.pattern_name} (dry-run).`);
-            if (sessionId) {
-              recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, activeCue.timestamp_ms, {
-                cue_type: cueType,
-                selected_vibration_id: vibrationId,
-                selected_wav: res.selected_wav,
-                target_limbs: res.target_limbs,
-                provider: res.provider,
-                status: res.status,
-                intensity: intensity,
-                text: activeCue.text,
-                cue_timestamp_ms: activeCue.timestamp_ms,
-                current_timestamp: currentTime
-              }).catch((err) => console.warn("Failed to log haptic_cue_triggered event:", err));
-            }
+            logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, activeCue.timestamp_ms || currentTime * 1000, {
+              cue_type: cueType,
+              selected_vibration_id: vibrationId,
+              selected_wav: res.selected_wav,
+              target_limbs: res.target_limbs,
+              provider: res.provider,
+              status: res.status,
+              intensity: intensity,
+              text: activeCue.text,
+              cue_timestamp_ms: activeCue.timestamp_ms || currentTime * 1000,
+              current_timestamp: currentTime
+            });
           })
           .catch((err) => {
             console.error("Failed to trigger prototype haptic cue:", err);
             const errMsg = err instanceof Error ? err.message : "Unknown error";
             announce(`Prototype haptic cue failed: ${errMsg}`);
-            if (sessionId) {
-              recordPlaybackEvent(sessionId, SESSION_EVENTS.HAPTIC_CUE_FAILED, activeCue.timestamp_ms, {
-                cue_type: cueType,
-                selected_vibration_id: vibrationId,
-                intensity: intensity,
-                text: activeCue.text,
-                error: errMsg,
-                current_timestamp: currentTime
-              }).catch((err) => console.warn("Failed to log haptic_cue_failed event:", err));
-            }
+            logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_FAILED, activeCue.timestamp_ms || currentTime * 1000, {
+              cue_type: cueType,
+              selected_vibration_id: vibrationId,
+              intensity: intensity,
+              text: activeCue.text,
+              error: errMsg,
+              current_timestamp: currentTime
+            });
           });
       }
     }
-  }, [activeCue, sessionId, currentTime, userProfile, announce, coexistenceSettings, handleAudioCueAnnouncement]);
+  }, [activeCue, sessionId, currentTime, userProfile, announce, coexistenceSettings, handleAudioCueAnnouncement, updateLatestAutomaticCue, logSessionEvent]);
 
   const handleRepeatTrainerInstruction = () => {
     if (!manifest || !manifest.trainer_instruction_events) return;
@@ -740,12 +460,10 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       const latestEvent = priorEvents[0];
       if (latestEvent.start_ms !== null && latestEvent.start_ms !== undefined) {
         handleSeek(latestEvent.start_ms / 1000, `Repeating trainer instruction: "${latestEvent.text}"`);
-        if (sessionId) {
-          recordPlaybackEvent(sessionId, SESSION_EVENTS.TRAINER_INSTRUCTION_REPEATED, currentTimeMs, {
-            text: latestEvent.text,
-            timestamp_ms: latestEvent.start_ms
-          }).catch((err) => console.warn("Failed to log trainer instruction repeated event:", err));
-        }
+        logSessionEvent(SESSION_EVENTS.TRAINER_INSTRUCTION_REPEATED, currentTimeMs, {
+          text: latestEvent.text,
+          timestamp_ms: latestEvent.start_ms
+        });
       }
     } else {
       announce("No prior trainer instructions found in this workout session.");
@@ -759,144 +477,30 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     );
     if (nextAnchor) {
       handleSeek(nextAnchor.start_time_seconds, `Skipped to section: ${nextAnchor.name}`);
-      if (sessionId) {
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.SECTION_SKIPPED, currentTimeMs, {
-          section_name: nextAnchor.name,
-          start_time_seconds: nextAnchor.start_time_seconds
-        }).catch((err) => console.warn("Failed to log section skipped event:", err));
-      }
+      logSessionEvent(SESSION_EVENTS.SECTION_SKIPPED, currentTimeMs, {
+        section_name: nextAnchor.name,
+        start_time_seconds: nextAnchor.start_time_seconds
+      });
     } else {
       announce("No more exercise sections found in this workout.");
     }
   };
 
-  const handleEndSession = async () => {
-    if (!sessionId) {
-      router.push(`/session/${params.videoId}/setup`);
-      return;
-    }
-    setIsEnding(true);
-    setEndError(null);
-    try {
-      announce("Workout session ended. Saving report and opening history...");
-      await endSession(sessionId);
-      router.push("/history");
-    } catch (err) {
-      console.error("Failed to end session:", err);
-      const message = err instanceof Error ? err.message : "Failed to end session. Please try again.";
-      setEndError(message);
-      setIsEnding(false);
-      announce(`Failed to end session: ${message}`);
-    }
-  };
+  // Session end orchestration
+  const {
+    isEnding,
+    endError,
+    handleEndSession,
+  } = useSessionEnd({
+    sessionId,
+    videoId: params.videoId,
+    playbackEventsBuffer: getBufferedEvents(),
+    repsBuffer: repsBufferRef.current,
+    formErrorsBuffer: formErrorsBufferRef.current,
+    announce,
+  });
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = chatInput.trim();
-    if (!query || isPending) return;
 
-    setIsPending(true);
-    setQaError(null);
-    setChatInput("");
-
-    // Append user message immediately
-    setChatMessages((prev) => [
-      ...prev,
-      { sender: "user", text: query }
-    ]);
-    announce(`User question submitted: "${query}"`);
-
-    const activeExerciseName = currentExercise ? currentExercise.name : null;
-    let latestInstructionText = null;
-    if (manifest && manifest.trainer_instruction_events) {
-      const priorEvents = manifest.trainer_instruction_events.filter(
-        (evt) => evt.start_ms !== null && evt.start_ms !== undefined && evt.start_ms <= currentTimeMs
-      );
-      if (priorEvents.length > 0) {
-        priorEvents.sort((a, b) => (b.start_ms ?? 0) - (a.start_ms ?? 0));
-        latestInstructionText = priorEvents[0].text;
-      }
-    }
-
-    if (sessionId) {
-      recordPlaybackEvent(sessionId, SESSION_EVENTS.USER_QUESTION_SUBMITTED, currentTimeMs, {
-        question: query,
-        active_exercise: activeExerciseName,
-        latest_trainer_instruction: latestInstructionText
-      }).catch((err) => console.warn("Failed to log user_question_submitted event:", err));
-    }
-
-    try {
-      announce("Assistant is responding.");
-
-      const response = await askAssistant({
-        question: query,
-        video_id: params.videoId,
-        session_id: sessionId,
-        current_timestamp_ms: currentTimeMs,
-        persona: userProfile?.assistant_persona || undefined,
-        session_context: {
-          sessionId,
-          videoId: params.videoId,
-          currentTimeSeconds: currentTime,
-          currentTimeMs,
-          active_exercise: activeExerciseName,
-          latest_trainer_instruction: latestInstructionText,
-          audio_coexistence: coexistenceSettings,
-          assistant_voice_muted: assistantMuted,
-          youtube_metadata: metadata ? { title: metadata.title } : null
-        },
-        runtime_observation_context: {
-          pose_available: false,
-          pose_confidence: null,
-          observation_capability: "not_available",
-          latest_form_error: null,
-          latest_rep_event: null,
-          notes: "Real-time camera observation is not available."
-        }
-      });
-
-      setChatMessages((prev) => [
-        ...prev,
-        { sender: "assistant", text: response.answer_text }
-      ]);
-      announce(`Assistant response received: "${response.answer_text}"`);
-
-      if (sessionId) {
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_ANSWER_DELIVERED, currentTimeMs, {
-          question: query,
-          answer: response.answer_text,
-          current_timestamp_ms: currentTimeMs,
-          active_exercise: activeExerciseName,
-          latest_trainer_instruction: latestInstructionText,
-          source: response.provider || "prototype",
-          provider: response.provider || "prototype_assistant"
-        }).catch((err) => console.warn("Failed to log assistant_answer_delivered event:", err));
-      }
-    } catch (err) {
-      console.error("Assistant Q&A failed:", err);
-      const errMsg = err instanceof Error ? err.message : "Failed to get response from assistant.";
-      setQaError(errMsg);
-
-      setChatMessages((prev) => [
-        ...prev,
-        { sender: "assistant", text: `Error: ${errMsg}` }
-      ]);
-      announce(`Assistant response failed: ${errMsg}`);
-
-      if (sessionId) {
-        recordPlaybackEvent(sessionId, SESSION_EVENTS.ASSISTANT_ANSWER_FAILED, currentTimeMs, {
-          question: query,
-          error: errMsg,
-          current_timestamp_ms: currentTimeMs,
-          active_exercise: activeExerciseName,
-          latest_trainer_instruction: latestInstructionText
-        }).catch((err) => console.warn("Failed to log assistant_answer_failed event:", err));
-      }
-    } finally {
-      setIsPending(false);
-    }
-  };
 
   const handleToggleMute = (muted: boolean) => {
     setAssistantMuted(muted);
@@ -909,7 +513,9 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     return (
       <PageWrapper id="live-session-no-id-wrapper">
         <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
-          <span className="text-yellow-400 text-5xl mb-4" role="img" aria-label="Warning">⚠️</span>
+          <svg className="w-12 h-12 text-yellow-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
           <h2 className="text-xl font-bold text-white mb-2">Session ID Missing</h2>
           <p className="text-sm text-slate-400 mb-6">
             An active session is required to record your workout and view telemetry. Please configure your session first.
@@ -933,7 +539,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     );
   }
 
-  if (isLoadingJob) {
+  if (isLoadingArtifacts) {
     return (
       <PageWrapper id="live-session-loading-wrapper">
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
@@ -945,13 +551,15 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     );
   }
 
-  if (jobError) {
+  if (artifactsError) {
     return (
       <PageWrapper id="live-session-error-wrapper">
         <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
-          <span className="text-red-500 text-5xl mb-4" role="img" aria-label="Error">⚠️</span>
+          <svg className="w-12 h-12 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
           <h2 className="text-xl font-bold text-white mb-2">Failed to Load Session</h2>
-          <p className="text-sm text-slate-400 mb-6">{jobError}</p>
+          <p className="text-sm text-slate-400 mb-6">{artifactsError}</p>
           <Link
             href="/video-library"
             className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
@@ -1039,7 +647,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
             containerRef={containerRef}
             isReady={isReady}
             playerError={playerError}
-            metadata={metadata}
+            metadata={metadata ? {
+              title: metadata.title || undefined,
+              channel_name: metadata.channel_name || undefined,
+              duration: metadata.duration || undefined,
+            } : null}
             currentTime={currentTime}
             duration={duration}
             playbackRate={playbackRate}
@@ -1053,6 +665,10 @@ function LiveSessionContent({ params }: LiveSessionProps) {
               setPlaybackRate={setPlaybackRate}
               setAssistantMuted={handleToggleMute}
               handleRepeatTrainerInstruction={handleRepeatTrainerInstruction}
+              isPlaying={isPlaying}
+              play={play}
+              pause={pause}
+              handleSkipSection={handleSkipSection}
             />
           </YouTubePlayerPanel>
 
@@ -1075,7 +691,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
                   <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-slate-300">
                     {Object.entries(currentAngles).map(([joint, val]) => (
                       <span key={joint} className="bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
-                        {joint.replace("_", " ")}: {val.toFixed(0)}°
+                        {joint.replace("_", " ")}: {val.toFixed(0)}{"\u00b0"}
                       </span>
                     ))}
                   </div>
@@ -1101,177 +717,35 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
         {/* Right Column: Tracked Performance & Assistant Cue Feed */}
         <div className="lg:col-span-4 flex flex-col gap-6 order-1 lg:order-2">
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between text-center" aria-label="Tracked Performance Summary">
-            <div>
-              <span className="text-xs uppercase font-extrabold text-yellow-400 tracking-wider block mb-1">
-                Active Exercise Section
-              </span>
-              <h2 className="text-xl font-bold text-white mb-2">
-                {currentExercise ? currentExercise.name : "Break / Transition"}
-              </h2>
-            </div>
-            <div className="my-4 py-4 px-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col justify-center">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">
-                {currentExercise ? "Supplementary Target Cues" : "Your Tracked Performance"}
-              </span>
-              <span className={`font-extrabold text-yellow-400 tracking-tight block ${currentExercise ? "text-xl font-bold leading-relaxed" : "text-5xl"}`}>
-                {currentExercise ? (
-                  currentExercise.description_accessible || "Follow YouTube instructions"
-                ) : (
-                  "Ready"
-                )}
-              </span>
-              {currentExercise && (
-                <span className="text-sm text-slate-400 mt-2 block">
-                  Joint: <strong className="text-slate-200 capitalize">{currentExercise.counting_joint || "any"}</strong> | Target: Follow trainer
-                  {lastHandledRepRef.current >= 0 && (
-                    <span className="block text-yellow-400 font-bold mt-1 text-sm" id="rep-completion-telemetry-badge">
-                      Completed: {lastHandledRepRef.current} reps
-                    </span>
-                  )}
-                </span>
-              )}
-            </div>
+          <PerformanceSummaryPanel
+            currentExercise={currentExercise}
+            lastHandledRep={latestRepCount}
+            currentTime={currentTime}
+            formatTime={formatTime}
+          />
 
-            <div>
-              <div className="flex justify-between items-center text-sm text-slate-400 px-1 mb-1.5">
-                <span>Section Progress</span>
-                <span>
-                  {currentExercise
-                    ? `${formatTime(currentTime - currentExercise.start_time_seconds)} / ${formatTime(currentExercise.end_time_seconds - currentExercise.start_time_seconds)}`
-                    : "No active exercise"}
-                </span>
-              </div>
-              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                <div
-                  className="bg-yellow-400 h-full rounded-full transition-all"
-                  style={{
-                    width: currentExercise
-                      ? `${((currentTime - currentExercise.start_time_seconds) / (currentExercise.end_time_seconds - currentExercise.start_time_seconds)) * 100}%`
-                      : "0%"
-                  }}
-                />
-              </div>
-            </div>
-          </section>
+          <CurrentAutomaticCuePanel
+            latestAutomaticCue={latestAutomaticCue}
+            formatTime={formatTime}
+            isLoadingCuePlan={isLoadingArtifacts}
+            cuePlanError={artifactsError}
+            isLoadingManifest={isLoadingArtifacts}
+            manifestError={artifactsError}
+          />
 
-          {/* Assistant Cue Feed panel */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex-1 flex flex-col justify-between min-h-[300px]" aria-labelledby="assistant-feed-heading">
-            <div>
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800/65">
-                <h2 id="assistant-feed-heading" className="text-sm font-bold text-slate-400 uppercase tracking-wider">
-                  Assistant Cue Feed
-                </h2>
-                {isLoadingCuePlan && (
-                  <span className="text-xs text-yellow-400/80 animate-pulse flex items-center gap-1" id="cueplan-loading-indicator">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400/80" />
-                    Loading assistance cues...
-                  </span>
-                )}
-                {!isLoadingCuePlan && cuePlanError && (
-                  <span className="text-xs text-slate-400 font-medium flex items-center gap-1" id="cueplan-error-indicator" title="Using basic timeline fallback">
-                    Using basic assistance cues
-                  </span>
-                )}
-                {isLoadingManifest && !isLoadingCuePlan && (
-                  <span className="text-sm text-yellow-400 animate-pulse flex items-center gap-1.5" id="manifest-loading-indicator">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                    Loading Manifest
-                  </span>
-                )}
-                {manifestError && !cuePlanError && (
-                  <span className="text-sm text-red-400 font-semibold flex items-center gap-1" id="manifest-error-indicator" title={manifestError}>
-                    Load Error
-                  </span>
-                )}
-              </div>
-
-              <div
-                className="space-y-4 mb-4 pr-1 max-h-[220px] lg:max-h-[320px] overflow-y-auto"
-                role="log"
-                aria-live="polite"
-                aria-relevant="additions text"
-              >
-                {manifestError && (
-                  <div className="p-3 bg-red-950/40 border border-red-500/20 text-red-200 rounded-2xl text-sm flex flex-col gap-1 mb-2" role="alert" id="manifest-error-alert">
-                    <span className="font-bold text-sm text-red-400 uppercase tracking-wider">⚠️ Manifest Loading Error</span>
-                    <p>Failed to load the sidecar assistance manifest. Voice cues and timeline anchors will be unavailable.</p>
-                    <p className="text-sm opacity-75">{manifestError}</p>
-                  </div>
-                )}
-                {chatMessages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[90%] ${msg.sender === "assistant"
-                        ? "bg-slate-950 border border-slate-800 text-slate-300 self-start"
-                        : "bg-yellow-400 text-slate-950 font-medium ml-auto"
-                      }`}
-                  >
-                    <p className="font-bold text-xs mb-1 opacity-70">
-                      {msg.sender === "assistant" ? "ASSISTANT" : "YOU"}
-                    </p>
-                    <p>{msg.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="w-full border-t border-slate-800/80 pt-4 flex flex-col">
-              {isPending && (
-                <div className="text-xs text-yellow-400 animate-pulse px-1 mb-2 font-medium" id="assistant-responding-indicator">
-                  Assistant is responding...
-                </div>
-              )}
-              {qaError && (
-                <div className="text-xs text-red-400 px-1 mb-2 font-semibold" id="qa-error-display">
-                  ⚠️ Error: {qaError}
-                </div>
-              )}
-              <form onSubmit={handleSendMessage} className="w-full flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder={isPending ? "Assistant is responding..." : "Ask assistant about movement setup..."}
-                  disabled={isPending}
-                  className="flex-1 min-w-0 px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all disabled:opacity-50"
-                  aria-label="Ask assistant for verbal clarification"
-                  id="live-chat-input"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                />
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0 transition-all"
-                  id="live-chat-btn"
-                >
-                  {isPending ? "Sending..." : "Send"}
-                </button>
-              </form>
-            </div>
-          </section>
+          <QnAChatPanel
+            qaMessages={qaMessages}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            isPending={isPending}
+            qaError={qaError}
+            handleSendMessage={handleSendMessage}
+          />
         </div>
       </div>
 
       {/* Bottom Bar: Action buttons */}
       <section className="flex flex-wrap items-center justify-center gap-3 mt-8 pt-6 border-t border-slate-900" aria-label="Playback and Session Controls">
-        <button
-          onClick={isPlaying ? pause : play}
-          className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-          id="pause-btn"
-          aria-label={isPlaying ? "Pause trainer video playback" : "Resume trainer video playback"}
-        >
-          {isPlaying ? "Pause Playback" : "Resume Playback"}
-        </button>
-
-        <button
-          onClick={handleSkipSection}
-          className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-          id="skip-btn"
-          aria-label="Skip to next workout exercise section"
-        >
-          Skip to Next Section
-        </button>
-
         <div className="flex flex-col items-center gap-1.5">
           {endError && (
             <span className="text-sm text-red-400 font-semibold animate-pulse" role="alert">

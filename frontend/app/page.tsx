@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { getUserProfile } from "@/lib/api";
-import { getActiveUserId, USER_UPDATED_EVENT } from "@/lib/prototypeUser";
+import { useUserProfile } from "@/components/layout/UserProfileContext";
 import { usePrototypeHapticConnection } from "@/lib/hooks/usePrototypeHapticConnection";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 export default function Home() {
   const router = useRouter();
-  const [hasProfile, setHasProfile] = useState<boolean>(false);
-  const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(true);
+  const { user, loading: isLoadingProfile } = useUserProfile();
+  const hasProfile = !!(user && user.name && user.name !== "Prototype User");
 
   const {
     isConnected,
@@ -21,46 +19,11 @@ export default function Home() {
     announcement: hapticAnnouncement,
   } = usePrototypeHapticConnection();
 
-  useEffect(() => {
-    const checkProfile = () => {
-      const activeUserId = getActiveUserId();
-      if (!activeUserId) {
-        setHasProfile(false);
-        setIsLoadingProfile(false);
-        return;
-      }
-      setIsLoadingProfile(true);
-      getUserProfile(activeUserId)
-        .then((profile) => {
-          if (profile && profile.name && profile.name !== "Prototype User") {
-            setHasProfile(true);
-          } else {
-            setHasProfile(false);
-          }
-        })
-        .catch((err) => {
-          console.warn("Failed to check active user profile on home mount:", err);
-          setHasProfile(false);
-        })
-        .finally(() => {
-          setIsLoadingProfile(false);
-        });
-    };
-
-    checkProfile();
-
-    if (typeof window !== "undefined") {
-      window.addEventListener(USER_UPDATED_EVENT, checkProfile);
-      return () => {
-        window.removeEventListener(USER_UPDATED_EVENT, checkProfile);
-      };
-    }
-  }, []);
-
   const handleQuickSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const input = document.getElementById("quick-submit-input") as HTMLInputElement;
     if (input && input.value) {
+      window.dispatchEvent(new Event("navigation-start"));
       router.push(`/process?url=${encodeURIComponent(input.value)}`);
     }
   };

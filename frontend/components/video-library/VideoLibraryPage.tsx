@@ -9,27 +9,7 @@ import ImportedVideoCard from "@/components/video-library/ImportedVideoCard";
 import SampleVideoCard from "@/components/video-library/SampleVideoCard";
 import DeleteVideoDialog from "@/components/video-library/DeleteVideoDialog";
 import { DEMO_VIDEOS } from "@/lib/demoVideos";
-
-
-/** Human-readable badge for a processing stage. */
-function stageBadge(stage: ProcessingStage) {
-  switch (stage) {
-    case ProcessingStage.COMPLETED:
-      return { text: "Ready", classes: "bg-emerald-600 text-white border-emerald-500 shadow-md font-bold" };
-    case ProcessingStage.FAILED:
-      return { text: "Failed", classes: "bg-red-600 text-white border-red-500 shadow-md font-bold" };
-    case ProcessingStage.SUBMITTED:
-    case ProcessingStage.FETCHING_METADATA:
-    case ProcessingStage.TRANSCRIBING:
-    case ProcessingStage.ANCHORING_TIMELINE:
-    case ProcessingStage.CLASSIFYING_TRAINER_INSTRUCTIONS:
-    case ProcessingStage.ANALYZING_MOVEMENT_WINDOWS:
-    case ProcessingStage.GENERATING_SIDECAR_MANIFEST:
-      return { text: "Preparing", classes: "bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold" };
-    default:
-      return { text: stage, classes: "bg-slate-800 text-slate-400 border-slate-700 font-bold" };
-  }
-}
+import { getPreprocessingStageBadge } from "@/lib/formatters/preprocessingFormatters";
 
 /** Format a duration in seconds to a human-readable string. */
 function formatDuration(seconds: number | null | undefined): string {
@@ -56,6 +36,9 @@ export default function VideoLibraryPage() {
   const [selectedJobForDelete, setSelectedJobForDelete] = useState<AssistanceJob | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [jobsRefreshError, setJobsRefreshError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const handleImageError = (videoId: string) => {
@@ -93,23 +76,82 @@ export default function VideoLibraryPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setIsLoadingJobs(true);
+    setJobsError(null);
     getJobs()
       .then((jobs) => {
         if (!cancelled) {
           setImportedJobs(jobs);
         }
       })
-      .catch(() => {
-        // Backend may not be running. That's fine, show demo cards.
+      .catch((err) => {
+        console.error("Failed to fetch initial video jobs:", err);
+        if (!cancelled) {
+          setJobsError(
+            err instanceof Error
+              ? err.message
+              : "Failed to connect to the backend server. Please verify the API is running."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingJobs(false);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const handleStartSession = (videoId: string) => {
-    console.log("Starting session for video ID:", videoId);
-  };
+  // Poll active preparation jobs every 12 seconds to update progress
+  useEffect(() => {
+    let cancelled = false;
+
+    const hasPreparing = importedJobs.some(
+      (job) =>
+        job.stage !== ProcessingStage.COMPLETED &&
+        job.stage !== ProcessingStage.FAILED
+    );
+
+    if (!hasPreparing) return;
+
+    const poll = async () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      try {
+        const jobs = await getJobs();
+        if (!cancelled) {
+          setImportedJobs(jobs);
+          setJobsRefreshError(null);
+        }
+      } catch (err) {
+        console.warn("Failed to poll video jobs updates:", err);
+        if (!cancelled) {
+          setJobsRefreshError("Could not refresh preparation status. Showing last known progress. Updates will retry automatically.");
+        }
+      }
+    };
+
+    const interval = setInterval(() => {
+      poll();
+    }, 12000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        poll();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [importedJobs]);
+
 
   return (
     <PageWrapper id="video-library-page-wrapper">
@@ -142,7 +184,7 @@ export default function VideoLibraryPage() {
       </div>
 
       {/* Imported Videos from Backend */}
-      {importedJobs.length > 0 && (
+      {(isLoadingJobs || jobsError || importedJobs.length > 0) && (
         <section className="mb-10" aria-labelledby="imported-heading">
           <h2 id="imported-heading" className="text-lg font-bold text-slate-300 mb-4 flex items-center gap-2">
             <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -150,25 +192,67 @@ export default function VideoLibraryPage() {
             </svg>
             Assistance-Ready Videos
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {importedJobs.map((job, idx) => {
-              const badge = stageBadge(job.stage as ProcessingStage);
-              const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
-              return (
-                <ImportedVideoCard
-                  key={job.video_id}
-                  job={job}
-                  badge={badge}
-                  gradient={gradient}
-                  failedImage={!!failedImages[job.video_id]}
-                  handleImageError={handleImageError}
-                  formatDuration={formatDuration}
-                  handleStartSession={handleStartSession}
-                  onRequestDelete={handleRequestDelete}
-                />
-              );
-            })}
-          </div>
+
+          {isLoadingJobs ? (
+            <div
+              className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center gap-3 text-slate-300"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="w-5 h-5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+              <span>Fetching assistance-ready videos...</span>
+            </div>
+          ) : jobsError ? (
+            <div
+              className="p-6 bg-slate-900/50 border border-red-500/20 rounded-2xl flex items-start gap-3 text-slate-300"
+              role="alert"
+            >
+              <svg className="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="font-semibold text-red-400">Could not load prepared videos.</p>
+                <p className="text-sm text-slate-400 mt-1">Sample videos are still available below. Please check if the backend is running.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {jobsRefreshError && (
+                <div
+                  className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-medium rounded-2xl flex items-center gap-3"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <svg className="w-5 h-5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.228 10H17M4 4h7M4 4v5h5" />
+                  </svg>
+                  <div>
+                    <p className="font-semibold">Could not refresh preparation status. Showing last known progress.</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Updates will retry automatically.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {importedJobs.map((job, idx) => {
+                  const badge = getPreprocessingStageBadge(job.stage as ProcessingStage);
+                  const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
+                  return (
+                    <ImportedVideoCard
+                      key={job.video_id}
+                      job={job}
+                      badge={badge}
+                      gradient={gradient}
+                      failedImage={!!failedImages[job.video_id]}
+                      handleImageError={handleImageError}
+                      formatDuration={formatDuration}
+                      onRequestDelete={handleRequestDelete}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
         </section>
       )}
 

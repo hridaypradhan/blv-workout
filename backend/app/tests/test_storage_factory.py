@@ -6,14 +6,12 @@ from app.core.storage import (
     get_user_storage,
     get_job_storage,
     get_session_storage,
-    get_session_event_storage,
     get_artifact_storage,
 )
 from app.core.storage.dynamodb import (
     DynamoDBUserStorage,
     DynamoDBJobStorage,
     DynamoDBSessionStorage,
-    DynamoDBSessionEventStorage,
 )
 from app.core.user_store import UserStore
 from app.core.job_store import JobStore
@@ -30,7 +28,6 @@ class TestStorageFactory(unittest.TestCase):
         factory._user_storage = None
         factory._job_storage = None
         factory._session_storage = None
-        factory._session_event_storage = None
         factory._artifact_storage = None
 
     def tearDown(self) -> None:
@@ -39,7 +36,6 @@ class TestStorageFactory(unittest.TestCase):
         factory._user_storage = None
         factory._job_storage = None
         factory._session_storage = None
-        factory._session_event_storage = None
         factory._artifact_storage = None
 
     def test_default_storage_provider_is_local_json(self) -> None:
@@ -49,7 +45,6 @@ class TestStorageFactory(unittest.TestCase):
         self.assertIsInstance(get_user_storage(), UserStore)
         self.assertIsInstance(get_job_storage(), JobStore)
         self.assertIsInstance(get_session_storage(), SessionStore)
-        self.assertIsInstance(get_session_event_storage(), SessionStore)
         self.assertIsInstance(get_artifact_storage(), LocalJsonGeneratedArtifactStorage)
 
     def test_unknown_storage_provider_raises_value_error(self) -> None:
@@ -68,7 +63,6 @@ class TestStorageFactory(unittest.TestCase):
         self.assertIsInstance(get_user_storage(), DynamoDBUserStorage)
         self.assertIsInstance(get_job_storage(), DynamoDBJobStorage)
         self.assertIsInstance(get_session_storage(), DynamoDBSessionStorage)
-        self.assertIsInstance(get_session_event_storage(), DynamoDBSessionEventStorage)
         self.assertIsInstance(get_artifact_storage(), S3GeneratedArtifactStorage)
 
     @patch("app.core.storage.local_json.load_manifest_from_disk")

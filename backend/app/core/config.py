@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash"
     AI_PROVIDER: str = "prototype"
-    AI_DIAGNOSTICS_ENABLED: bool = True
+    AI_DIAGNOSTICS_ENABLED: bool = False
     YOUTUBE_API_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
 

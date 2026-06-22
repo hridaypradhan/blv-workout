@@ -22,6 +22,8 @@ class TestS3GeneratedArtifactStorage(unittest.TestCase):
         self.get_s3_patcher.start()
 
         self.original_provider = settings.STORAGE_PROVIDER
+        self.original_diagnostics = settings.AI_DIAGNOSTICS_ENABLED
+        settings.AI_DIAGNOSTICS_ENABLED = True
         # Clear singleton
         from app.core.storage import factory
         factory._artifact_storage = None
@@ -29,6 +31,7 @@ class TestS3GeneratedArtifactStorage(unittest.TestCase):
     def tearDown(self) -> None:
         self.get_s3_patcher.stop()
         settings.STORAGE_PROVIDER = self.original_provider
+        settings.AI_DIAGNOSTICS_ENABLED = self.original_diagnostics
         from app.core.storage import factory
         factory._artifact_storage = None
 

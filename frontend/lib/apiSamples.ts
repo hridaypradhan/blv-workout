@@ -67,6 +67,23 @@ export const apiSamples: Record<string, ApiSample> = {
       message: "Ingestion record deleted successfully."
     }, null, 2)
   },
+  "GET /api/preprocessing/transcript/{video_id}": {
+    pathParams: {
+      video_id: "00000000-0000-0000-0000-000000000000"
+    },
+    description: "Retrieve pre-processed text and segment-level transcripts for grounding",
+    response: JSON.stringify({
+      video_id: "00000000-0000-0000-0000-000000000000",
+      transcript_text: "Let's start with some squats...",
+      transcript_segments: [
+        {
+          start_ms: 1000,
+          end_ms: 5000,
+          text: "Let's start with some squats..."
+        }
+      ]
+    }, null, 2)
+  },
   "POST /api/session/start": {
     body: JSON.stringify({
       user_id: "00000000-0000-0000-0000-000000000000",
@@ -85,62 +102,44 @@ export const apiSamples: Record<string, ApiSample> = {
       summary: null
     }, null, 2)
   },
-  "POST /api/session/{session_id}/rep": {
+  "POST /api/session/{session_id}/finalize": {
     pathParams: {
       session_id: "00000000-0000-0000-0000-000000000000"
     },
     body: JSON.stringify({
-      exercise_id: "22222222-2222-2222-2222-222222222222",
-      rep_count: 1,
-      metadata: {}
+      playback_events: [
+        {
+          event_type: "pause",
+          timestamp_ms: 12500,
+          metadata: { reason: "user_triggered" }
+        }
+      ],
+      reps: [
+        {
+          exercise_id: "22222222-2222-2222-2222-222222222222",
+          rep_count: 1,
+          timestamp: "2026-05-27T01:35:33.170345Z",
+          metadata: {}
+        }
+      ],
+      form_errors: [
+        {
+          exercise_id: "22222222-2222-2222-2222-222222222222",
+          form_error: {
+            joint: "left_knee",
+            observed_angle: 105.0,
+            expected_range: [0.0, 90.0],
+            severity: "medium",
+            message: "Left knee is over-flexed."
+          },
+          timestamp: "2026-05-27T01:35:33.170345Z"
+        }
+      ]
     }, null, 2),
-    description: "Record a completed repetition (tracked performance)",
+    description: "Finalize and save all workout telemetry and interaction events in a single transaction",
     response: JSON.stringify({
-      status: "recorded"
-    }, null, 2)
-  },
-  "POST /api/session/{session_id}/form-error": {
-    pathParams: {
-      session_id: "00000000-0000-0000-0000-000000000000"
-    },
-    body: JSON.stringify({
-      exercise_id: "22222222-2222-2222-2222-222222222222",
-      form_error: {
-        joint: "left_knee",
-        observed_angle: 105.0,
-        expected_range: [0.0, 90.0],
-        severity: "medium",
-        message: "Left knee is over-flexed."
-      }
-    }, null, 2),
-    description: "Record a detected form error (supplementary correction event)",
-    response: JSON.stringify({
-      status: "recorded"
-    }, null, 2)
-  },
-  "POST /api/session/{session_id}/playback-event": {
-    pathParams: {
-      session_id: "00000000-0000-0000-0000-000000000000"
-    },
-    body: JSON.stringify({
-      event_type: "pause",
-      timestamp_ms: 12500,
-      metadata: {
-        reason: "user_triggered"
-      }
-    }, null, 2),
-    description: "Record a playback state change event during YouTube video playback",
-    response: JSON.stringify({
-      status: "recorded"
-    }, null, 2)
-  },
-  "POST /api/session/{session_id}/end": {
-    pathParams: {
-      session_id: "00000000-0000-0000-0000-000000000000"
-    },
-    description: "End an active assisted playback session",
-    response: JSON.stringify({
-      status: "ended"
+      status: "finalized",
+      message: "Session telemetry saved and session ended successfully."
     }, null, 2)
   },
   "GET /api/session/{session_id}": {
@@ -202,97 +201,6 @@ export const apiSamples: Record<string, ApiSample> = {
       }
     }, null, 2)
   },
-  "POST /api/assistant/pacing": {
-    body: JSON.stringify({
-      session_id: "00000000-0000-0000-0000-000000000000",
-      exercise_id: "22222222-2222-2222-2222-222222222222",
-      lag_ratio: 1.15,
-      persona: "supportive"
-    }, null, 2),
-    description: "Generic pacing feedback based on user lag",
-    response: JSON.stringify({
-      text: "Take your time, slow it down.",
-      persona: "supportive",
-      modality: "audio",
-      metadata: {
-        lag_ratio: 1.15
-      }
-    }, null, 2)
-  },
-  "POST /api/assistant/pacing/adaptive": {
-    body: JSON.stringify({
-      session_id: "00000000-0000-0000-0000-000000000000",
-      exercise_id: "22222222-2222-2222-2222-222222222222",
-      exercise_name: "Squat",
-      expected_rep_duration_seconds: 4.0,
-      rep_durations_seconds: [3.9, 4.0, 3.8],
-      persona: "supportive"
-    }, null, 2),
-    description: "Adaptive pacing and player playback adjustments",
-    response: JSON.stringify({
-      feature: "adaptive_pacing",
-      decision: "recovery",
-      assistant_message: "Excellent job catching up. Resuming normal speed.",
-      playback: {
-        action: "play",
-        suggested_speed: 1.0
-      },
-      haptic: {
-        enabled: true,
-        pattern: "success-spark",
-        sleeves: [],
-        intensity: 0.5
-      },
-      adaptation_recommendation: null,
-      metrics: {
-        latest_lag_ratio: 0.95,
-        rolling_average_lag_ratio: 0.975,
-        sustained_lag: false,
-        recovery_detected: true,
-        form_errors_increasing: false
-      },
-      reason: "User has successfully matched the expected pace over recent repetitions."
-    }, null, 2)
-  },
-  "POST /api/assistant/pacing/rhythm": {
-    body: JSON.stringify({
-      session_id: "00000000-0000-0000-0000-000000000000",
-      exercise_id: "22222222-2222-2222-2222-222222222222",
-      exercise_name: "Pushup",
-      expected_rep_duration_seconds: 3.0,
-      rep_durations_seconds: [3.5, 3.6, 3.4],
-      persona: "supportive"
-    }, null, 2),
-    description: "Rhythmic tempo and assistant messages",
-    response: JSON.stringify({
-      feature: "rhythm_pacing",
-      decision: "too_slow",
-      assistant_message: "You're falling slightly behind the beat. Let's speed up just a bit.",
-      rhythm: {
-        expected_rep_duration_seconds: 3.0,
-        user_average_rep_duration_seconds: 3.5,
-        drift_ratio: 1.1666666666666667,
-        drift_percent: 16.666666666666675,
-        irregularity_score: 0.023328473740792194
-      },
-      reason: "User average repetition speed is slower than the video's rhythmic beat."
-    }, null, 2)
-  },
-  "POST /api/assistant/motivation": {
-    body: JSON.stringify({
-      milestone_event: "completed_5_reps",
-      persona: "supportive"
-    }, null, 2),
-    description: "Motivational milestone quote generator",
-    response: JSON.stringify({
-      text: "Five reps in already! You are matching the pace flawlessly. Keep pushing!",
-      persona: "supportive",
-      modality: "audio",
-      metadata: {
-        milestone_event: "completed_5_reps"
-      }
-    }, null, 2)
-  },
   "POST /api/assistant/qa": {
     body: JSON.stringify({
       question: "How low should I go on squats?",
@@ -306,17 +214,6 @@ export const apiSamples: Record<string, ApiSample> = {
       modality: "audio",
       metadata: {}
     }, null, 2)
-  },
-  "GET /api/assistant/form-risk-templates/{exercise_id}": {
-    pathParams: {
-      exercise_id: "22222222-2222-2222-2222-222222222222"
-    },
-    description: "Get static form risk correction templates for exercise",
-    response: JSON.stringify([
-      "Keep your back straight and chest proud.",
-      "Gently lower your hips a bit more if comfortable.",
-      "Track your knees straight ahead."
-    ], null, 2)
   },
   "POST /api/user/register": {
     body: JSON.stringify({
@@ -387,40 +284,7 @@ export const apiSamples: Record<string, ApiSample> = {
       created_at: "2026-05-27T01:00:00Z"
     }, null, 2)
   },
-  "GET /api/user/{user_id}/history": {
-    pathParams: {
-      user_id: "00000000-0000-0000-0000-000000000000"
-    },
-    description: "Get completed session history for a user",
-    response: JSON.stringify([
-      {
-        id: "576dd7b5-7b0c-4d28-8307-acea7ecc029f",
-        user_id: "00000000-0000-0000-0000-000000000000",
-        video_id: "11111111-1111-1111-1111-111111111111",
-        started_at: "2026-05-27T01:35:32.921875Z",
-        ended_at: "2026-05-27T01:35:50.000000Z",
-        reps_count: 1,
-        errors_count: 1
-      }
-    ], null, 2)
-  },
-  "GET /api/user/{user_id}/progress/{exercise_id}": {
-    pathParams: {
-      user_id: "00000000-0000-0000-0000-000000000000",
-      exercise_id: "22222222-2222-2222-2222-222222222222"
-    },
-    description: "Retrieve metrics and reps for a specific movement",
-    response: JSON.stringify({
-      exercise_id: "22222222-2222-2222-2222-222222222222",
-      exercise_name: "Squat",
-      total_completed_reps: 15,
-      accuracy_score: 0.92,
-      form_error_breakdown: {
-        left_knee: 3,
-        right_knee: 1
-      }
-    }, null, 2)
-  },
+
   "POST /api/haptic/test": {
     body: JSON.stringify({
       sleeve_side: "left"
@@ -441,20 +305,6 @@ export const apiSamples: Record<string, ApiSample> = {
       status: "triggered",
       pattern: "double-pulse",
       intensity: 0.8
-    }, null, 2)
-  },
-  "GET /api/haptic/patterns": {
-    description: "Retrieve the haptic patterns catalog",
-    response: JSON.stringify({
-      "double-pulse": {
-        pulses: 2,
-        interval_ms: 150,
-        intensity: 0.8
-      },
-      "sustained-vibe": {
-        duration_ms: 1000,
-        intensity: 0.6
-      }
     }, null, 2)
   }
 };

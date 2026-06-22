@@ -2,15 +2,22 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { AssistanceJob, ProcessingStage } from "@/types";
+import { getPreprocessingStageMetadata } from "@/lib/formatters/preprocessingFormatters";
+
+const SEMANTIC_BADGE_CLASSES = {
+  ready: "bg-emerald-600 text-white border-emerald-500 shadow-md font-bold",
+  failed: "bg-red-600 text-white border-red-500 shadow-md font-bold",
+  preparing: "bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold",
+  unknown: "bg-slate-800 text-slate-400 border-slate-700 font-bold",
+};
 
 interface ImportedVideoCardProps {
   job: AssistanceJob;
-  badge: { text: string; classes: string };
+  badge: { text: string; semanticState: "ready" | "failed" | "preparing" | "unknown" };
   gradient: string;
   failedImage: boolean;
   handleImageError: (videoId: string) => void;
   formatDuration: (seconds: number | null | undefined) => string;
-  handleStartSession: (videoId: string) => void;
   onRequestDelete: (job: AssistanceJob) => void;
 }
 
@@ -21,7 +28,6 @@ export default function ImportedVideoCard({
   failedImage,
   handleImageError,
   formatDuration,
-  handleStartSession,
   onRequestDelete,
 }: ImportedVideoCardProps) {
   return (
@@ -59,7 +65,7 @@ export default function ImportedVideoCard({
               Duration unavailable
             </div>
           )}
-          <div className={`px-2.5 py-1 rounded-md text-sm font-semibold border ${badge.classes}`}>
+          <div className={`px-2.5 py-1 rounded-md text-sm font-semibold border ${SEMANTIC_BADGE_CLASSES[badge.semanticState] || SEMANTIC_BADGE_CLASSES.unknown}`}>
             {badge.text}
           </div>
         </div>
@@ -118,7 +124,6 @@ export default function ImportedVideoCard({
         {job.stage === ProcessingStage.COMPLETED ? (
           <Link
             href={`/session/${job.video_id}/setup`}
-            onClick={() => handleStartSession(job.video_id)}
             className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all"
             aria-label={`Start assisted playback for ${job.title || "imported video"}`}
           >
@@ -134,11 +139,27 @@ export default function ImportedVideoCard({
           >
             Retry Preparation
           </Link>
-        ) : (
-          <div className="w-full flex items-center justify-center px-4 py-2.5 bg-slate-800/50 text-slate-400 font-bold rounded-xl text-sm border border-slate-700">
-            Preparing...
-          </div>
-        )}
+        ) : (() => {
+          const stageMeta = getPreprocessingStageMetadata(job.stage);
+          return (
+            <div
+              className="w-full flex flex-col items-center justify-center px-4 py-3 bg-slate-800/50 text-slate-400 rounded-xl text-sm border border-slate-700 text-center"
+              aria-label={stageMeta ? `Video preparation status: ${stageMeta.accessibleDescription}` : "Video assistance is preparing."}
+            >
+              <span className="font-bold text-slate-300">Preparing...</span>
+              {stageMeta && (
+                <div className="flex flex-col items-center mt-1">
+                  <span className="text-xs opacity-90 font-semibold">
+                    {stageMeta.compactProgress}
+                  </span>
+                  <span className="text-[11px] opacity-75 mt-0.5">
+                    {stageMeta.description}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </article>
   );

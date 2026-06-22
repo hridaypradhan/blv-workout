@@ -74,14 +74,21 @@ export function shortVideoId(videoId: string | null | undefined): string {
  * Calculates high-level metrics for a session.
  */
 export function getSessionMetrics(session: Session) {
-  const reps = session.reps?.length || 0;
-  const formErrors = session.form_errors?.length || 0;
+  const reps = typeof session.reps_count === "number" ? session.reps_count : (session.reps?.length || 0);
+  const formErrors = typeof session.form_errors_count === "number" ? session.form_errors_count : (session.form_errors?.length || 0);
   
-  let assistantInteractions = 0;
-  let hapticCues = 0;
-  let playbackInteractions = 0;
-  
-  if (session.playback_events) {
+  let assistantInteractions = typeof session.assistant_interactions_count === "number" ? session.assistant_interactions_count : 0;
+  let hapticCues = typeof session.haptic_cues_count === "number" ? session.haptic_cues_count : 0;
+  let playbackInteractions = typeof session.playback_interactions_count === "number" ? session.playback_interactions_count : 0;
+
+  const hasPrecomputed =
+    typeof session.reps_count === "number" &&
+    typeof session.form_errors_count === "number" &&
+    typeof session.assistant_interactions_count === "number" &&
+    typeof session.haptic_cues_count === "number" &&
+    typeof session.playback_interactions_count === "number";
+
+  if (!hasPrecomputed && session.playback_events) {
     for (const evt of session.playback_events) {
       const type = evt.event_type;
       if (
@@ -176,7 +183,7 @@ export function formatSessionEventDetails(evt: { event_type: string; metadata?: 
   if (type === SESSION_EVENTS.ASSISTANT_CORRECTION_REQUESTED) {
     const jointLabel = metadata.joint ? metadata.joint.replace(/_/g, " ") : "joint";
     const observed = typeof metadata.observed_angle === "number" ? metadata.observed_angle.toFixed(0) : "0";
-    return `Requested correction check for ${jointLabel} (observed: ${observed}°)`;
+    return `Requested correction check for ${jointLabel} (observed: ${observed}\u00b0)`;
   }
   if (type === SESSION_EVENTS.ASSISTANT_ANSWER_DELIVERED) {
     return `Answered: "${metadata.answer || ""}"`;
@@ -229,7 +236,7 @@ export function formatSessionEventDetails(evt: { event_type: string; metadata?: 
   if (type === SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED) {
     const jointLabel = metadata.joint ? metadata.joint.replace(/_/g, " ") : "joint";
     const observed = typeof metadata.observed_angle === "number" ? metadata.observed_angle.toFixed(0) : "0";
-    return `Warning on ${jointLabel} (${observed}°): "${metadata.message || ""}"`;
+    return `Warning on ${jointLabel} (${observed}\u00b0): "${metadata.message || ""}"`;
   }
   
   return typeof metadata === "object" ? JSON.stringify(metadata) : type;

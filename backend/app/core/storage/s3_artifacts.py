@@ -106,6 +106,8 @@ class S3GeneratedArtifactStorage(GeneratedArtifactStorage):
         return self._load_json(key)
 
     def save_sidecar_diagnostics(self, video_id: str, diagnostics: dict) -> None:
+        if not settings.AI_DIAGNOSTICS_ENABLED:
+            return
         key = f"diagnostics/sidecar/{video_id}.json"
         self._save_json(key, diagnostics)
 
@@ -118,6 +120,8 @@ class S3GeneratedArtifactStorage(GeneratedArtifactStorage):
         return self._load_json(key)
 
     def save_cue_plan_diagnostics(self, video_id: str, diagnostics: dict) -> None:
+        if not settings.AI_DIAGNOSTICS_ENABLED:
+            return
         key = f"diagnostics/cue-plan/{video_id}.json"
         self._save_json(key, diagnostics)
 
@@ -126,6 +130,8 @@ class S3GeneratedArtifactStorage(GeneratedArtifactStorage):
         return self._delete_object(key)
 
     def save_qna_diagnostics(self, session_or_video_id: str, key_suffix: str, diagnostics: dict) -> None:
+        if not settings.AI_DIAGNOSTICS_ENABLED:
+            return
         key = f"diagnostics/qna/{session_or_video_id}/{key_suffix}.json"
         self._save_json(key, diagnostics)
 

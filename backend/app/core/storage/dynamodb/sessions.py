@@ -291,16 +291,54 @@ class DynamoDBSessionStorage(SessionStorage):
         session.form_errors_count = len(form_errors_validated)
 
         assistant_cues = 0
-        haptic_cues = 0
         p_events = 0
         for evt in playback_events_validated:
             t = evt.event_type
             if t in ("assistant_cue_delivered", "assistant_correction_delivered", "assistant_answer_delivered", "user_question_submitted"):
                 assistant_cues += 1
-            elif t in ("haptic_cue_triggered", "haptic_cue_requested"):
-                haptic_cues += 1
             elif t in ("play", "pause", "seek", "speed_change", "ended"):
                 p_events += 1
+
+        # Count unique haptic cues (deduplicate requested + triggered/failed outcomes)
+        final_outcomes = []
+        requests = []
+        for evt in playback_events_validated:
+            t = evt.event_type
+            meta = evt.metadata or {}
+            cid = meta.get("cue_id") or meta.get("cueId")
+            ts = evt.timestamp_ms
+            event_name = meta.get("bhaptics_event_name") or meta.get("cue_type") or meta.get("selected_vibration_id")
+
+            if t in ("haptic_cue_triggered", "haptic_cue_failed"):
+                final_outcomes.append({"cue_id": cid, "timestamp_ms": ts, "event_name": event_name})
+            elif t == "haptic_cue_requested":
+                requests.append({"cue_id": cid, "timestamp_ms": ts, "event_name": event_name})
+
+        matched_requests = set()
+        for req_idx, req in enumerate(requests):
+            req_cid = req["cue_id"]
+            req_ts = req["timestamp_ms"]
+
+            if req_cid is not None:
+                matched = False
+                for out in final_outcomes:
+                    if out["cue_id"] == req_cid:
+                        matched = True
+                        break
+                if matched:
+                    matched_requests.add(req_idx)
+                    continue
+
+            if req_ts is not None:
+                for out in final_outcomes:
+                    out_ts = out["timestamp_ms"]
+                    if out_ts is not None and abs(out_ts - req_ts) <= 2000:
+                        if not req["event_name"] or not out["event_name"] or req["event_name"] == out["event_name"]:
+                            matched_requests.add(req_idx)
+                            break
+
+        unmatched_requests_count = len(requests) - len(matched_requests)
+        haptic_cues = len(final_outcomes) + unmatched_requests_count
 
         session.assistant_interactions_count = assistant_cues
         session.haptic_cues_count = haptic_cues

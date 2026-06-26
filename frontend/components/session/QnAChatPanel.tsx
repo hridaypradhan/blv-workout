@@ -70,25 +70,30 @@ export default function QnAChatPanel({
             Error: {qaError}
           </div>
         )}
-        <form onSubmit={handleSendMessage} className="w-full flex items-center gap-2">
-          <input
-            type="text"
-            placeholder={isPending ? "Assistant is responding..." : "Ask assistant about movement setup..."}
-            disabled={isPending}
-            className="flex-1 min-w-0 px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all disabled:opacity-50"
-            aria-label="Ask assistant for verbal clarification"
-            id="live-chat-input"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={isPending}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0 transition-all"
-            id="live-chat-btn"
-          >
-            {isPending ? "Sending..." : "Send"}
-          </button>
+        <form onSubmit={handleSendMessage} className="w-full flex flex-col gap-2">
+          <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input
+              type="text"
+              placeholder={isPending ? "Responding..." : "Ask about form..."}
+              disabled={isPending}
+              className="flex-1 w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all disabled:opacity-50"
+              aria-label="Ask assistant about movement setup or form"
+              id="live-chat-input"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={isPending || !chatInput.trim()}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0 transition-all self-end sm:self-auto h-[42px] flex items-center justify-center"
+              id="live-chat-btn"
+            >
+              {isPending ? "Sending..." : "Send"}
+            </button>
+          </div>
+          <span className="text-[11px] text-slate-500 px-1">
+            Ask about movement setup or form correction tips.
+          </span>
         </form>
       </div>
     </section>

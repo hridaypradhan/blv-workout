@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLayout } from "./LayoutContext";
-import { usePrototypeHapticConnection } from "@/lib/hooks/usePrototypeHapticConnection";
+import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 
 interface SidebarProps {
@@ -15,12 +15,34 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
   const { sidebarOpen, setSidebarOpen, sidebarCollapsed } = useLayout();
 
   const {
+    status,
     statusText,
     announcement,
-    toggleConnection,
-    isConnecting,
-    isConnected,
-  } = usePrototypeHapticConnection();
+    isLoading,
+    refresh,
+    error,
+  } = useHapticDeviceStatus();
+
+  const isGreen = status === "connected" || status === "partially_connected";
+  const isYellow = status === "initialized_no_devices" || isLoading;
+  const statusColorClass = isGreen ? "bg-emerald-500" : isYellow ? "bg-yellow-500 animate-pulse" : "bg-red-500";
+
+  let compactLabel = "Indicator mode";
+  if (status === "connected" || status === "partially_connected") {
+    compactLabel = "Connected";
+  } else if (status === "initialized_no_devices" || status === "disabled") {
+    compactLabel = "Indicator mode";
+  } else if (status === "player_unavailable") {
+    compactLabel = "Player offline";
+  } else if (status === "sdk_unavailable" || status === "not_configured") {
+    compactLabel = "SDK unavailable";
+  } else if (status === "python_unsupported") {
+    compactLabel = "Python unsupported";
+  } else if (status === "error") {
+    compactLabel = "Status unavailable";
+  } else {
+    compactLabel = "Status unavailable";
+  }
 
   const navItems: Array<{
     name: string;
@@ -29,8 +51,8 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
     isPlaceholder?: boolean;
   }> = [
     {
-      name: "Home",
-      href: "/",
+      name: "Prepare Assistance",
+      href: "/process",
       icon: (
         <svg
           className="w-5 h-5"
@@ -44,7 +66,7 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth="2"
-            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
           />
         </svg>
       ),
@@ -52,27 +74,6 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
     {
       name: "Video Library",
       href: "/video-library",
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-          />
-        </svg>
-      ),
-    },
-    {
-      name: "Prepare Assistance",
-      href: "/process",
       icon: (
         <svg
           className="w-5 h-5"
@@ -191,15 +192,15 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
           sidebarCollapsed ? "justify-center h-16 px-0" : "justify-between h-16 px-6"
         }`}>
           <Link
-            href="/"
+            href="/process"
             onClick={() => {
               setSidebarOpen(false);
-              if (pathname !== "/") {
+              if (pathname !== "/process") {
                 window.dispatchEvent(new CustomEvent("navigation-start"));
               }
             }}
             className="flex items-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-2 rounded"
-            aria-label="FitA11y Home Page"
+            aria-label="FitA11y Prepare Assistance"
             title={sidebarCollapsed ? "FitA11y" : undefined}
           >
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-tr from-yellow-400 to-amber-500 text-slate-900 font-bold text-lg shrink-0">
@@ -279,41 +280,41 @@ export default function Sidebar({ id = "main-sidebar" }: SidebarProps) {
         <div className="p-4 border-t border-slate-800 bg-slate-950/40">
           {sidebarCollapsed ? (
             <button
-              onClick={toggleConnection}
-              disabled={isConnecting}
+              onClick={refresh}
+              disabled={isLoading}
               className="flex items-center justify-center mx-auto w-8 h-8 rounded-lg border border-slate-800 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-              aria-label={`Haptic Sleeve Status: ${statusText}. Click to toggle connection.`}
+              aria-label={`Haptic Sleeve Status: ${statusText}. Click to check status.`}
               title={`Haptic Sleeve: ${statusText}`}
             >
-              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                isConnected ? "bg-emerald-500" : isConnecting ? "bg-yellow-500 animate-pulse" : "bg-red-500 animate-pulse"
-              }`} />
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColorClass}`} />
             </button>
           ) : (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-800 bg-slate-900/60">
-              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                isConnected ? "bg-emerald-500" : isConnecting ? "bg-yellow-500 animate-pulse" : "bg-red-500 animate-pulse"
-              }`} aria-hidden="true" />
-              <div className="flex-1 text-xs min-w-0">
-                <p className="font-semibold text-slate-200">Haptic Sleeve</p>
-                <p className="text-slate-300 font-medium truncate">{statusText}</p>
-              </div>
-              <button
-                onClick={toggleConnection}
-                disabled={isConnecting}
-                className="text-xs font-bold text-yellow-400 hover:text-yellow-300 disabled:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5 shrink-0"
-                aria-pressed={isConnected}
-                aria-label={
-                  isConnected
-                    ? "Disconnect Haptic Sleeve (Prototype)"
-                    : isConnecting
-                    ? "Connecting Haptic Sleeve (Prototype)"
-                    : "Connect Haptic Sleeve (Prototype)"
-                }
-                id="sleeve-connect-btn"
+            <div className="flex flex-col gap-2">
+              <div
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-800 bg-slate-900/60"
+                title={`Haptic Sleeve: ${statusText}`}
+                aria-label={`Haptic Sleeve Status: ${statusText}`}
               >
-                {isConnected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
-              </button>
+                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColorClass}`} aria-hidden="true" />
+                <div className="flex-1 text-xs min-w-0">
+                  <p className="font-semibold text-slate-200">Haptic Sleeve</p>
+                  <p className="text-slate-300 font-medium">{compactLabel}</p>
+                </div>
+                <button
+                  onClick={refresh}
+                  disabled={isLoading}
+                  className="text-xs font-bold text-yellow-400 hover:text-yellow-300 disabled:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 rounded px-1.5 py-0.5 shrink-0"
+                  aria-label="Refresh haptic connection status"
+                  id="sleeve-connect-btn"
+                >
+                  {isLoading ? "Checking..." : "Refresh"}
+                </button>
+              </div>
+              {error && (
+                <div className="px-1 text-[10px] text-amber-400 leading-normal" id="sidebar-haptic-error">
+                  Unable to refresh haptic provider status. Indicator mode may still work once the backend is available.
+                </div>
+              )}
             </div>
           )}
         </div>

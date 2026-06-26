@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
-import { triggerHapticPattern, generateCorrection } from "@/lib/api";
+import { generateCorrection } from "@/lib/api";
 import { AssistantPersona, Exercise, User } from "@/types";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 
@@ -32,6 +32,15 @@ interface UsePrototypePoseSessionEventsProps {
   announce: (msg: string) => void;
   updateLatestAutomaticCue: (text: string, source: string) => void;
   logSessionEvent: (eventType: string, timestampMs: number, metadata?: Record<string, unknown>) => void;
+  triggerHapticEvent: (params: {
+    cueType: string;
+    vibrationId: string;
+    intensity: number;
+    limbs?: string[];
+    text?: string;
+    cueId?: string | null;
+    currentTimeMs: number;
+  }) => Promise<unknown>;
 }
 
 /** Maps a tracked anatomical joint to logical limb targets for dry-run triggering. */
@@ -65,6 +74,7 @@ export function usePrototypePoseSessionEvents({
   announce,
   updateLatestAutomaticCue,
   logSessionEvent,
+  triggerHapticEvent,
 }: UsePrototypePoseSessionEventsProps) {
   const repsBufferRef = useRef<RepsBufferItem[]>([]);
   const formErrorsBufferRef = useRef<FormErrorsBufferItem[]>([]);
@@ -122,30 +132,19 @@ export function usePrototypePoseSessionEvents({
       const vibrationId = userProfile?.haptic_preferences?.per_rep_tick || "per_rep_tick_001";
       const limbs = ["left_arm", "right_arm"];
 
-      triggerHapticPattern(null, null, 0.6, "per_rep_tick", vibrationId, limbs)
-        .then((res) => {
-          announce(`Haptic cue would trigger: ${res.pattern_name} (dry-run).`);
-          logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
-            cue_type: "per_rep_tick",
-            selected_vibration_id: vibrationId,
-            selected_wav: res.selected_wav,
-            target_limbs: res.target_limbs,
-            provider: res.provider,
-            status: res.status,
-            intensity: 0.6,
-          });
-        })
-        .catch((err) => {
-          console.error("Failed to trigger rep haptic cue:", err);
-          logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
-            cue_type: "per_rep_tick",
-            selected_vibration_id: vibrationId,
-            intensity: 0.6,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
+      triggerHapticEvent({
+        cueType: "per_rep_tick",
+        vibrationId,
+        intensity: 0.6,
+        limbs,
+        text: `Repetition ${repCount} completed.`,
+        cueId: `rep-tick-${repCount}`,
+        currentTimeMs,
+      }).catch((err) => {
+        console.error("Failed to trigger rep haptic cue:", err);
+      });
     }
-  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs, userProfile, announce, logSessionEvent]);
+  }, [latestRepEvent, sessionId, currentExercise, currentTimeMs, userProfile, announce, logSessionEvent, triggerHapticEvent]);
 
   // Handle prototype form error events
   const lastHandledErrorRepRef = useRef<number>(-1);
@@ -215,28 +214,17 @@ export function usePrototypePoseSessionEvents({
       const limbs = getLimbsForJoint(latestFormError.joint);
       const vibrationId = userProfile?.haptic_preferences?.form_warning_above || "form_warning_above_001";
 
-      triggerHapticPattern(null, null, 0.8, "form_warning_above", vibrationId, limbs)
-        .then((res) => {
-          announce(`Haptic cue would trigger on limbs ${limbs.join(", ")} (dry-run).`);
-          logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTimeMs, {
-            cue_type: "form_warning_above",
-            selected_vibration_id: vibrationId,
-            selected_wav: res.selected_wav,
-            target_limbs: res.target_limbs,
-            provider: res.provider,
-            status: res.status,
-            intensity: 0.8,
-          });
-        })
-        .catch((err) => {
-          console.error("Failed to trigger corrective haptic cue:", err);
-          logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_FAILED, currentTimeMs, {
-            cue_type: "form_warning_above",
-            selected_vibration_id: vibrationId,
-            intensity: 0.8,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
+      triggerHapticEvent({
+        cueType: "form_warning_above",
+        vibrationId,
+        intensity: 0.8,
+        limbs,
+        text: `Form warning: ${latestFormError.message}`,
+        cueId: `form-error-${repCount}-${joint}`,
+        currentTimeMs,
+      }).catch((err) => {
+        console.error("Failed to trigger corrective haptic cue:", err);
+      });
     }
   }, [
     latestFormError,
@@ -247,6 +235,7 @@ export function usePrototypePoseSessionEvents({
     announce,
     updateLatestAutomaticCue,
     logSessionEvent,
+    triggerHapticEvent,
   ]);
 
   return {

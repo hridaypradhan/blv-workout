@@ -1,0 +1,2 @@
+# Optional hardware support package for physical haptic sleeves
+bhaptics-python>=1.0.0

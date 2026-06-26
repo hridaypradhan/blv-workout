@@ -83,6 +83,13 @@ export interface HapticVibrationCandidate {
   provider_notes?: string | null;
 }
 
+export interface HapticEventMappingItem {
+  cue_type: string;
+  bhaptics_event_name: string;
+  label: string;
+  description: string;
+}
+
 export interface User {
   id?: string | null;
   email: string;
@@ -330,6 +337,13 @@ export interface HapticTriggerResponse {
   selected_wav?: string | null;
   target_limbs?: HapticLimb[] | null;
   bhaptics_event_name?: string | null;
+  delivery_mode?: "hardware" | "indicator" | "dry_run" | "failed" | null;
+  hardware_available?: boolean;
+  player_available?: boolean | null;
+  request_id?: string | null;
+  status_message?: string | null;
+  resolved_cue_type?: string | null;
+  target_positions?: string[] | null;
 }
 
 export interface RuntimeObservationContext {
@@ -502,3 +516,35 @@ export interface TranscriptArtifact {
   transcript_segments: TranscriptSegment[];
   created_at: string;
 }
+
+export type HapticProviderStatus =
+  | "disabled"
+  | "not_configured"
+  | "sdk_unavailable"
+  | "python_unsupported"
+  | "player_unavailable"
+  | "initialized_no_devices"
+  | "partially_connected"
+  | "connected"
+  | "error";
+
+export interface HapticDeviceStatus {
+  key: string;
+  name: string;
+  position: number;
+  connected: boolean;
+  paired: boolean;
+  battery: number | null;
+  status_text: string;
+  source: string;
+}
+
+export interface HapticStatusResponse {
+  status: HapticProviderStatus;
+  provider: string;
+  hardware_available: boolean;
+  player_available: boolean | null;
+  devices: Record<string, HapticDeviceStatus>;
+  details?: Record<string, any>;
+}
+

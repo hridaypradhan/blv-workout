@@ -1,6 +1,6 @@
 # FitA11y
 
-FitA11y is an **assistive playback companion** prototype designed specifically for **Blind and Low Vision (BLV)** users. Rather than replacing the trainer or hosting standalone AI-led workouts, FitA11y operates alongside original YouTube fitness videos. It provides supplementary, non-intrusive voice cues (for form correction and pacing) and simulated haptic feedback, keeping the YouTube creator as the trainer of record.
+FitA11y is an **assistive playback companion** prototype designed specifically for **Blind and Low Vision (BLV)** users. Rather than replacing the trainer or hosting standalone AI-led workouts, FitA11y operates alongside original YouTube fitness videos. It provides supplementary, non-intrusive voice cues (for form correction and pacing) and haptic feedback (delivered via bHaptics or accessible visual/spoken fallback indicators), keeping the YouTube creator as the trainer of record.
 
 ---
 
@@ -12,8 +12,8 @@ FitA11y is an **assistive playback companion** prototype designed specifically f
    A JSON sidecar generated during preprocessing that maps exercise anchors, speaking opportunities, expected movement windows, and haptic cues to the original video's timeline.
 3. **Audio Coexistence & Interruption Levels**
    Intelligent speech ducking and interruption rules (Silent, Haptic Only, Brief Speech, Full Speech, Pause Before Speaking) ensuring the assistant never talks over the trainer unless preferred.
-4. **Simulated Haptic & Spatial Cues**
-   Generates tactile vibration sequence instructions (for pacing adjustments, joint extension limits, or movement corrections) to supplement voice guidance, designed to connect with future Bluetooth haptic sleeve hardware.
+4. **bHaptics & Fallback Cues**
+   Generates tactile vibration sequence instructions (for pacing adjustments, joint extension limits, or movement corrections) mapped to neutral bHaptics event names, delivered directly to wearable sleeves using the bHaptics SDK/Player, or gracefully falling back to visual/spoken indicators.
 5. **Tracked User Performance**
    Maintains structured, screen-reader-accessible session records, tracking reps, form logs, and duration trends separately from the trainer's workout benchmark.
 6. **Interactive API Lab Playground**
@@ -36,8 +36,8 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
 - **Embedded YouTube Player**: Real YouTube player integration where playback events (play/pause/seek/speed changes) drive session timing.
 - **Deterministic & Gemini-Backed Sidecars**: Pre-processing generates structured sidecar manifests mapping events to the video timeline. By default, it operates in offline-capable deterministic `prototype` mode. However, if configured with `AI_PROVIDER=gemini` and a valid `GEMINI_API_KEY`, the backend uses the Google GenAI SDK to call Gemini models to analyze YouTube captions and generate structured sidecars dynamically. If the API key is missing, captions are unavailable, or the Gemini response fails schema validation constraints, the coordinator falls back cleanly to the offline `prototype` strategy.
 - **Deterministic & Gemini-Backed Assistant Q&A**: Answers user questions dynamically in the workout session chat. By default, it operates in offline-capable deterministic prototype mode. If configured with `AI_PROVIDER=gemini` and a valid `GEMINI_API_KEY`, it uses Gemini to generate answers grounded in the video's sidecar timelines, transcripts (using a compact ±60-second window around the current timestamp), and cue plans, falling back cleanly to the prototype on failures.
-- **Simulated Haptic Cues**: Haptic cues (vibration patterns) are delivered via API responses, structured to trigger simulated sleeve feedback rather than communicating with physical Bluetooth hardware sleeves.
-- **Camera-Free Pose & Rep Tracking**: Joint status, repetitions, and form warnings are simulated mathematically based on elapsed video time and sidecar anchors; no camera permission or video stream model inference is active.
+- **bHaptics Sleeve Integration**: Fully integrated with bHaptics. If `BHAPTICS_ENABLED=true` and a physical sleeve connection is active via the bHaptics Player app, haptic events are fired directly to the sleeves. If bHaptics is disabled, disconnected, or unsupported, the application seamlessly falls back to visual and spoken indicators in the web session.
+- **Camera-Free Pose & Rep Tracking**: Joint status, repetitions, and form warnings are simulated mathematically based on elapsed video time and sidecar anchors; real Google MediaPipe camera pose tracking is not yet active.
 - **Pluggable Storage / JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory by default, with AWS DynamoDB and S3 cloud storage configuration options; no SQL database or database migration layer is active.
 
 ### Intended Future System State:
@@ -46,10 +46,11 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
   - Gemini-backed Assistant Q&A is fully implemented as an optional provider. It enforces strict capability boundaries that prevent the model from claiming it can see the user when no real-time camera pose tracking is active.
   - Future AI work includes live camera-based pose validation, richer biomechanics feedback, and audio/video analysis beyond transcripts.
 - **Real Pose Detection**: Integrate Google MediaPipe on the client or server side using device camera feeds to evaluate form errors and track reps in real-time.
-- **Real Haptic Sleeve Communication**: Use Web Bluetooth API or a native BLE integration layer to transmit physical vibration sequences to wearable hardware sleeves.
+- **Physical Sleeve Playback** *(hardware path available now)*: Physical bHaptics TactSleeve playback via the bHaptics Player and bHaptics Python SDK is already integrated. Connecting real sleeves requires a Python 3.8–3.12 environment, the `bhaptics-python` package, and bHaptics Player running on the same machine. See **Section 3** of this README for setup steps.
 - **Real TTS & Audio Coexistence**: Integrate a production Text-to-Speech API and OS-level audio ducking APIs to smoothly overlay speech over YouTube trainer audio.
 - **Production Cloud Storage**: Transition the application to run fully backed by AWS DynamoDB (for users, jobs, sessions, and session event tracking) and AWS S3 (for prepared video manifests, cue plans, and developer diagnostics logs).
 - **Comprehensive Accessibility & Safety Validation**: Screen-reader flow audits and clinical biomechanics validation for movement tracking limits before deployment to actual users.
+
 
 > [!TIP]
 > **Prototype Persistence**: For local developer and demo convenience, prepared jobs, session history, and user settings are persisted locally in the `backend/.prototype_data` directory. To reset the application back to its default clean state, simply delete the `backend/.prototype_data` directory.
@@ -134,7 +135,27 @@ GEMINI_MODEL=gemini-3.5-flash
 
 ---
 
-### 3. Frontend Setup & Run
+### 3. When Sleeves are Available (Optional Hardware Setup)
+For development, testing, and normal runs without hardware, the app operates fully in dry-run/indicator fallback mode. However, if physical bHaptics sleeves are available, you can enable real haptic playback:
+1. **Python Environment**: Ensure the Python backend is running on a Python version supported by the bHaptics SDK (3.8 - 3.12 inclusive). If your standard development python is version 3.13 or higher, configure and activate a Python 3.12 virtual environment for the backend.
+2. **Install SDK Package**: Install the optional `bhaptics-python` package in the backend environment. You can use the optional requirements file:
+   ```bash
+   pip install -r backend/requirements-bhaptics.txt
+   ```
+3. **Run bHaptics Player**: Install and launch the official bHaptics Player application on the same machine.
+4. **Connect Devices**: Turn on and connect/pair the physical TactSleeve devices within the bHaptics Player app.
+5. **Environment Configuration**: Set the following variables in your `backend/.env` file:
+   ```env
+   BHAPTICS_ENABLED=true
+   BHAPTICS_PROVIDER=bhaptics
+   BHAPTICS_APP_ID=your_registered_bhaptics_app_id
+   BHAPTICS_API_KEY=your_registered_bhaptics_api_key
+   ```
+6. **Execution**: Play a session as normal. Connected sleeve hardware will receive physical vibration triggers corresponding to the cue events.
+
+---
+
+### 4. Frontend Setup & Run
 
 Go to the `frontend` directory:
 ```bash

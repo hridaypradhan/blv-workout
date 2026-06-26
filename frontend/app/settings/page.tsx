@@ -7,6 +7,7 @@ import { updateUserSettings, getHapticVibrations } from "@/lib/api";
 import { mergeUserPreferences } from "@/lib/userPreferences";
 import { AssistantPersona, InterruptionLevel, AssistantVerbosity, HapticVibrationCandidate, HapticPreferences } from "@/types";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
+import HapticSettingsPanel from "@/components/settings/HapticSettingsPanel";
 
 export default function Settings() {
   const { user, loading } = useUserProfile();
@@ -46,8 +47,8 @@ export default function Settings() {
       try {
         const vList = await getHapticVibrations();
         setVibrations(vList);
-      } catch (vErr) {
-        console.error("Failed to load haptic vibrations manifest:", vErr);
+      } catch (err) {
+        console.error("Failed to load haptic options:", err);
       } finally {
         setIsVibrationsLoading(false);
       }
@@ -500,68 +501,30 @@ export default function Settings() {
             </div>
           </section>
 
-          {/* Section 5: Haptic Vibration Preferences */}
+          {/* Section 5: bHaptics Mapping & Event Preview */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="haptic-pref-heading">
             <h2 id="haptic-pref-heading" className="text-xl font-bold text-white mb-2">
-              Haptic Vibration Preferences
+              bHaptics Mapping & Settings Preview
             </h2>
-            <p className="text-xs text-slate-400 mb-6">
-              Choose your preferred vibration candidate for each workout cue. You can preview the raw WAV file in your browser.
-            </p>
-
-            <div className="space-y-6">
-              {[
-                { key: "start", label: "Session Start Cue" },
-                { key: "countdown", label: "Countdown Tick Cue" },
-                { key: "per_rep_tick", label: "Repetition Tick Cue" },
-                { key: "speed_up", label: "Speed Up Cue" },
-                { key: "slow_down", label: "Slow Down Cue" },
-                { key: "form_warning_above", label: "Form Warning Cue" },
-                { key: "cooldown", label: "Cooldown / Session End Cue" },
-              ].map((cue) => {
-                const candidates = vibrations.filter((v) => v.cue_type === cue.key);
-                const selectedId = hapticPreferences[cue.key as keyof HapticPreferences] || "";
-                const selectedWav = candidates.find((c) => c.id === selectedId)?.source_wav;
-
-                return (
-                  <div key={cue.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
-                    <div className="flex-1 min-w-[200px]">
-                      <label htmlFor={`haptic-select-${cue.key}`} className="block text-sm font-bold text-slate-200 mb-1">
-                        {cue.label}
-                      </label>
-                      <span className="text-xs text-slate-400">Tactile response for this session moment.</span>
-                    </div>
-
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                      <select
-                        id={`haptic-select-${cue.key}`}
-                        value={selectedId}
-                        onChange={(e) => handleHapticPrefChange(cue.key, e.target.value)}
-                        className="flex-1 sm:w-64 px-4 py-3 bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all cursor-pointer"
-                      >
-                        {candidates.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.label} {c.duration_ms ? `(${Math.round(c.duration_ms)}ms)` : ""}
-                          </option>
-                        ))}
-                        {candidates.length === 0 && (
-                          <option value="">No vibrations found</option>
-                        )}
-                      </select>
-                      <button
-                        type="button"
-                        disabled={!selectedWav}
-                        onClick={() => selectedWav && previewWav(selectedWav)}
-                        className="px-4 py-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-100 hover:text-white font-bold rounded-xl text-xs border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-                        title="Preview selected haptic sound wave"
-                      >
-                        Preview
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="text-xs text-slate-400 mb-6 space-y-2">
+              <p>
+                Each assistive workout cue category maps to a neutral, product-independent bHaptics event name.
+              </p>
+              <p>
+                If physical sleeves are connected to your bHaptics Player, they will receive the event triggers directly.
+                Otherwise, the app will gracefully fall back to showing visual and spoken accessibility indicators in the session.
+              </p>
+              <p className="text-slate-500 font-medium">
+                Note: Audio preview of source WAV plays in your browser as an optional/secondary preview of the original WAV candidate. It is not the physical sleeve delivery mechanism.
+              </p>
             </div>
+
+            <HapticSettingsPanel
+              hapticPreferences={hapticPreferences}
+              onHapticPrefChange={handleHapticPrefChange}
+              vibrations={vibrations}
+              previewWav={previewWav}
+            />
           </section>
 
           {statusMessage && (

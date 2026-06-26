@@ -10,12 +10,10 @@ import { ProcessingStage } from "@/types";
 import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
 import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
-import {
-  triggerHapticPattern,
-} from "@/lib/api";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { useSpokenCuePlayback } from "@/lib/hooks/useSpokenCuePlayback";
-import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
+import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
+import { useHapticEventDelivery } from "@/lib/hooks/useHapticEventDelivery";
 import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, RuntimeCueSelectionResponse } from "@/types";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 import { useAutomaticCue } from "@/lib/hooks/useAutomaticCue";
@@ -84,7 +82,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const [currentSpokenCue, setCurrentSpokenCue] = useState<(RuntimeCueSelectionResponse & { timestampMs?: number }) | null>(null);
   const [seekEpoch, setSeekEpoch] = useState(0);
 
-  const { hapticState } = usePrototypeHapticConnection();
+  const { status: hapticStatus, statusText: hapticStatusText, deviceStatuses, isLoading: isLoadingHapticStatus, error: hapticError } = useHapticDeviceStatus();
 
 
 
@@ -132,6 +130,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     playbackRate,
   });
 
+  const { recentEvents, triggerHapticEvent } = useHapticEventDelivery(announce, logSessionEvent);
+
   const currentTimeRef = useRef(currentTime);
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -158,33 +158,22 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   }, [currentTime, seek, announce]);
 
   const handleHapticCueTrigger = React.useCallback((text: string, hapticCueRef: string | null, cueId: string | null) => {
-    if (text) {
-      announce(`Haptic cue requested: ${text}`);
-    }
-
     const cueType = hapticCueRef || (text ? getCueTypeFromCue(text) : "per_rep_tick");
     const vibrationId = (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] || `${cueType}_001`;
     const limbs = ["left_arm", "right_arm"];
 
-    triggerHapticPattern(null, null, 0.7, cueType, vibrationId, limbs)
-      .then((hapticRes) => {
-        announce(`Haptic cue would trigger: ${hapticRes.pattern_name} (dry-run).`);
-        logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, currentTime * 1000, {
-          cue_type: cueType,
-          selected_vibration_id: vibrationId,
-          selected_wav: hapticRes.selected_wav,
-          target_limbs: hapticRes.target_limbs,
-          provider: hapticRes.provider,
-          status: hapticRes.status,
-          intensity: 0.7,
-          text: text,
-          cue_id: cueId,
-        });
-      })
-      .catch((err) => {
-        console.error("Failed to trigger haptic cue:", err);
-      });
-  }, [userProfile, currentTime, announce, logSessionEvent]);
+    triggerHapticEvent({
+      cueType,
+      vibrationId,
+      intensity: 0.7,
+      limbs,
+      text,
+      cueId,
+      currentTimeMs: currentTime * 1000
+    }).catch((err) => {
+      console.error("Failed to trigger haptic cue:", err);
+    });
+  }, [userProfile, currentTime, triggerHapticEvent]);
 
   // Monitor playback states to populate the screen-reader announcement live region
   const prevIsPlayingAnnouncement = useRef(false);
@@ -233,6 +222,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     announce,
     updateLatestAutomaticCue,
     logSessionEvent,
+    triggerHapticEvent,
   });
 
   // Monitor session artifacts loading updates
@@ -417,38 +407,20 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           limbs.push("left_arm", "right_arm");
         }
 
-        triggerHapticPattern(null, null, intensity, cueType, vibrationId, limbs)
-          .then((res) => {
-            announce(`Haptic cue would trigger: ${res.pattern_name} (dry-run).`);
-            logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_TRIGGERED, activeCue.timestamp_ms || currentTime * 1000, {
-              cue_type: cueType,
-              selected_vibration_id: vibrationId,
-              selected_wav: res.selected_wav,
-              target_limbs: res.target_limbs,
-              provider: res.provider,
-              status: res.status,
-              intensity: intensity,
-              text: activeCue.text,
-              cue_timestamp_ms: activeCue.timestamp_ms || currentTime * 1000,
-              current_timestamp: currentTime
-            });
-          })
-          .catch((err) => {
-            console.error("Failed to trigger prototype haptic cue:", err);
-            const errMsg = err instanceof Error ? err.message : "Unknown error";
-            announce(`Prototype haptic cue failed: ${errMsg}`);
-            logSessionEvent(SESSION_EVENTS.HAPTIC_CUE_FAILED, activeCue.timestamp_ms || currentTime * 1000, {
-              cue_type: cueType,
-              selected_vibration_id: vibrationId,
-              intensity: intensity,
-              text: activeCue.text,
-              error: errMsg,
-              current_timestamp: currentTime
-            });
-          });
+        triggerHapticEvent({
+          cueType,
+          vibrationId,
+          intensity,
+          limbs,
+          text: activeCue.text,
+          cueId: `legacy-${activeCue.timestamp_ms}-${activeCue.text}`,
+          currentTimeMs: activeCue.timestamp_ms || currentTime * 1000
+        }).catch((err) => {
+          console.error("Failed to trigger haptic event:", err);
+        });
       }
     }
-  }, [activeCue, sessionId, currentTime, userProfile, announce, coexistenceSettings, handleAudioCueAnnouncement, updateLatestAutomaticCue, logSessionEvent]);
+  }, [activeCue, sessionId, currentTime, userProfile, announce, coexistenceSettings, handleAudioCueAnnouncement, updateLatestAutomaticCue, logSessionEvent, triggerHapticEvent]);
 
   const handleRepeatTrainerInstruction = () => {
     if (!manifest || !manifest.trainer_instruction_events) return;
@@ -507,7 +479,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     announce(muted ? "Assistant voice muted." : "Assistant voice unmuted.");
   };
 
-  const sleeveStatus = getPrototypeSleeveStatuses(hapticState);
 
   if (!sessionId) {
     return (
@@ -602,42 +573,82 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       </div>
 
       {/* Top Bar: Sleeve Calibration & Device Strip */}
-      <section className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-6 shadow-md" aria-label="Device Status Bar">
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${hapticState === "connected" ? "bg-emerald-500 animate-ping" : hapticState === "connecting" ? "bg-yellow-500 animate-pulse" : "bg-red-500"}`} />
-          <span className="text-sm font-semibold text-slate-300">
-            {hapticState === "connected"
-              ? "Prototype Sleeve Calibration Mode (Simulated)"
-              : hapticState === "connecting"
-                ? "Prototype Sleeve Connecting..."
-                : "Prototype Sleeves Disconnected (Simulated)"}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 xl:gap-4 w-full xl:w-auto" aria-label="Individual Limb Calibration Statuses">
-          {sleeveStatus.map((s) => {
-            const limbStatusText = s.styleState === "connected"
-              ? "Prototype Cue Ready"
-              : s.styleState === "connecting"
-                ? "Prototype Connecting..."
-                : "Offline (Simulated)";
-            const dotColor = s.styleState === "connected"
-              ? "bg-yellow-400 animate-pulse"
-              : s.styleState === "connecting"
+      <div className="mb-6 flex flex-col gap-2">
+        <section className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-md" aria-label="Device Status Bar">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+              hapticStatus === "connected" || hapticStatus === "partially_connected"
+                ? "bg-emerald-500 animate-ping"
+                : hapticStatus === "initialized_no_devices" || isLoadingHapticStatus
                 ? "bg-yellow-500 animate-pulse"
+                : "bg-red-500"
+            }`} />
+            <span className="text-sm font-semibold text-slate-300">
+              Haptic Status: {hapticStatusText}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 xl:gap-4 w-full xl:w-auto" aria-label="Individual Sleeve Connection Statuses">
+            {deviceStatuses.map((s) => {
+              const dotColor = s.connected
+                ? "bg-yellow-400 animate-pulse"
                 : "bg-red-500";
-            return (
-              <div key={s.label} className="flex items-center gap-2 p-2 bg-slate-950 border border-slate-800/60 rounded-xl min-w-0" aria-label={`${s.name}: ${limbStatusText}`}>
-                <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} aria-hidden="true" />
-                <div className="text-xs font-bold text-slate-300 min-w-0">
-                  <span className="sr-only">{s.name} </span>
-                  <span className="text-yellow-400">{s.label}: </span>
-                  <span className="block md:inline font-semibold text-slate-400" title={limbStatusText}>{limbStatusText}</span>
+              return (
+                <div key={s.key} className="flex items-center gap-2 p-2 bg-slate-950 border border-slate-800/60 rounded-xl min-w-0" aria-label={`${s.name}: ${s.status_text}`}>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} aria-hidden="true" />
+                  <div className="text-xs font-bold text-slate-300 min-w-0">
+                    <span className="text-yellow-400">{s.name}: </span>
+                    <span className="block md:inline font-semibold text-slate-400" title={s.status_text}>{s.status_text}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        {hapticError && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs rounded-xl" id="session-haptic-error">
+            Unable to refresh haptic provider status. Indicator mode may still work once the backend is available.
+          </div>
+        )}
+      </div>
+
+      {/* Haptic Event Delivery Feed */}
+      {recentEvents.length > 0 && (
+        <section
+          className="p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-6 shadow-md"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-labelledby="haptic-feed-heading"
+        >
+          <h2 id="haptic-feed-heading" className="text-xs uppercase font-extrabold text-yellow-400 tracking-wider mb-2">
+            Haptic Event Feed (Live Delivery)
+          </h2>
+          <div className="space-y-2">
+            {recentEvents.map((evt, idx) => (
+              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 bg-slate-950 rounded-xl border border-slate-850 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                    evt.deliveryMode === "hardware"
+                      ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                      : evt.deliveryMode === "indicator" || evt.deliveryMode === "dry_run"
+                      ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
+                      : "bg-red-500/10 border border-red-500/20 text-red-400"
+                  }`}>
+                    {evt.deliveryMode}
+                  </span>
+                  <span className="font-bold text-slate-200">{evt.eventName}</span>
+                  <span className="text-slate-500">on {evt.targetLimbs.join(", ")}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-400">
+                  <span className="font-medium italic text-slate-300">{evt.statusMessage}</span>
+                  <span className="text-slate-600 font-medium ml-2">
+                    {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">

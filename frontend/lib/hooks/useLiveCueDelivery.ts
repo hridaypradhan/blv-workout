@@ -67,23 +67,21 @@ export function useLiveCueDelivery({
             ...res,
             timestampMs: currentTime * 1000
           });
+
+          logSessionEvent(
+            SESSION_EVENTS.ASSISTANT_CUE_DELIVERED,
+            currentTime * 1000,
+            {
+              text: text,
+              modality: res.modality,
+              priority: "normal",
+              cue_id: res.cue_id,
+              reason: res.reason,
+            }
+          );
         } else if (res.modality === "haptic") {
           handleHapticCueTrigger(text, res.haptic_cue_ref, res.cue_id);
         }
-
-        logSessionEvent(
-          res.modality === "haptic"
-            ? SESSION_EVENTS.HAPTIC_CUE_REQUESTED
-            : SESSION_EVENTS.ASSISTANT_CUE_DELIVERED,
-          currentTime * 1000,
-          {
-            text: text,
-            modality: res.modality,
-            priority: "normal",
-            cue_id: res.cue_id,
-            reason: res.reason,
-          }
-        );
 
         if (res.recommended_playback_action === "pause_before_speaking") {
           announce("Pausing workout playback for assistant instruction.");

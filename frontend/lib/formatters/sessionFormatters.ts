@@ -125,7 +125,21 @@ export function getSessionMetrics(session: Session) {
 }
 
 /** Get a reader-friendly display label for a session event type. */
-export function getSessionEventLabel(eventType: string): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getSessionEventLabel(eventType: string, metadata?: any): string {
+  if (eventType === SESSION_EVENTS.HAPTIC_CUE_TRIGGERED) {
+    const mode = metadata?.delivery_mode;
+    if (mode === "hardware") return "Haptic Fired";
+    if (mode === "indicator" || mode === "dry_run") return "Haptic Indicator";
+    return "Haptic Triggered";
+  }
+  if (eventType === SESSION_EVENTS.HAPTIC_CUE_FAILED) {
+    return "Haptic Failed";
+  }
+  if (eventType === SESSION_EVENTS.HAPTIC_CUE_REQUESTED) {
+    return "Haptic Requested";
+  }
+
   const labels: Record<string, string> = {
     [SESSION_EVENTS.PLAY]: "Started Playback",
     [SESSION_EVENTS.PAUSE]: "Paused Playback",
@@ -138,9 +152,6 @@ export function getSessionEventLabel(eventType: string): string {
     [SESSION_EVENTS.ASSISTANT_CUE_DELIVERED]: "Voice Cue Delivered",
     [SESSION_EVENTS.ASSISTANT_CORRECTION_REQUESTED]: "Correction Requested",
     [SESSION_EVENTS.ASSISTANT_CORRECTION_DELIVERED]: "Correction Delivered",
-    [SESSION_EVENTS.HAPTIC_CUE_REQUESTED]: "Haptic Cue Requested",
-    [SESSION_EVENTS.HAPTIC_CUE_TRIGGERED]: "Haptic Cue Triggered",
-    [SESSION_EVENTS.HAPTIC_CUE_FAILED]: "Haptic Cue Failed",
     [SESSION_EVENTS.HAPTIC_TEST_REQUESTED]: "Haptic Test Requested",
     [SESSION_EVENTS.TRAINER_INSTRUCTION_REPEATED]: "Instruction Repeated",
     [SESSION_EVENTS.SECTION_SKIPPED]: "Section Skipped",
@@ -198,30 +209,27 @@ export function formatSessionEventDetails(evt: { event_type: string; metadata?: 
     return `Skipped directly to workout section: "${metadata.section_name || ""}"`;
   }
   if (type === SESSION_EVENTS.HAPTIC_CUE_REQUESTED) {
-    if (metadata.cue_type) {
-      const vibId = metadata.selected_vibration_id || "none";
-      const limbs = metadata.target_limbs?.join(", ") || "none";
-      return `Requested semantic haptic cue "${metadata.cue_type}" (ID: ${vibId}) on limbs [${limbs}]`;
-    }
-    const sides = metadata.sleeve_sides?.join(", ") || "sleeves";
-    return `Requested pattern "${metadata.pattern_name || ""}" on ${sides} (${metadata.purpose || "cues"})`;
+    const eventName = metadata.bhaptics_event_name || "unknown";
+    const cueType = metadata.cue_type || "unknown";
+    const limbs = (metadata.target_positions || metadata.target_limbs || []).join(", ") || "none";
+    const vibId = metadata.selected_vibration_id || "none";
+    return `Haptic request: Event ${eventName} (Type: ${cueType}, ID: ${vibId}) on [${limbs}]`;
   }
   if (type === SESSION_EVENTS.HAPTIC_CUE_TRIGGERED) {
-    const provider = metadata.provider || "prototype";
-    if (provider === "bhaptics_dry_run" || metadata.status === "would_trigger") {
-      const cueType = metadata.cue_type || "unknown";
-      const vibId = metadata.selected_vibration_id || "none";
-      const limbs = metadata.target_limbs?.join(", ") || "none";
-      const wav = metadata.selected_wav || "none";
-      const intensity = typeof metadata.intensity === "number" ? metadata.intensity : 0.7;
-      return `[Dry-run] Haptic cue "${cueType}" (ID: ${vibId}, WAV: ${wav}) would trigger on limbs [${limbs}] at ${intensity} intensity`;
-    }
-    const sides = metadata.sleeve_sides?.join(", ") || "sleeves";
-    const intensity = typeof metadata.intensity === "number" ? metadata.intensity : 0.7;
-    return `Triggered haptic pattern "${metadata.pattern_name || ""}" on ${sides} at ${intensity} intensity`;
+    const eventName = metadata.bhaptics_event_name || "unknown";
+    const mode = metadata.delivery_mode || "unknown";
+    const provider = metadata.provider || "none";
+    const limbs = (metadata.target_positions || metadata.target_limbs || []).join(", ") || "none";
+    const reqId = metadata.request_id || "none";
+    const statusMsg = metadata.status_message || metadata.status || "Triggered successfully";
+    return `Haptic delivered (${mode}): Event ${eventName} via ${provider} on [${limbs}]. Req ID: ${reqId}. Status: ${statusMsg}`;
   }
   if (type === SESSION_EVENTS.HAPTIC_CUE_FAILED) {
-    return `Haptic trigger failed: "${metadata.error || ""}"`;
+    const eventName = metadata.bhaptics_event_name || "unknown";
+    const errorMsg = metadata.error || metadata.status_message || "Unknown error";
+    const provider = metadata.provider || "none";
+    const reqId = metadata.request_id || "none";
+    return `Haptic delivery failed: Event ${eventName} via ${provider}. Req ID: ${reqId}. Error: ${errorMsg}`;
   }
   if (type === SESSION_EVENTS.HAPTIC_TEST_REQUESTED) {
     return `Fired haptic test pulse on sleeve side: "${metadata.sleeve_side || ""}"`;
@@ -243,7 +251,8 @@ export function formatSessionEventDetails(evt: { event_type: string; metadata?: 
 }
 
 /** Get Tailwind CSS style category classes based on event type. */
-export function getSessionEventStyle(eventType: string): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getSessionEventStyle(eventType: string, metadata?: any): string {
   if (
     eventType === SESSION_EVENTS.SEEK ||
     eventType === SESSION_EVENTS.SPEED_CHANGE ||
@@ -272,6 +281,12 @@ export function getSessionEventStyle(eventType: string): string {
     return "text-sky-500/80";
   }
   if (eventType === SESSION_EVENTS.HAPTIC_CUE_TRIGGERED) {
+    const mode = metadata?.delivery_mode;
+    if (mode === "hardware") {
+      return "text-sky-400 font-extrabold";
+    } else if (mode === "indicator" || mode === "dry_run") {
+      return "text-yellow-500/90 font-medium";
+    }
     return "text-sky-400 font-semibold";
   }
   if (eventType === SESSION_EVENTS.HAPTIC_TEST_REQUESTED) {

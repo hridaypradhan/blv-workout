@@ -23,6 +23,7 @@ export const metadata: Metadata = {
 
 import { LayoutProvider } from "@/components/layout/LayoutContext";
 import { UserProfileProvider } from "@/components/layout/UserProfileContext";
+import { HapticStatusProvider } from "@/lib/hooks/useHapticDeviceStatus";
 
 export default function RootLayout({
   children,
@@ -43,20 +44,22 @@ export default function RootLayout({
           Skip to main content
         </a>
 
-        {/* Layout container wrapped in provider */}
+        {/* Layout container wrapped in providers */}
         <UserProfileProvider>
           <LayoutProvider>
-            <div className="relative min-h-screen">
-              {/* Global Sidebar */}
-              <Sidebar id="global-sidebar" />
+            <HapticStatusProvider>
+              <div className="relative min-h-screen">
+                {/* Global Sidebar */}
+                <Sidebar id="global-sidebar" />
 
-              <Suspense fallback={null}>
-                <NavigationProgress />
-              </Suspense>
+                <Suspense fallback={null}>
+                  <NavigationProgress />
+                </Suspense>
 
-              {/* Children views */}
-              {children}
-            </div>
+                {/* Children views */}
+                {children}
+              </div>
+            </HapticStatusProvider>
           </LayoutProvider>
         </UserProfileProvider>
       </body>

@@ -7,7 +7,7 @@ import PageWrapper from "@/components/layout/PageWrapper";
 import { startSession, triggerHapticTest, askAssistant } from "@/lib/api";
 import { getActiveUserId, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
 import { mergeUserPreferences } from "@/lib/userPreferences";
-import { usePrototypeHapticConnection, getPrototypeSleeveStatuses } from "@/lib/hooks/usePrototypeHapticConnection";
+import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
 import { SleeveSide, AssistantPersona, QARequest, InterruptionLevel, AudioCoexistenceSettings, AssistantVerbosity } from "@/types";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
@@ -55,7 +55,14 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [sleeveResults, setSleeveResults] = useState<Record<string, string>>({});
   const [sleeveAnnouncement, setSleeveAnnouncement] = useState("");
 
-  const { hapticState } = usePrototypeHapticConnection();
+  const {
+    status: hapticStatus,
+    statusText: hapticStatusText,
+    deviceStatuses,
+    refresh: refreshHaptic,
+    isLoading: isHapticLoading,
+    error: hapticError,
+  } = useHapticDeviceStatus();
 
   useEffect(() => {
     if (user) {
@@ -98,8 +105,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
           </div>
           <h1 className="text-xl font-bold text-white mb-2">Failed to load session settings</h1>
           <p className="text-slate-400 text-sm mb-6">{artifactsError}</p>
-          <Link href="/onboarding" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-bold text-white rounded-lg border border-slate-700">
-            Back to Home
+          <Link href="/process" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-bold text-white rounded-lg border border-slate-700">
+            Back to Prepare Assistance
           </Link>
         </div>
       </PageWrapper>
@@ -191,7 +198,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
   };
 
   const handleTestSleeve = async (sleeveKey: string, name: string) => {
-    const side = (sleeveKey === "la" || sleeveKey === "ll") ? "left" : "right";
+    const side: SleeveSide = sleeveKey.startsWith("left") ? "left" : "right";
     setTestingSleeves((prev) => ({ ...prev, [sleeveKey]: true }));
     setSleeveResults((prev) => ({ ...prev, [sleeveKey]: "" }));
     setSleeveAnnouncement(`Testing ${name} haptic cue...`);
@@ -200,8 +207,10 @@ export default function SessionSetup({ params }: SetupPageProps) {
     // and do not write telemetry to the backend events history database to avoid cluttering workout reports.
 
     try {
-      const response = await triggerHapticTest(side as SleeveSide);
-      setSleeveResults((prev) => ({ ...prev, [sleeveKey]: "Pulse Fired" }));
+      const response = await triggerHapticTest(side);
+      const isHardware = response.source === "hardware";
+      const resultText = isHardware ? "Pulse Fired (Hardware)" : "Pulse Simulated (Non-Physical)";
+      setSleeveResults((prev) => ({ ...prev, [sleeveKey]: resultText }));
       setSleeveAnnouncement(`${name} test pulse success: ${response.message}`);
     } catch (err) {
       console.error(`Failed to test haptic sleeve ${sleeveKey}:`, err);
@@ -239,7 +248,17 @@ export default function SessionSetup({ params }: SetupPageProps) {
     }
   };
 
-  const sleeveStatus = getPrototypeSleeveStatuses(hapticState);
+  const sleeveStatus = (deviceStatuses.length > 0 ? deviceStatuses : [
+    { key: "left_arm", name: "Left Arm", status_text: "Disconnected", connected: false },
+    { key: "right_arm", name: "Right Arm", status_text: "Disconnected", connected: false },
+    { key: "left_leg", name: "Left Leg", status_text: "Disconnected", connected: false },
+    { key: "right_leg", name: "Right Leg", status_text: "Disconnected", connected: false }
+  ]).map(dev => ({
+    key: dev.key,
+    name: dev.name,
+    statusText: dev.status_text,
+    colorClass: dev.connected ? "bg-emerald-500" : "bg-red-500",
+  }));
 
   return (
     <PageWrapper id="session-setup-wrapper">
@@ -298,12 +317,54 @@ export default function SessionSetup({ params }: SetupPageProps) {
             {/* Sleeve Status */}
             <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between" aria-labelledby="sleeve-heading">
               <div>
-                <h2 id="sleeve-heading" className="text-lg font-bold text-white mb-2">
-                  Prototype Sleeve Status
-                </h2>
+                <div className="flex items-center justify-between flex-wrap gap-4 mb-2">
+                  <h2 id="sleeve-heading" className="text-lg font-bold text-white">
+                    Haptic Sleeve Status
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={refreshHaptic}
+                    disabled={isHapticLoading}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 disabled:bg-slate-900 text-slate-300 hover:text-white font-bold rounded-lg text-xs border border-slate-700 transition-all flex items-center gap-1.5"
+                    id="refresh-haptic-setup-btn"
+                  >
+                    {isHapticLoading ? (
+                      <span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span>Refresh Status</span>
+                    )}
+                  </button>
+                </div>
                 <p className="text-sm text-slate-300 mb-4">
-                  Verify prototype haptic readiness (mathematically simulated). No physical sleeve hardware is required in this prototype.
+                  Verify sleeve readiness. If physical sleeves are connected to your bHaptics Player, they will receive test pulses.
                 </p>
+
+                {/* Warning Alert Banner for unavailable states or status errors */}
+                {(hapticStatus === "player_unavailable" || hapticStatus === "not_configured" || hapticStatus === "sdk_unavailable" || hapticStatus === "python_unsupported" || hapticError) && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl text-xs mb-4">
+                    <strong className="block font-bold mb-0.5">
+                      {hapticError ? "Haptic Provider Unreachable" :
+                       hapticStatus === "player_unavailable" ? "bHaptics Player Offline" :
+                       hapticStatus === "not_configured" ? "bHaptics Credentials Missing" :
+                       hapticStatus === "sdk_unavailable" ? "bHaptics SDK Not Installed" :
+                       "Python Version Unsupported"}
+                    </strong>
+                    <span>
+                      {hapticError ? "Unable to refresh haptic provider status. Indicator mode may still work once the backend is available." :
+                       hapticStatus === "player_unavailable" ? "Please launch the bHaptics Player app on your machine and pair your sleeves there." :
+                       hapticStatus === "not_configured" ? "Please set your bHaptics APP_ID and API_KEY in settings to connect." :
+                       "The bHaptics software library could not be loaded on this environment."}
+                    </span>
+                    <span className="block mt-1 text-slate-400 font-medium">
+                      You can safely continue workout playback anyway; the session will fall back to using accessibility screen-reader and visual indicators.
+                    </span>
+                  </div>
+                )}
+
+                {/* Connection Status Text */}
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl mb-4 text-xs font-semibold text-slate-300">
+                  Provider status: <span className="text-slate-100 font-bold">{hapticStatusText}</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -334,29 +395,29 @@ export default function SessionSetup({ params }: SetupPageProps) {
                       </div>
 
                       {/* Bottom/Action Row */}
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-900 mt-auto">
-                        <div className="min-w-0">
-                          {testResult && (
-                            <span
-                              className={`text-xs font-semibold px-2 py-0.5 rounded inline-block ${
-                                testResult === "Pulse Fired"
-                                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                                  : "bg-red-500/10 border border-red-500/20 text-red-400"
-                              }`}
-                            >
-                              {testResult}
-                            </span>
-                          )}
-                        </div>
+                      <div className="flex flex-col gap-2 pt-2 border-t border-slate-900 mt-auto">
                         <button
                           type="button"
                           onClick={() => handleTestSleeve(sleeve.key, sleeve.name)}
                           disabled={isTesting}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-xs font-bold text-slate-200 border border-slate-700 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all text-center shrink-0"
+                          className="w-full px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-xs font-bold text-slate-200 border border-slate-700 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all text-center shrink-0"
                           aria-label={`Test ${sleeve.name} haptic cue`}
                         >
-                          {isTesting ? "Testing..." : "Test"}
+                          {isTesting ? "Testing..." : "Test Pulse"}
                         </button>
+                        {testResult && (
+                          <span
+                            className={`text-[10px] font-semibold font-mono px-2 py-0.5 rounded text-center block ${
+                              testResult.includes("Hardware")
+                                ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                : testResult === "Failed"
+                                ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                                : "bg-blue-500/10 border border-blue-500/20 text-blue-400"
+                            }`}
+                          >
+                            {testResult}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );

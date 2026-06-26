@@ -40,6 +40,7 @@ export default function VideoLibraryPage() {
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [jobsRefreshError, setJobsRefreshError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const inFlightRef = useRef(false);
 
   const handleImageError = (videoId: string) => {
     setFailedImages((prev) => ({ ...prev, [videoId]: true }));
@@ -104,15 +105,15 @@ export default function VideoLibraryPage() {
     };
   }, []);
 
+  const hasPreparing = importedJobs.some(
+    (job) =>
+      job.stage !== ProcessingStage.COMPLETED &&
+      job.stage !== ProcessingStage.FAILED
+  );
+
   // Poll active preparation jobs every 12 seconds to update progress
   useEffect(() => {
     let cancelled = false;
-
-    const hasPreparing = importedJobs.some(
-      (job) =>
-        job.stage !== ProcessingStage.COMPLETED &&
-        job.stage !== ProcessingStage.FAILED
-    );
 
     if (!hasPreparing) return;
 
@@ -120,6 +121,10 @@ export default function VideoLibraryPage() {
       if (document.visibilityState !== "visible") {
         return;
       }
+      if (inFlightRef.current) {
+        return;
+      }
+      inFlightRef.current = true;
       try {
         const jobs = await getJobs();
         if (!cancelled) {
@@ -131,6 +136,8 @@ export default function VideoLibraryPage() {
         if (!cancelled) {
           setJobsRefreshError("Could not refresh preparation status. Showing last known progress. Updates will retry automatically.");
         }
+      } finally {
+        inFlightRef.current = false;
       }
     };
 
@@ -150,7 +157,7 @@ export default function VideoLibraryPage() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [importedJobs]);
+  }, [hasPreparing]);
 
 
   return (

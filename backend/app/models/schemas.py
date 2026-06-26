@@ -552,6 +552,7 @@ class HapticTriggerRequest(BaseModel):
     cue_type: str | None = None
     vibration_id: str | None = None
     limbs: list[HapticLimb] | None = None
+    bhaptics_event_name: str | None = None
 
 
 class HapticPattern(BaseModel):
@@ -574,7 +575,7 @@ class HapticTestResponse(BaseModel):
     sleeve_side: SleeveSide
     message: str
     source: str = "prototype"
-    provider: str = "prototype_haptic"
+    provider: str = "bhaptics_dry_run"
     replace_with: str = "haptic_hardware_provider"
 
 
@@ -586,14 +587,40 @@ class HapticTriggerResponse(BaseModel):
     sleeve_sides: list[SleeveSide] | None = None
     intensity: float
     source: str = "prototype"
-    provider: str = "prototype_haptic"
+    provider: str = "bhaptics_dry_run"
     replace_with: str = "haptic_hardware_provider"
     cue_type: str | None = None
     selected_vibration_id: str | None = None
     selected_wav: str | None = None
     target_limbs: list[HapticLimb] | None = None
     bhaptics_event_name: str | None = None
+    delivery_mode: Literal["hardware", "indicator", "dry_run", "failed"] | None = None
+    hardware_available: bool = False
+    player_available: bool | None = None
+    request_id: str | None = None
+    status_message: str | None = None
+    resolved_cue_type: str | None = None
+    target_positions: list[str] | None = None
 
+
+class HapticStatusResponse(BaseModel):
+    """Response returned from checking haptic device connection status."""
+
+    status: str
+    provider: str
+    hardware_available: bool
+    player_available: bool | None = None
+    devices: dict[str, Any] = Field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class HapticEventMappingItem(BaseModel):
+    """Canonical mapping item of cue category to neutral bHaptics event name."""
+
+    cue_type: str
+    bhaptics_event_name: str
+    label: str
+    description: str
 
 
 class TranscriptArtifact(BaseModel):

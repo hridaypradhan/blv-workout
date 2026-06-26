@@ -30,7 +30,7 @@ export default function Header({ id = "main-header" }: HeaderProps) {
 
   const pageTitle =
     pathname === "/"
-      ? "Home"
+      ? "Prepare Assistance"
       : pathname === "/video-library"
       ? "Video Library"
       : pathname === "/process"

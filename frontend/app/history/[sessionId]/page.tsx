@@ -135,6 +135,92 @@ export default function HistoryDetail({ params }: HistoryDetailPageProps) {
         {/* Movement Breakdown & Corrections */}
         <MovementCorrectionLog session={session} />
 
+        {/* Haptic Telemetry Audit Snapshot Card */}
+        {(() => {
+          const hapticEvents = session.playback_events?.filter(
+            (evt) =>
+              evt.event_type === "haptic_cue_requested" ||
+              evt.event_type === "haptic_cue_triggered" ||
+              evt.event_type === "haptic_cue_failed"
+          ) || [];
+          const lastHapticEvent = hapticEvents.length > 0 ? hapticEvents[hapticEvents.length - 1] : null;
+
+          if (!lastHapticEvent) return null;
+
+          return (
+            <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl mb-6" aria-labelledby="haptic-audit-heading">
+              <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+                <h2 id="haptic-audit-heading" className="text-lg font-bold text-white flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
+                  Last Haptic Telemetry Audit
+                </h2>
+                <span className="text-xs text-slate-400 font-mono">
+                  Total haptic signals: {hapticEvents.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-mono">
+                <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
+                  <span className="text-slate-500 block mb-1">Audit Event:</span>
+                  <span className={`font-bold ${
+                    lastHapticEvent.event_type === "haptic_cue_failed"
+                      ? "text-red-400"
+                      : lastHapticEvent.metadata?.delivery_mode === "hardware"
+                      ? "text-sky-400"
+                      : lastHapticEvent.metadata?.delivery_mode === "indicator" || lastHapticEvent.metadata?.delivery_mode === "dry_run"
+                      ? "text-yellow-500"
+                      : "text-slate-300"
+                  }`}>
+                    {lastHapticEvent.event_type.replace(/_/g, " ").toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
+                  <span className="text-slate-500 block mb-1">Resolved bHaptics Event:</span>
+                  <span className="text-yellow-400 font-bold">
+                    {lastHapticEvent.metadata?.bhaptics_event_name || "N/A"}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
+                  <span className="text-slate-500 block mb-1">Delivery Mode:</span>
+                  <span className="text-white capitalize">
+                    {lastHapticEvent.metadata?.delivery_mode || "N/A"}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
+                  <span className="text-slate-500 block mb-1">Active Provider:</span>
+                  <span className="text-slate-300">
+                    {lastHapticEvent.metadata?.provider || "N/A"}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
+                  <span className="text-slate-500 block mb-1">Request ID:</span>
+                  <span className="text-slate-400 select-all truncate block" title={lastHapticEvent.metadata?.request_id}>
+                    {lastHapticEvent.metadata?.request_id || "N/A"}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
+                  <span className="text-slate-500 block mb-1">Target Limbs / Positions:</span>
+                  <span className="text-slate-300">
+                    {lastHapticEvent.metadata?.target_positions?.join(", ") || lastHapticEvent.metadata?.target_limbs?.join(", ") || "None"}
+                  </span>
+                </div>
+
+                <div className="sm:col-span-2 md:col-span-3 p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
+                  <span className="text-slate-500 block mb-1">Status Message / Diagnostics:</span>
+                  <span className="text-slate-300">
+                    {lastHapticEvent.metadata?.status_message || lastHapticEvent.metadata?.error || lastHapticEvent.metadata?.status || "No messages."}
+                  </span>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
         {/* Playback Events Timeline */}
         <PlaybackTimeline session={session} />
 

@@ -25,8 +25,8 @@ export default function PlaybackTimeline({ session }: PlaybackTimelineProps) {
               : "-";
             
             const details = formatSessionEventDetails(evt);
-            const categoryStyle = getSessionEventStyle(evt.event_type);
-            const eventLabel = getSessionEventLabel(evt.event_type);
+            const categoryStyle = getSessionEventStyle(evt.event_type, evt.metadata);
+            const eventLabel = getSessionEventLabel(evt.event_type, evt.metadata);
 
             return (
               <div key={idx} className="flex items-start gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs">

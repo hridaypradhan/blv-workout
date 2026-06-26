@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     DYNAMODB_SESSION_EVENTS_TABLE: str = "FitA11y-dev-SessionEvents"
     ARTIFACTS_BUCKET: str = "fita11y-dev-artifacts-905418181041"
 
+    # bHaptics configuration
+    BHAPTICS_ENABLED: bool = False
+    BHAPTICS_APP_ID: str = ""
+    BHAPTICS_API_KEY: str = ""
+    BHAPTICS_PROVIDER: str = "auto"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

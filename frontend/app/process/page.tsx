@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { ProcessingStage } from "@/types";
 import { submitVideo, getSSEUrl } from "@/lib/api";
@@ -13,13 +14,18 @@ function stageIndex(stage: ProcessingStage): number {
 }
 
 export default function ProcessVideo() {
+  const router = useRouter();
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [currentStage, setCurrentStage] = useState<ProcessingStage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false);
   const [sseWarning, setSseWarning] = useState<string | null>(null);
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const submittedVideoIdRef = useRef<string | null>(null);
+  const hasRedirectedRef = useRef(false);
 
   /** Cleanup SSE connection on unmount. */
   useEffect(() => {
@@ -50,6 +56,12 @@ export default function ProcessVideo() {
           es.close();
         } else if (stage === ProcessingStage.COMPLETED) {
           es.close();
+          if (submittedVideoIdRef.current === vid && !hasRedirectedRef.current) {
+            hasRedirectedRef.current = true;
+            setHandoffMessage("Preparation complete. Opening session setup...");
+            window.dispatchEvent(new Event("navigation-start"));
+            router.push(`/session/${vid}/setup`);
+          }
         }
       } catch (err) {
         console.warn("Received malformed SSE event data:", event.data, err);
@@ -69,17 +81,23 @@ export default function ProcessVideo() {
         setSseWarning("Connection to preparation updates was interrupted. Reconnecting...");
       }
     };
-  }, [currentStage]);
+  }, [currentStage, router]);
 
   /** Helper to trigger URL submission */
   const submitUrl = useCallback(async (url: string) => {
     setError(null);
     setCurrentStage(null);
     setSseWarning(null);
+    setVideoId(null);
+    setHandoffMessage(null);
+    hasRedirectedRef.current = false;
+    submittedVideoIdRef.current = null;
     setIsSubmitting(true);
 
     try {
       const result = await submitVideo(url);
+      setVideoId(result.video_id);
+      submittedVideoIdRef.current = result.video_id;
       setCurrentStage(ProcessingStage.SUBMITTED);
       connectSSE(result.video_id);
     } catch (err) {
@@ -259,17 +277,27 @@ export default function ProcessVideo() {
                   Preparation Complete
                 </h3>
                 <p className="text-sm text-emerald-300/80 mt-1">
-                  Assistance sidecar is ready. You can now start assisted playback of the YouTube video.
+                  {handoffMessage || "Opening session setup..."}
                 </p>
-                <Link
-                  href="/video-library"
-                  className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold rounded-lg text-xs border border-emerald-500/30 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                >
-                  Go to Video Library
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Link
+                    href={`/session/${videoId || ""}/setup`}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs hover:bg-emerald-400 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                    id="open-setup-btn"
+                  >
+                    Open Session Setup
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                  <Link
+                    href="/video-library"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-xs border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-500"
+                    id="view-library-btn"
+                  >
+                    View in Video Library
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -293,7 +321,9 @@ export default function ProcessVideo() {
 
           {/* Accessible live region for screen readers */}
           <div aria-live="polite" className="sr-only" id="status-announcer">
-            {currentStage && (
+            {handoffMessage ? (
+              <span>{handoffMessage}</span>
+            ) : currentStage && (
               <span>
                 {isFailed
                   ? `Preparation failed: ${error}`

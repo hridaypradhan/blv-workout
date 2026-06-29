@@ -53,21 +53,24 @@ export function useQnAChat({
   const [isPending, setIsPending] = useState(false);
   const [qaError, setQaError] = useState<string | null>(null);
 
-  const handleSendMessage = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = chatInput.trim();
-    if (!query || isPending) return;
+  /**
+   * Core Q&A submission logic. Shared by both typed chat and voice input paths.
+   * @param query - The question text to submit.
+   * @param source - Where the question originated: "typed" (form) or "voice" (speech recognition).
+   */
+  const submitQuestion = useCallback(async (query: string, source: "typed" | "voice" = "typed") => {
+    const trimmed = query.trim();
+    if (!trimmed || isPending) return;
 
     setIsPending(true);
     setQaError(null);
-    setChatInput("");
 
     // Append user message immediately
     setQaMessages((prev) => [
       ...prev,
-      { sender: "user", text: query }
+      { sender: "user", text: trimmed }
     ]);
-    announce(`User question submitted: "${query}"`);
+    announce(`User question submitted: "${trimmed}"`);
 
     const activeExerciseName = currentExercise ? currentExercise.name : null;
     let latestInstructionText = null;
@@ -82,9 +85,10 @@ export function useQnAChat({
     }
 
     logSessionEvent(SESSION_EVENTS.USER_QUESTION_SUBMITTED, currentTimeMs, {
-      question: query,
+      question: trimmed,
       active_exercise: activeExerciseName,
-      latest_trainer_instruction: latestInstructionText
+      latest_trainer_instruction: latestInstructionText,
+      input_source: source,
     });
 
     try {
@@ -121,7 +125,7 @@ export function useQnAChat({
       };
 
       const response = await askAssistant({
-        question: query,
+        question: trimmed,
         video_id: videoId,
         session_id: sessionId,
         current_timestamp_ms: currentTimeMs,
@@ -144,13 +148,14 @@ export function useQnAChat({
       announce(`Assistant response received: "${response.answer_text}"`);
 
       logSessionEvent(SESSION_EVENTS.ASSISTANT_ANSWER_DELIVERED, currentTimeMs, {
-        question: query,
+        question: trimmed,
         answer: response.answer_text,
         current_timestamp_ms: currentTimeMs,
         active_exercise: activeExerciseName,
         latest_trainer_instruction: latestInstructionText,
         source: response.provider || "prototype",
-        provider: response.provider || "prototype_assistant"
+        provider: response.provider || "prototype_assistant",
+        input_source: source,
       });
     } catch (err) {
       console.error("Assistant Q&A failed:", err);
@@ -164,17 +169,17 @@ export function useQnAChat({
       announce(`Assistant response failed: ${errMsg}`);
 
       logSessionEvent(SESSION_EVENTS.ASSISTANT_ANSWER_FAILED, currentTimeMs, {
-        question: query,
+        question: trimmed,
         error: errMsg,
         current_timestamp_ms: currentTimeMs,
         active_exercise: activeExerciseName,
-        latest_trainer_instruction: latestInstructionText
+        latest_trainer_instruction: latestInstructionText,
+        input_source: source,
       });
     } finally {
       setIsPending(false);
     }
   }, [
-    chatInput,
     isPending,
     sessionId,
     videoId,
@@ -192,6 +197,18 @@ export function useQnAChat({
     logSessionEvent,
   ]);
 
+  /**
+   * Form submit handler for the typed chat input.
+   * Thin wrapper around submitQuestion that reads from chatInput state.
+   */
+  const handleSendMessage = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = chatInput.trim();
+    if (!query) return;
+    setChatInput("");
+    await submitQuestion(query, "typed");
+  }, [chatInput, submitQuestion]);
+
   return {
     qaMessages,
     chatInput,
@@ -199,5 +216,6 @@ export function useQnAChat({
     isPending,
     qaError,
     handleSendMessage,
+    submitQuestion,
   };
 }

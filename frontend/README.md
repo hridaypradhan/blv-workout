@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FitA11y — Frontend
 
-## Getting Started
+This is the Next.js (React + TypeScript + Tailwind CSS) frontend for the FitA11y assistive workout companion. For full project documentation, architecture, setup instructions, and feature details, see the [root README](../README.md).
 
-First, run the development server:
+## Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Run the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The frontend runs on [http://localhost:3000](http://localhost:3000). The FastAPI backend must also be running on [http://localhost:8000](http://localhost:8000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Development Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# Type checking
+npx tsc --noEmit
 
-## Learn More
+# Run unit tests
+npm run test
 
-To learn more about Next.js, take a look at the following resources:
+# Production build
+npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Key Directories
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `app/` — Next.js App Router pages and layouts
+- `components/` — Reusable React components (session controls, voice panel, Q&A chat, etc.)
+- `lib/` — Hooks, API clients, voice command parsing, session telemetry, and utility modules
+- `lib/hooks/` — React hooks for speech recognition, voice commands, Q&A, session management
+- `lib/voice/` — Voice command parser and type definitions
+- `types/` — Shared TypeScript type definitions
 
-## Deploy on Vercel
+## Testing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Tests use [Vitest](https://vitest.dev/) with `@testing-library/react`. Test files live alongside source code in `__tests__/` directories.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run test
+```

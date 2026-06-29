@@ -18,9 +18,11 @@ import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, Runtim
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 import { useAutomaticCue } from "@/lib/hooks/useAutomaticCue";
 import { useQnAChat } from "@/lib/hooks/useQnAChat";
+import { useLiveVoiceCommands } from "@/lib/hooks/useLiveVoiceCommands";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
 import CurrentAutomaticCuePanel from "@/components/session/CurrentAutomaticCuePanel";
 import QnAChatPanel from "@/components/session/QnAChatPanel";
+import VoiceControlPanel from "@/components/session/VoiceControlPanel";
 import PerformanceSummaryPanel from "@/components/session/PerformanceSummaryPanel";
 import { useSessionEnd } from "@/lib/hooks/useSessionEnd";
 import { useLiveCueDelivery } from "@/lib/hooks/useLiveCueDelivery";
@@ -335,6 +337,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     isPending,
     qaError,
     handleSendMessage,
+    submitQuestion,
   } = useQnAChat({
     sessionId,
     videoId: params.videoId,
@@ -478,6 +481,32 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     setAssistantMuted(muted);
     announce(muted ? "Assistant voice muted." : "Assistant voice unmuted.");
   };
+
+  // Live voice command orchestration
+  const {
+    voiceStatus,
+    startVoice,
+    stopVoice,
+    lastTranscript: voiceLastTranscript,
+    voiceError,
+  } = useLiveVoiceCommands({
+    isPlaying,
+    play,
+    pause,
+    seek: handleSeek,
+    currentTime,
+    playbackRate,
+    setPlaybackRate,
+    handleSkipSection,
+    handleRepeatTrainerInstruction,
+    assistantMuted,
+    setAssistantMuted: handleToggleMute,
+    submitQuestion,
+    announce,
+    logSessionEvent,
+    currentTimeMs,
+    isQnAPending: isPending,
+  });
 
 
   if (!sessionId) {
@@ -742,6 +771,14 @@ function LiveSessionContent({ params }: LiveSessionProps) {
             cuePlanError={artifactsError}
             isLoadingManifest={isLoadingArtifacts}
             manifestError={artifactsError}
+          />
+
+          <VoiceControlPanel
+            voiceStatus={voiceStatus}
+            startVoice={startVoice}
+            stopVoice={stopVoice}
+            lastTranscript={voiceLastTranscript}
+            voiceError={voiceError}
           />
 
           <QnAChatPanel

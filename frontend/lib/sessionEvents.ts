@@ -18,6 +18,14 @@ export const SESSION_EVENTS = {
   SECTION_SKIPPED: "section_skipped",
   PROTOTYPE_REP_DETECTED: "prototype_rep_detected",
   PROTOTYPE_FORM_ERROR_DETECTED: "prototype_form_error_detected",
+  VOICE_MIC_ENABLED: "voice_mic_enabled",
+  VOICE_MIC_DISABLED: "voice_mic_disabled",
+  VOICE_COMMAND_RECOGNIZED: "voice_command_recognized",
+  VOICE_COMMAND_EXECUTED: "voice_command_executed",
+  VOICE_COMMAND_REJECTED: "voice_command_rejected",
+  VOICE_COMMAND_FAILED: "voice_command_failed",
+  VOICE_RECOGNITION_ERROR: "voice_recognition_error",
 } as const;
 
 export type SessionEventType = typeof SESSION_EVENTS[keyof typeof SESSION_EVENTS];
+

@@ -40,6 +40,47 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
 - **Camera-Free Pose & Rep Tracking**: Joint status, repetitions, and form warnings are simulated mathematically based on elapsed video time and sidecar anchors; real Google MediaPipe camera pose tracking is not yet active.
 - **Pluggable Storage / JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory by default, with AWS DynamoDB and S3 cloud storage configuration options; no SQL database or database migration layer is active.
 
+#### Live Voice Control
+
+Voice control is implemented during live sessions as a **browser SpeechRecognition prototype**. It provides hands-free interaction through deterministic playback commands and voice-submitted Q&A.
+
+**Architecture:**
+- Uses the browser's native Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`).
+- Does **not** use Gemini Live audio.
+- Does **not** stream microphone audio to the backend.
+- Voice Q&A input is converted to text and submitted through the existing `/api/assistant/qa` flow.
+- Manual buttons and typed Q&A remain the reliable fallback.
+
+**Supported Voice Commands:**
+
+| Category | Supported Phrases |
+|---|---|
+| **Pause** | `pause`, `pause video`, `stop playback`, `pause playback` |
+| **Resume** | `resume`, `play`, `start video`, `continue`, `unpause`, `resume playback`, `resume video` |
+| **Rewind** | `rewind`, `go back`, `back`, `rewind 15 seconds`, `go back 30` (default: 10s) |
+| **Forward** | `forward`, `skip ahead`, `fast forward`, `skip ahead 15`, `fast forward 20 seconds` (default: 10s) |
+| **Slow Down** | `slow down`, `slower`, `reduce speed` |
+| **Normal Speed** | `normal speed`, `regular speed`, `reset speed` |
+| **Speed Up** | `speed up`, `faster`, `increase speed` |
+| **Next Section** | `next section`, `skip section`, `skip to next exercise`, `next exercise`, `skip to next section` |
+| **Repeat Trainer** | `repeat instruction`, `repeat trainer`, `what did the trainer say`, `say that again`, `repeat last instruction`, `repeat` |
+| **Mute Assistant** | `mute assistant`, `mute`, `silence assistant` |
+| **Unmute Assistant** | `unmute assistant`, `unmute` |
+| **End Session** | `end session`, `stop workout`, `finish workout`, `end workout` — tells the user to use the End & Save Session button |
+| **Q&A** | `ask ...`, `question ...`, `FitA11y ...`, `fit a 11 y ...`, `fit ally ...` — followed by your question |
+
+**Browser Limitations:**
+
+> [!WARNING]
+> Browser SpeechRecognition support is limited and browser-dependent. This is **prototype STT**, not production-grade speech-to-text.
+
+- **Chrome** generally works with microphone permission granted.
+- **Brave** may fail even with microphone permission granted — Brave Shields, privacy settings, site permissions, VPNs, speech-service blocking, or browser-level Web Speech API support can interfere.
+- Browser microphone permission is **necessary but not sufficient** — the browser must also support the Web Speech API and not block the underlying speech recognition service.
+- High-volume trainer video audio, assistant TTS, speaker quality, and microphone quality can all interfere with recognition accuracy.
+- If voice control fails, use manual playback controls or typed Q&A as a fallback.
+- Volume ducking or pausing during voice capture is documented as a future improvement.
+
 ### Intended Future System State:
 - **Future AI / Gemini Work**:
   - Gemini sidecar generation exists now as an optional provider.

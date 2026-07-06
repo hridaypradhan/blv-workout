@@ -429,4 +429,57 @@ describe("useSpokenCuePlayback Hook", () => {
     // Play should NOT be called to restore video playback because it was a user seek
     expect(playMock).not.toHaveBeenCalled();
   });
+
+  test("speaks a Q&A answer immediately when timestampMs is null", () => {
+    const props = createProps({
+      cueId: "qna-answer-1",
+      text: "This is a detailed answer to your question.",
+      timestampMs: null,
+      currentTime: 10.0,
+    });
+    const speakSpy = vi.spyOn(mockSpeechSynth, "speak");
+
+    renderHook((p) => useSpokenCuePlayback(p), { initialProps: props });
+
+    expect(speakSpy).toHaveBeenCalledTimes(1);
+    const utterance = speakSpy.mock.calls[0][0] as MockSpeechSynthesisUtterance;
+    expect(utterance.text).toBe("This is a detailed answer to your question.");
+  });
+
+  test("Q&A answer cancels on seekEpoch change and does not resume playback", () => {
+    const playMock = vi.fn();
+    const pauseMock = vi.fn();
+    const props = createProps({
+      cueId: "qna-answer-1",
+      text: "This is a detailed answer to your question.",
+      timestampMs: null,
+      recommendedPlaybackAction: "pause_before_speaking",
+      isPlaying: true,
+      play: playMock,
+      pause: pauseMock,
+      seekEpoch: 0,
+    });
+    const cancelSpy = vi.spyOn(mockSpeechSynth, "cancel");
+
+    const { rerender } = renderHook((p) => useSpokenCuePlayback(p), { initialProps: props });
+
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    cancelSpy.mockClear();
+
+    rerender(
+      createProps({
+        cueId: "qna-answer-1",
+        text: "This is a detailed answer to your question.",
+        timestampMs: null,
+        recommendedPlaybackAction: "pause_before_speaking",
+        isPlaying: true,
+        play: playMock,
+        pause: pauseMock,
+        seekEpoch: 1,
+      })
+    );
+
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+    expect(playMock).not.toHaveBeenCalled();
+  });
 });

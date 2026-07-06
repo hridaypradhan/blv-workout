@@ -10,6 +10,8 @@ import {
   TrainerInstructionEvent,
   CuePlan,
   TranscriptArtifact,
+  InterruptionLevel,
+  FeedbackModality,
 } from "@/types";
 
 interface UseQnAChatProps {
@@ -27,6 +29,7 @@ interface UseQnAChatProps {
   userProfile: User | null;
   announce: (msg: string) => void;
   logSessionEvent: (eventType: string, timestampMs: number, eventMetadata?: Record<string, unknown>) => void;
+  onAssistantAnswerReady?: (answerText: string) => void;
 }
 
 /**
@@ -47,6 +50,7 @@ export function useQnAChat({
   userProfile,
   announce,
   logSessionEvent,
+  onAssistantAnswerReady,
 }: UseQnAChatProps) {
   const [qaMessages, setQaMessages] = useState<Array<{ sender: "assistant" | "user"; text: string }>>([]);
   const [chatInput, setChatInput] = useState("");
@@ -145,7 +149,29 @@ export function useQnAChat({
         ...prev,
         { sender: "assistant", text: response.answer_text }
       ]);
-      announce(`Assistant response received: "${response.answer_text}"`);
+      const isSpeechSynthAvailable = typeof window !== "undefined" && !!window.speechSynthesis;
+      const isSilentOrHapticOnly =
+        coexistenceSettings?.interruption_level === InterruptionLevel.SILENT ||
+        coexistenceSettings?.interruption_level === InterruptionLevel.HAPTIC_ONLY;
+      const audioFeedbackDisabled =
+        userProfile?.feedback_modalities &&
+        !userProfile.feedback_modalities.includes(FeedbackModality.AUDIO);
+
+      const isSpeechEnabled =
+        isSpeechSynthAvailable &&
+        !assistantMuted &&
+        !isSilentOrHapticOnly &&
+        !audioFeedbackDisabled;
+
+      if (isSpeechEnabled) {
+        announce("Assistant response received.");
+      } else {
+        announce(`Assistant response received: "${response.answer_text}"`);
+      }
+
+      if (onAssistantAnswerReady) {
+        onAssistantAnswerReady(response.answer_text);
+      }
 
       logSessionEvent(SESSION_EVENTS.ASSISTANT_ANSWER_DELIVERED, currentTimeMs, {
         question: trimmed,
@@ -195,6 +221,7 @@ export function useQnAChat({
     userProfile,
     announce,
     logSessionEvent,
+    onAssistantAnswerReady,
   ]);
 
   /**

@@ -42,6 +42,15 @@ function formatTime(seconds: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
+/** Generate a unique stable cue ID for Q&A answers with fallback. */
+function generateQnaCueId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `qna-${crypto.randomUUID()}`;
+  }
+  const randomStr = Math.random().toString(36).substring(2, 15);
+  return `qna-${Date.now()}-${randomStr}`;
+}
+
 
 
 /** Inferred mapping of cue description text to haptic vibration category types. */
@@ -330,6 +339,20 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
 
 
+  const handleAssistantAnswerReady = React.useCallback((answerText: string) => {
+    const qnaId = generateQnaCueId();
+    setCurrentSpokenCue({
+      cue_id: qnaId,
+      should_deliver: true,
+      modality: "audio",
+      text: answerText,
+      haptic_cue_ref: null,
+      interruption_policy_hint: null,
+      recommended_playback_action: coexistenceSettings.pause_before_speaking ? "pause_before_speaking" : "none",
+      reason: "Assistant Q&A response",
+    });
+  }, [coexistenceSettings.pause_before_speaking]);
+
   const {
     qaMessages,
     chatInput,
@@ -353,6 +376,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     userProfile,
     announce,
     logSessionEvent,
+    onAssistantAnswerReady: handleAssistantAnswerReady,
   });
 
   // Append new cues to the message feed as they trigger

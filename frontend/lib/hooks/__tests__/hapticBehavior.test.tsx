@@ -453,8 +453,8 @@ describe("Haptic Hooks, Component, and Formatter Tests", () => {
 
   describe("HapticSettingsPanel Component", () => {
     const vibrations = [
-      { id: "v1", cue_type: "start", label: "Start Vibration 1", source_wav: "wav1.wav", duration_ms: 500 },
-      { id: "v2", cue_type: "countdown", label: "Countdown Vibration 1", source_wav: "wav2.wav", duration_ms: 200 },
+      { id: "v1", cue_type: "start", label: "Start Vibration 1", source_wav: "wav1.wav", filename: "wav1.wav", duration_ms: 500, conversion_status: "converted" },
+      { id: "v2", cue_type: "countdown", label: "Countdown Vibration 1", source_wav: "wav2.wav", filename: "wav2.wav", duration_ms: 200, conversion_status: "converted" },
     ];
     const hapticPreferences = {
       start: "v1",

@@ -3,7 +3,7 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 import { render, waitFor, act } from "@testing-library/react";
 import VideoLibraryPage from "../VideoLibraryPage";
 import { getJobs } from "@/lib/api";
-import { ProcessingStage } from "@/types";
+import { ProcessingStage, AssistanceJob } from "@/types";
 import { LayoutProvider } from "@/components/layout/LayoutContext";
 import { UserProfileProvider } from "@/components/layout/UserProfileContext";
 
@@ -53,7 +53,7 @@ describe("VideoLibraryPage - Jobs Polling Behavior", () => {
   test("active jobs trigger polling every 12 seconds", async () => {
     vi.useFakeTimers();
     // 1 active job (transcribing)
-    const activeJobs = [
+    const activeJobs: AssistanceJob[] = [
       {
         video_id: "vid-1",
         youtube_url: "https://youtube.com/watch?v=123",
@@ -86,14 +86,14 @@ describe("VideoLibraryPage - Jobs Polling Behavior", () => {
       await vi.advanceTimersByTimeAsync(12000);
     });
 
-    expect(apiCallCount(getJobs)).toBe(2);
+    expect(vi.mocked(getJobs).mock.calls.length).toBe(2);
     vi.useRealTimers();
   });
 
   test("completed/failed jobs do not keep polling", async () => {
     vi.useFakeTimers();
     // All terminal jobs (completed)
-    const terminalJobs = [
+    const terminalJobs: AssistanceJob[] = [
       {
         video_id: "vid-2",
         youtube_url: "https://youtube.com/watch?v=456",
@@ -130,7 +130,7 @@ describe("VideoLibraryPage - Jobs Polling Behavior", () => {
 
   test("polling does not overlap if a request is still in flight", async () => {
     vi.useFakeTimers();
-    const activeJobs = [
+    const activeJobs: AssistanceJob[] = [
       {
         video_id: "vid-3",
         youtube_url: "https://youtube.com/watch?v=789",
@@ -157,8 +157,8 @@ describe("VideoLibraryPage - Jobs Polling Behavior", () => {
     expect(getJobs).toHaveBeenCalledTimes(1);
 
     // We'll mock getJobs to return a promise that doesn't resolve immediately
-    let resolvePollPromise: (value: unknown) => void = () => {};
-    const pollPromise = new Promise((resolve) => {
+    let resolvePollPromise: (value: AssistanceJob[]) => void = () => {};
+    const pollPromise = new Promise<AssistanceJob[]>((resolve) => {
       resolvePollPromise = resolve;
     });
     vi.mocked(getJobs).mockReturnValueOnce(pollPromise);
@@ -195,6 +195,4 @@ describe("VideoLibraryPage - Jobs Polling Behavior", () => {
   });
 });
 
-function apiCallCount(mockFn: { mock: { calls: unknown[] } }) {
-  return mockFn.mock.calls.length;
-}
+

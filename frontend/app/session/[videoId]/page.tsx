@@ -139,7 +139,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
 
-  const { latestAutomaticCue, updateLatestAutomaticCue } = useAutomaticCue(currentTimeRef);
+  const { latestAutomaticCue, isAutomaticCueActive, updateLatestAutomaticCue } = useAutomaticCue(currentTimeRef, currentTime);
 
   const lastCheckedSecond = useRef<number>(-1);
 
@@ -766,6 +766,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
           <CurrentAutomaticCuePanel
             latestAutomaticCue={latestAutomaticCue}
+            isAutomaticCueActive={isAutomaticCueActive}
             formatTime={formatTime}
             isLoadingCuePlan={isLoadingArtifacts}
             cuePlanError={artifactsError}

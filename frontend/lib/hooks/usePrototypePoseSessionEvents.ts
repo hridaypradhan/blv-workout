@@ -30,7 +30,7 @@ interface UsePrototypePoseSessionEventsProps {
   isPlaying: boolean;
   userProfile: User | null;
   announce: (msg: string) => void;
-  updateLatestAutomaticCue: (text: string, source: string) => void;
+  updateLatestAutomaticCue: (text: string, source: string, startMs?: number, endMs?: number) => void;
   logSessionEvent: (eventType: string, timestampMs: number, metadata?: Record<string, unknown>) => void;
   triggerHapticEvent: (params: {
     cueType: string;

@@ -11,7 +11,7 @@ interface UseLiveCueDeliveryProps {
   assistantMuted: boolean;
   recentlyDeliveredCueIds: string[];
   setRecentlyDeliveredCueIds: React.Dispatch<React.SetStateAction<string[]>>;
-  updateLatestAutomaticCue: (text: string, source: string) => void;
+  updateLatestAutomaticCue: (text: string, source: string, startMs?: number, endMs?: number) => void;
   handleAudioCueAnnouncement: (text: string) => void;
   handleHapticCueTrigger: (text: string, hapticCueRef: string | null, cueId: string | null) => void;
   logSessionEvent: (eventType: string, timestampMs: number, metadata?: Record<string, unknown>) => void;
@@ -58,7 +58,14 @@ export function useLiveCueDelivery({
         const text = res.text || "";
 
         if (text) {
-          updateLatestAutomaticCue(text, "cue_plan");
+          // Look up the matched candidate's time window for seek-aware UI display
+          const matchedCandidate = cuePlan.cue_candidates.find((c) => c.id === res.cue_id);
+          updateLatestAutomaticCue(
+            text,
+            "cue_plan",
+            matchedCandidate?.start_ms,
+            matchedCandidate?.end_ms
+          );
         }
 
         if (res.modality === "audio" && text) {

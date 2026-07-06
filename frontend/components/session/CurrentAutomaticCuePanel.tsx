@@ -7,6 +7,7 @@ interface CurrentAutomaticCuePanelProps {
     timestamp: Date;
     videoTime: number;
   } | null;
+  isAutomaticCueActive: boolean;
   formatTime: (seconds: number) => string;
   isLoadingCuePlan: boolean;
   cuePlanError: string | null;
@@ -16,16 +17,23 @@ interface CurrentAutomaticCuePanelProps {
 
 export default function CurrentAutomaticCuePanel({
   latestAutomaticCue,
+  isAutomaticCueActive,
   formatTime,
   isLoadingCuePlan,
   cuePlanError,
   isLoadingManifest,
   manifestError,
 }: CurrentAutomaticCuePanelProps) {
+  const showCue = latestAutomaticCue && isAutomaticCueActive;
+
+  const panelAriaLabel = showCue
+    ? "Current Assistant Cue - active"
+    : "Current Assistant Cue";
+
   return (
     <section
       className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between transition-all duration-300"
-      aria-label="Current Assistant Cue"
+      aria-label={panelAriaLabel}
     >
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-2 border-b border-slate-800/65">
@@ -55,8 +63,8 @@ export default function CurrentAutomaticCuePanel({
                 Load Error
               </span>
             )}
-            {latestAutomaticCue && (
-              <span className="flex h-2 w-2 relative">
+            {showCue && (
+              <span className="flex h-2 w-2 relative" data-testid="cue-active-dot">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
@@ -77,12 +85,8 @@ export default function CurrentAutomaticCuePanel({
           </div>
         )}
 
-        {!latestAutomaticCue ? (
-          <div className="py-8 px-4 text-slate-500 text-sm font-medium italic text-center">
-            No automatic cues received yet. Start workout playback to receive real-time corrections and guidance.
-          </div>
-        ) : (
-          <div className="space-y-4 animate-fade-in text-center">
+        {showCue ? (
+          <div className="space-y-4 animate-fade-in text-center" data-testid="cue-content-active">
             <p className="text-lg font-bold text-yellow-400 leading-relaxed">
               &quot;{latestAutomaticCue.text}&quot;
             </p>
@@ -103,6 +107,12 @@ export default function CurrentAutomaticCuePanel({
                 Received: {latestAutomaticCue.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             </div>
+          </div>
+        ) : (
+          <div className="py-8 px-4 text-slate-500 text-sm font-medium italic text-center" data-testid="cue-empty-state">
+            {latestAutomaticCue
+              ? "No cue active at this playback position."
+              : "No automatic cues received yet. Start workout playback to receive real-time corrections and guidance."}
           </div>
         )}
       </div>

@@ -245,4 +245,57 @@ describe("parseVoiceCommand", () => {
       expect(result).toEqual({ type: "ask_question", question: "how is my form" });
     });
   });
+
+  // --- Positioning Gate Commands ---
+  describe("positioning gate commands", () => {
+    test('"cancel countdown" → cancel_countdown', () => {
+      expect(parseVoiceCommand("cancel countdown")).toEqual({ type: "cancel_countdown" });
+    });
+
+    test('"skip alignment" → skip_alignment', () => {
+      expect(parseVoiceCommand("skip alignment")).toEqual({ type: "skip_alignment" });
+    });
+
+    test('"skip positioning" → skip_alignment', () => {
+      expect(parseVoiceCommand("skip positioning")).toEqual({ type: "skip_alignment" });
+    });
+  });
+
+  // --- Scroll & Navigation Commands ---
+  describe("scroll and navigation commands", () => {
+    test.each(["scroll down", "scroll down please", "please scroll down"])('"%s" → scroll_down', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "scroll_down" });
+    });
+
+    test.each(["scroll up", "scroll up please", "please scroll up"])('"%s" → scroll_up', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "scroll_up" });
+    });
+
+    test.each(["page down", "page down please"])('"%s" → page_down', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "page_down" });
+    });
+
+    test.each(["page up", "page up please"])('"%s" → page_up', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "page_up" });
+    });
+
+    test.each(["previous section", "previous exercise", "go back a section"])('"%s" → previous_section', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "previous_section" });
+    });
+
+    test.each(["read current section", "read section", "please read current section"])('"%s" → read_current_section', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "read_current_section" });
+    });
+  });
+
+  // --- Change Camera Commands ---
+  describe("change camera commands", () => {
+    test.each(["change camera", "switch camera"])('"%s" → change_camera next', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "change_camera", target: "next" });
+    });
+
+    test.each(["use external camera", "switch to external camera", "use external webcam"])('"%s" → change_camera external', (input) => {
+      expect(parseVoiceCommand(input)).toEqual({ type: "change_camera", target: "external" });
+    });
+  });
 });

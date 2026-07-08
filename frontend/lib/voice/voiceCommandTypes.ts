@@ -17,6 +17,13 @@ export type VoiceCommandType =
   | "unmute_assistant"
   | "ask_question"
   | "end_session"
+  | "scroll_down"
+  | "scroll_up"
+  | "page_down"
+  | "page_up"
+  | "previous_section"
+  | "read_current_section"
+  | "change_camera"
   | "rejected";
 
 export interface PauseCommand {
@@ -81,6 +88,43 @@ export interface RejectedCommand {
   transcript: string;
 }
 
+export interface CancelCountdownCommand {
+  type: "cancel_countdown";
+}
+
+export interface SkipAlignmentCommand {
+  type: "skip_alignment";
+}
+
+export interface ScrollDownCommand {
+  type: "scroll_down";
+}
+
+export interface ScrollUpCommand {
+  type: "scroll_up";
+}
+
+export interface PageDownCommand {
+  type: "page_down";
+}
+
+export interface PageUpCommand {
+  type: "page_up";
+}
+
+export interface PreviousSectionCommand {
+  type: "previous_section";
+}
+
+export interface ReadCurrentSectionCommand {
+  type: "read_current_section";
+}
+
+export interface ChangeCameraCommand {
+  type: "change_camera";
+  target?: "external" | "next";
+}
+
 export type VoiceCommand =
   | PauseCommand
   | ResumeCommand
@@ -95,4 +139,13 @@ export type VoiceCommand =
   | UnmuteAssistantCommand
   | AskQuestionCommand
   | EndSessionCommand
+  | CancelCountdownCommand
+  | SkipAlignmentCommand
+  | ScrollDownCommand
+  | ScrollUpCommand
+  | PageDownCommand
+  | PageUpCommand
+  | PreviousSectionCommand
+  | ReadCurrentSectionCommand
+  | ChangeCameraCommand
   | RejectedCommand;

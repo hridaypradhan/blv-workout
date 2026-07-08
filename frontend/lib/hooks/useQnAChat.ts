@@ -30,6 +30,14 @@ interface UseQnAChatProps {
   announce: (msg: string) => void;
   logSessionEvent: (eventType: string, timestampMs: number, eventMetadata?: Record<string, unknown>) => void;
   onAssistantAnswerReady?: (answerText: string) => void;
+  runtimeObservationContext?: {
+    pose_available: boolean;
+    pose_confidence: number | null;
+    observation_capability: "not_available" | "available" | "low_confidence";
+    latest_form_error: Record<string, unknown> | null;
+    latest_rep_event: Record<string, unknown> | null;
+    notes?: string | null;
+  } | null;
 }
 
 /**
@@ -51,6 +59,7 @@ export function useQnAChat({
   announce,
   logSessionEvent,
   onAssistantAnswerReady,
+  runtimeObservationContext,
 }: UseQnAChatProps) {
   const [qaMessages, setQaMessages] = useState<Array<{ sender: "assistant" | "user"; text: string }>>([]);
   const [chatInput, setChatInput] = useState("");
@@ -135,7 +144,7 @@ export function useQnAChat({
         current_timestamp_ms: currentTimeMs,
         persona: userProfile?.assistant_persona || undefined,
         session_context: fullContext,
-        runtime_observation_context: {
+        runtime_observation_context: runtimeObservationContext || {
           pose_available: false,
           pose_confidence: null,
           observation_capability: "not_available",
@@ -222,6 +231,7 @@ export function useQnAChat({
     announce,
     logSessionEvent,
     onAssistantAnswerReady,
+    runtimeObservationContext,
   ]);
 
   /**

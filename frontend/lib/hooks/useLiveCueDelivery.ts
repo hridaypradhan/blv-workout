@@ -17,6 +17,7 @@ interface UseLiveCueDeliveryProps {
   logSessionEvent: (eventType: string, timestampMs: number, metadata?: Record<string, unknown>) => void;
   announce: (msg: string) => void;
   setCurrentSpokenCue: React.Dispatch<React.SetStateAction<(RuntimeCueSelectionResponse & { timestampMs?: number }) | null>>;
+  isGateOpen?: boolean;
 }
 
 export function useLiveCueDelivery({
@@ -33,11 +34,13 @@ export function useLiveCueDelivery({
   logSessionEvent,
   announce,
   setCurrentSpokenCue,
+  isGateOpen = false,
 }: UseLiveCueDeliveryProps) {
   const lastCheckedSecond = useRef<number>(-1);
 
   useEffect(() => {
-    if (!cuePlan || !isPlaying) return;
+    if (!cuePlan) return;
+    if (!isPlaying && !isGateOpen) return;
 
     const currentSecond = Math.floor(currentTime);
     if (currentSecond === lastCheckedSecond.current) return;
@@ -53,6 +56,18 @@ export function useLiveCueDelivery({
       );
 
       if (res.should_deliver && res.cue_id) {
+        // Gate-active suppression: do NOT add to recentlyDeliveredCueIds so the
+        // cue engine can re-select this cue after gate completion + seek-back.
+        if (isGateOpen) {
+          logSessionEvent(SESSION_EVENTS.CUE_SUPPRESSED_BY_GATE, currentTime * 1000, {
+            cueId: res.cue_id,
+            text: res.text,
+            reason: "positioning_gate_active",
+            modality: res.modality,
+          });
+          return;
+        }
+
         setRecentlyDeliveredCueIds((prev) => [...prev, res.cue_id!]);
 
         const text = res.text || "";
@@ -100,6 +115,7 @@ export function useLiveCueDelivery({
   }, [
     currentTime,
     isPlaying,
+    isGateOpen,
     cuePlan,
     coexistenceSettings,
     assistantMuted,

@@ -6,6 +6,7 @@ import {
   InterruptionLevel,
   FeedbackModality,
 } from "../../types";
+import { PauseOwner } from "./usePlaybackPauseCoordinator";
 
 export interface UseSpokenCuePlaybackProps {
   cueId: string | null | undefined;
@@ -21,8 +22,8 @@ export interface UseSpokenCuePlaybackProps {
   sessionId: string | null | undefined;
   currentTime: number; // in seconds
   isPlaying: boolean;
-  play: () => void;
-  pause: () => void;
+  requestPause: (owner: PauseOwner, reason?: string) => void;
+  releasePause: (owner: PauseOwner, reason?: string, skipResume?: boolean) => void;
   getVolume?: () => number | null;
   setVolume?: (vol: number) => void;
   isPlayerMuted?: () => boolean | null;
@@ -87,8 +88,8 @@ export function useSpokenCuePlayback({
   sessionId,
   currentTime,
   isPlaying,
-  play,
-  pause,
+  requestPause,
+  releasePause,
   getVolume,
   setVolume,
   isPlayerMuted,
@@ -102,8 +103,8 @@ export function useSpokenCuePlayback({
 
   // Track playback state and functions using refs to avoid re-triggering speech on state updates
   const isPlayingRef = useRef(isPlaying);
-  const playRef = useRef(play);
-  const pauseRef = useRef(pause);
+  const requestPauseRef = useRef(requestPause);
+  const releasePauseRef = useRef(releasePause);
 
   // Track volume methods using refs
   const getVolumeRef = useRef(getVolume);
@@ -116,12 +117,12 @@ export function useSpokenCuePlayback({
   // Keep refs updated
   useEffect(() => {
     isPlayingRef.current = isPlaying;
-    playRef.current = play;
-    pauseRef.current = pause;
+    requestPauseRef.current = requestPause;
+    releasePauseRef.current = releasePause;
     getVolumeRef.current = getVolume;
     setVolumeRef.current = setVolume;
     isPlayerMutedRef.current = isPlayerMuted;
-  }, [isPlaying, play, pause, getVolume, setVolume, isPlayerMuted]);
+  }, [isPlaying, requestPause, releasePause, getVolume, setVolume, isPlayerMuted]);
 
   // Track whether we paused the player specifically for the active spoken cue
   const wasPlayingRef = useRef(false);
@@ -146,8 +147,8 @@ export function useSpokenCuePlayback({
   }, []);
 
   const restorePlayback = useCallback(() => {
-    if (wasPlayingRef.current && playRef.current) {
-      playRef.current();
+    if (wasPlayingRef.current && releasePauseRef.current) {
+      releasePauseRef.current("assistant_speech", "Finished speaking cue");
       wasPlayingRef.current = false;
     }
   }, []);
@@ -165,6 +166,9 @@ export function useSpokenCuePlayback({
     if (shouldResumePlayback) {
       restorePlayback();
     } else {
+      if (wasPlayingRef.current && releasePauseRef.current) {
+        releasePauseRef.current("assistant_speech", "Cancelled speech", true);
+      }
       wasPlayingRef.current = false; // Discard resume flag
     }
   }, [restoreVolume, restorePlayback]);
@@ -290,8 +294,8 @@ export function useSpokenCuePlayback({
     if (recommendedPlaybackAction === "pause_before_speaking") {
       const wasPlayingBefore = isPlayingRef.current;
       wasPlayingRef.current = wasPlayingBefore;
-      if (wasPlayingBefore && pauseRef.current) {
-        pauseRef.current();
+      if (wasPlayingBefore && requestPauseRef.current) {
+        requestPauseRef.current("assistant_speech", `Speaking cue: ${cueId}`);
       }
     }
 

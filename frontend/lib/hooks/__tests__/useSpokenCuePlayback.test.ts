@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useSpokenCuePlayback, UseSpokenCuePlaybackProps } from "../useSpokenCuePlayback";
+import { PauseOwner } from "../usePlaybackPauseCoordinator";
 import { InterruptionLevel, FeedbackModality, AssistantVerbosity } from "../../../types";
 
 // --- Mock speech synthesis classes ---
@@ -68,7 +69,15 @@ describe("useSpokenCuePlayback Hook", () => {
     vi.unstubAllGlobals();
   });
 
-  const createProps = (overrides?: Partial<UseSpokenCuePlaybackProps>): UseSpokenCuePlaybackProps => {
+  interface CreatePropsOverrides extends Partial<UseSpokenCuePlaybackProps> {
+    play?: (...args: unknown[]) => unknown;
+    pause?: (...args: unknown[]) => unknown;
+  }
+
+  const createProps = (overrides?: CreatePropsOverrides): UseSpokenCuePlaybackProps => {
+    const playMock = overrides?.play || vi.fn();
+    const pauseMock = overrides?.pause || vi.fn();
+
     return {
       cueId: "cue-1",
       shouldDeliver: true,
@@ -91,15 +100,23 @@ describe("useSpokenCuePlayback Hook", () => {
       sessionId: "session-456",
       currentTime: 10.0,
       isPlaying: true,
-      play: vi.fn(),
-      pause: vi.fn(),
+      requestPause: (owner: PauseOwner, reason?: string) => {
+        if (owner === "assistant_speech") {
+          pauseMock(owner, reason);
+        }
+      },
+      releasePause: (owner: PauseOwner, reason?: string, skipResume?: boolean) => {
+        if (owner === "assistant_speech" && !skipResume) {
+          playMock(owner, reason);
+        }
+      },
       getVolume: vi.fn(() => 50),
       setVolume: vi.fn(),
       isPlayerMuted: vi.fn(() => false),
       timestampMs: 10000,
       seekEpoch: 0,
       ...overrides,
-    };
+    } as unknown as UseSpokenCuePlaybackProps;
   };
 
   test("speaks an eligible audio cue", () => {

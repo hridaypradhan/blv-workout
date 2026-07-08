@@ -167,6 +167,7 @@ export interface FormError {
   expected_range: [number, number];
   severity: string;
   message?: string | null;
+  metadata?: Record<string, any>;
 }
 
 export interface Session {

@@ -37,12 +37,13 @@ FitA11y is currently implemented as an end-to-end runnable **prototype** to show
 - **Deterministic & Gemini-Backed Sidecars**: Pre-processing generates structured sidecar manifests mapping events to the video timeline. By default, it operates in offline-capable deterministic `prototype` mode. However, if configured with `AI_PROVIDER=gemini` and a valid `GEMINI_API_KEY`, the backend uses the Google GenAI SDK to call Gemini models to analyze YouTube captions and generate structured sidecars dynamically. If the API key is missing, captions are unavailable, or the Gemini response fails schema validation constraints, the coordinator falls back cleanly to the offline `prototype` strategy.
 - **Deterministic & Gemini-Backed Assistant Q&A**: Answers user questions dynamically in the workout session chat. By default, it operates in offline-capable deterministic prototype mode. If configured with `AI_PROVIDER=gemini` and a valid `GEMINI_API_KEY`, it uses Gemini to generate answers grounded in the video's sidecar timelines, transcripts (using a compact ±60-second window around the current timestamp), and cue plans, falling back cleanly to the prototype on failures.
 - **bHaptics Sleeve Integration**: Fully integrated with bHaptics. If `BHAPTICS_ENABLED=true` and a physical sleeve connection is active via the bHaptics Player app, haptic events are fired directly to the sleeves. If bHaptics is disabled, disconnected, or unsupported, the application seamlessly falls back to visual and spoken indicators in the web session.
-- **Camera-Free Pose & Rep Tracking**: Joint status, repetitions, and form warnings are simulated mathematically based on elapsed video time and sidecar anchors; real Google MediaPipe camera pose tracking is not yet active.
+- **Live MediaPipe Pose Observation**: Live MediaPipe pose tracking runs locally on the browser camera stream during the active workout session to compute basic joint angles (e.g. elbow, knee, hip) and visibility. Real browser-local MediaPipe repetition counting and form analysis have been implemented for supported exercises (squat and bicep curl), while unsupported exercises or lost tracking states fall back safely to prototype-simulated tracking. Saved session events explicitly distinguish `camera_mediapipe` from `prototype_pose` provider sources. All camera frames and landmarks remain browser-local; no images or coordinates are transmitted externally. The local model is stored at `frontend/public/mediapipe/pose_landmarker_heavy.task`. Note that tracking is designed for accessibility feedback and is not clinically validated biomechanics.
+- **Pre-Session Setup Positioning**: Pre-session setup screen features browser-local Google MediaPipe Pose Landmarker tracking, offering a real-time alignment guide for Centering, Depth, Facing Orientation, and Body Posture. The `pose_landmarker_heavy.task` model (~30 MB) is committed to the repository at `frontend/public/mediapipe/pose_landmarker_heavy.task`. The hook `useMediaPipePoseLandmarker` performs a HEAD request at startup — if the local file is found, it is used; if not, the model is streamed from the Google CDN automatically.
 - **Pluggable Storage / JSON Persistence**: Prepared jobs, session histories, and user settings are saved locally as JSON files under the `backend/.prototype_data` directory by default, with AWS DynamoDB and S3 cloud storage configuration options; no SQL database or database migration layer is active.
 
 #### Live Voice Control
 
-Voice control is implemented during live sessions as a **browser SpeechRecognition prototype**. It provides hands-free interaction through deterministic playback commands and voice-submitted Q&A.
+Voice control is implemented during live sessions as a **browser SpeechRecognition prototype**. It provides hands-free interaction through deterministic playback commands, voice navigation, and voice-submitted Q&A. It is enabled by default on initial live session mount if supported.
 
 **Architecture:**
 - Uses the browser's native Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`).
@@ -62,10 +63,18 @@ Voice control is implemented during live sessions as a **browser SpeechRecogniti
 | **Slow Down** | `slow down`, `slower`, `reduce speed` |
 | **Normal Speed** | `normal speed`, `regular speed`, `reset speed` |
 | **Speed Up** | `speed up`, `faster`, `increase speed` |
+| **Previous Section** | `previous section`, `previous exercise`, `go back a section` |
 | **Next Section** | `next section`, `skip section`, `skip to next exercise`, `next exercise`, `skip to next section` |
-| **Repeat Trainer** | `repeat instruction`, `repeat trainer`, `what did the trainer say`, `say that again`, `repeat last instruction`, `repeat` |
+| **Read Section** | `read current section`, `read section`, `please read current section` |
+| **Scroll Down** | `scroll down`, `scroll down please`, `please scroll down` |
+| **Scroll Up** | `scroll up`, `scroll up please`, `please scroll up` |
+| **Page Down** | `page down`, `page down please` |
+| **Page Up** | `page up`, `page up please` |
+| **Repeat Trainer** | `repeat instruction`, `repeat trainer`, `what did the trainer say`, `say that again`, `repeat last instruction`, `repeat` (repeats gate guidance if positioning gate is active) |
 | **Mute Assistant** | `mute assistant`, `mute`, `silence assistant` |
 | **Unmute Assistant** | `unmute assistant`, `unmute` |
+| **Cancel Countdown** | `cancel countdown` (cancels live gate countdown) |
+| **Skip Alignment** | `skip alignment`, `skip positioning` (bypasses live positioning gate) |
 | **End Session** | `end session`, `stop workout`, `finish workout`, `end workout` — tells the user to use the End & Save Session button |
 | **Q&A** | `ask ...`, `question ...`, `FitA11y ...`, `fit a 11 y ...`, `fit ally ...` — followed by your question |
 
@@ -80,17 +89,93 @@ Voice control is implemented during live sessions as a **browser SpeechRecogniti
 - High-volume trainer video audio, assistant TTS, speaker quality, and microphone quality can all interfere with recognition accuracy.
 - If voice control fails, use manual playback controls or typed Q&A as a fallback.
 - Volume ducking or pausing during voice capture is documented as a future improvement.
+- **Auto-start**: Voice control is started automatically on live session mount when the Web Speech API is available. Auto-start fires once on `idle` status. **Brave** often blocks auto-start even when manual microphone permission is granted; use the microphone toggle button in the sidebar instead.
+
+#### Pre-Session Setup Voice Control
+
+In addition to live-session controls, the pre-session setup screen features dedicated, browser-local SpeechRecognition voice controls to facilitate hands-free workspace configuration.
+
+**Setup Voice Commands:**
+
+| Category | Supported Phrases | Behavior / Action |
+|---|---|---|
+| **Camera Settings** | `enable camera`, `start camera` | Requests browser camera stream permission. |
+| | `stop camera` | Closes camera stream and returns to offline mode. |
+| **Alignment Mode** | `start alignment` | Enters focused alignment modal (requires active stream). |
+| | `cancel alignment`, `return to setup`, `exit alignment` | Exits alignment mode and returns focus to setup controls. |
+| **Instruction Guides**| `repeat guidance`, `repeat instruction` | Repeats current MediaPipe stance alignment guide aloud. |
+| **Countdown Timer** | `cancel countdown` | Stops auto-start timer and returns to alignment monitoring. |
+| **Workout Controls** | `start workout`, `start assisted playback` | Triggers playback session initialization. |
+| **Difficulty Settings**| `choose fresh` / `choose normal` / `choose tired` | Toggles workout assistance intensity offsets. |
+| **Pre-session Q&A** | `ask assistant [query]`, `question [query]` | Submits query to assistant grounded in session context. |
+| **Navigation & Scroll**| `scroll down`, `scroll up` | Scrolls the layout container by 150px. |
+| | `page down`, `page up` | Scrolls the layout container by 450px. |
+| | `next section`, `previous section`| Cycles keyboard focus / scroll position between setup form blocks. |
+| | `read current section` | Uses TTS to announce the currently active setup block to BLV users. |
+
+**Important Safety & Browser Information:**
+- Setup voice control is browser SpeechRecognition-based and browser-dependent. Microphone and Speech API support is required.
+- Standard visual buttons and screen-reader keyboard navigation remain the primary fully supported pathways.
+- Setup MediaPipe alignment operates 100% locally client-side. No camera video stream, landmarks, or coordinate arrays ever leave the browser.
+- Live-session workout playback pose telemetry uses local MediaPipe tracking for reps/forms, falling back to simulated prototype tracking when camera visibility or exercise support is limited.
+
+### Live Haptic Feed Layout Stability & Speech Policies
+To support BLV users relying on assistive hardware or screen readers without inducing page layout shifts:
+- **Stable Dimension Panel**: The `LiveHapticStatusPanel` renders as a dedicated layout element in the sidebar with a fixed height constraint (`h-[220px] min-h-[220px]`). This prevents shifts when the stream of haptic events fluctuates.
+- **Sleeve Status Fallback**: When physical sleeves are active/connected, the noisy visual log is hidden by default (accessible via manual toggle) to minimize visual clutter. If sleeves are disconnected, a virtual screen-reader fallback feed is shown to present simulated indicator cues under an `aria-live="polite"` DOM region.
+- **Speech Suppression**: Modality-specific haptic events are mapped exclusively to target vibrations or screen-reader virtual text fields. Speech synthesis is suppressed for haptic events to prevent audio queue overlaps.
+
+### Camera Lifespan and Track Management
+To avoid browser camera indicators remaining green after workout completion or page navigation:
+- **Global Active Stream Registry**: A centralized registry in `useCameraStream.ts` tracks active MediaStream instances across the app.
+- **Unified Track Cleanup**: All active streams are aggressively terminated via `stopAllActiveCameraStreams()` on the following lifecycle events:
+  - Session end (End & Save Session button).
+  - Live session route unmount.
+  - Setup page route unmount.
+  - Positioning gate close, skip, or complete.
+  - Browser `beforeunload` (tab close / page refresh).
+  - Router `navigation-start` events (Next.js route change).
+- **`useCameraLifecycleCleanup`**: This hook must be rendered on any page that consumes a camera stream. It installs the beforeunload and navigation-start listeners.
 
 ### Intended Future System State:
 - **Future AI / Gemini Work**:
   - Gemini sidecar generation exists now as an optional provider.
   - Gemini-backed Assistant Q&A is fully implemented as an optional provider. It enforces strict capability boundaries that prevent the model from claiming it can see the user when no real-time camera pose tracking is active.
   - Future AI work includes live camera-based pose validation, richer biomechanics feedback, and audio/video analysis beyond transcripts.
-- **Real Pose Detection**: Integrate Google MediaPipe on the client or server side using device camera feeds to evaluate form errors and track reps in real-time.
+- **Richer Biomechanics**: Future enhancements include support for additional exercise types and more complex pose profiles.
 - **Physical Sleeve Playback** *(hardware path available now)*: Physical bHaptics TactSleeve playback via the bHaptics Player and bHaptics Python SDK is already integrated. Connecting real sleeves requires a Python 3.8–3.12 environment, the `bhaptics-python` package, and bHaptics Player running on the same machine. See **Section 3** of this README for setup steps.
 - **Real TTS & Audio Coexistence**: Integrate a production Text-to-Speech API and OS-level audio ducking APIs to smoothly overlay speech over YouTube trainer audio.
 - **Production Cloud Storage**: Transition the application to run fully backed by AWS DynamoDB (for users, jobs, sessions, and session event tracking) and AWS S3 (for prepared video manifests, cue plans, and developer diagnostics logs).
 - **Comprehensive Accessibility & Safety Validation**: Screen-reader flow audits and clinical biomechanics validation for movement tracking limits before deployment to actual users.
+
+### Camera Integration Staging & Playback Coordination
+
+The camera integration is implemented in progressive stages:
+1. **Stage 1 (Pose & Positioning Contracts)**: Introduced provider-agnostic pose runtime contracts in [poseRuntimeTypes.ts](frontend/lib/pose/poseRuntimeTypes.ts) and positioning state definitions in [positioningTypes.ts](frontend/lib/pose/positioningTypes.ts).
+2. **Stage 2 (Camera Permission & Setup Preview)**: Introduces frontend browser camera permission acquisition, device enumerate selection, and a client-only video preview component in the pre-session setup screen (leveraging a dedicated client hook and the native HTML5 `video` stream).
+3. **Stage 3 (Pre-Session Setup MediaPipe Alignment)**: Enforces hands-free stance alignment guide powered by client-side browser-local Google MediaPipe Pose Landmarker, tracking centering, orientation, and body posture to auto-start workouts.
+4. **Stage 4 (Per-Exercise Live Positioning Gate & Playback Pause Coordination)**: Automatically gates transitions to new exercises, pausing the player and requesting alignment before allowing workout continuation.
+5. **Stage 5 (Live MediaPipe Rep Counting & Form Analysis)**: Integrates real-time, browser-local Google MediaPipe Pose Landmarker tracking during live workouts for supported movements (squats and bicep curls) to count repetitions and analyze form errors. Unusable or unsupported tracking states automatically fall back to prototype-simulated tracking.
+
+#### Playback Pause Coordinator Model
+To prevent background playback from resuming incorrectly (e.g. when multiple features request pause state), a typesafe coordinator tracks active pause owners:
+- **`positioning_gate`**: Active when the user is performing per-exercise camera alignment.
+- **`assistant_speech`**: Active when the assistant is speaking a "pause before speaking" cue.
+- **`voice_listening`**: Reserved for future audio ducking during active voice capture (not active in this stage).
+- **`user_manual`**: Active when the user pauses manually (including IFrame player clicks or manual voice command).
+
+The playback player will only resume playing if the list of active pause owners becomes completely empty. This guarantees that manual user pauses are never programmatically undone by gate completions or assistant cue speech finishes.
+
+#### Gate Cue Suppression Policy
+Cues whose delivery window overlaps an active positioning gate are permanently suppressed (logged via `cue_suppressed_by_gate` events) and are not marked as recently delivered. Once the alignment gate is completed or skipped, playback seeks back to the start of the exercise anchor, so the cue selection engine naturally re-evaluates and delivers the cues on the replayed segment.
+
+> [!IMPORTANT]
+> - **No Server-Side Video Transmission**: All camera permissions and media stream renders are handled entirely client-side within the browser setup page. No video frames, image data, or tracking telemetry are sent to the backend server.
+> - **Live MediaPipe Tracking and Fallbacks**: Real-time browser-local repetition counting and form analysis are active for supported exercises. If the camera is unavailable, tracking visibility is low, or the exercise is unsupported, the session proceeds using the automatic simulated prototype fallback runtime.
+> - **Browser API Dependencies**: SpeechRecognition and SpeechSynthesis are browser-dependent features. Microphone access and native Web Speech API support are required.
+
+> [!NOTE]
+> The `video2exercise-main` reference directory contains Python algorithms and guidance ratios for tracking alignment. It is **not** a runtime dependency of the web application and will be removed in a later stage.
 
 
 > [!TIP]
@@ -349,6 +434,52 @@ To manually validate live Gemini-backed QnA:
    - *"What exercise are we doing?"* -> Verify it names the current exercise.
    - *"Can you see if my knees are right?"* -> Verify it truthfully states that it cannot see or check your form right now, and offers a general guidance alternative.
 6. Verify the diagnostic details under `backend/.prototype_data/ai_diagnostics/qna_{session_id}_{suffix}.json`. Confirm it logs `question_classification: "self_observation_form_check"` and `question_length` without saving the sensitive question text or full transcript.
+
+
+---
+
+## Stage 3: MediaPipe Pose Landmarker Setup
+
+FitA11y uses the Google MediaPipe Tasks Vision model browser-locally in a focused camera alignment mode before starting the workout.
+- **Focused Alignment Mode**: The pre-session setup screen features a dedicated alignment overlay ensuring the user's posture is centered, orientation is correct, and depth is calibrated.
+- **Hands-Free Auto-Start**: Once the positioning guide confirms readiness for the required duration, an auditory/visual countdown is triggered, automatically starting playback without the user needing to walk back to click the mouse.
+- **Client-Side Security**: All camera frames, image streams, and landmark metrics remain 100% browser-local; no data is ever transmitted to backend APIs.
+- **Camera Selection & Handoff Persistence**: When the user selects or switches webcams (including external USB webcams) in the pre-session setup screen, their preference is automatically persisted in session storage. Upon entering the live workout session, the player reads this preferred `deviceId` and auto-requests it first, preventing the browser from resetting back to the laptop's integrated webcam.
+- **Prioritized Webcam Fallback Hierarchy**: If the preferred webcam is unplugged or fails to start, the camera lifecycle engine automatically falls back using this priority hierarchy:
+  1. Matches devices with a similar label or groupId.
+  2. Prioritizes other external (non-integrated) USB webcams.
+  3. Falls back to the built-in integrated laptop webcam.
+  4. Falls back to generic media stream queries.
+  5. Continues with the camera off and triggers simulated prototype fallback if no camera works.
+- **Camera Feature Split & Fallback Integration**:
+  - **Real Camera & Preview**: User-approved camera feeds, active device listings, and toggle controls are fully operational.
+  - **Real Setup MediaPipe Alignment**: The pre-session setup screen performs live browser-local MediaPipe keypoint detection to calibrate posture, orientation, and depth positioning.
+  - **Real Live MediaPipe Tracking**: Live workout repetition counting and form checking are fully integrated for supported exercises (e.g. squats, bicep curls).
+  - **Simulated Fallback**: For unsupported movements or when the camera is offline/unusable, the app automatically engages a simulated prototype fallback that generates timestamp-based oscillations to simulate workout flow without implying the assistant can see the user.
+- **Decoupled Reference**: The `video2exercise-main/` folder is used strictly for design references and must not become an application dependency.
+
+### Model Asset — Local File (Committed) + CDN Fallback
+
+The `pose_landmarker_heavy.task` model file (~30 MB, Float16 precision) is committed directly to the repository at:
+
+```
+frontend/public/mediapipe/pose_landmarker_heavy.task
+```
+
+The initialization hook `useMediaPipePoseLandmarker` follows this resolution order at runtime:
+
+1. **Local file (preferred)**: Issues a `HEAD /mediapipe/pose_landmarker_heavy.task` request. If the Next.js dev server returns `200 OK`, the file is used directly from the local public directory.
+2. **CDN fallback**: If the HEAD request fails (non-ok status or network error), the hook falls back to streaming the model from the Google CDN:
+   `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task`
+
+> [!IMPORTANT]
+> The local file is only served when the Next.js dev server (`npm run dev`) is running. The HEAD request will fail in bare `node` or test environments — this is expected and handled by the CDN fallback.
+
+If you need to re-download the model (e.g. after deleting it), use:
+```bash
+curl -o frontend/public/mediapipe/pose_landmarker_heavy.task \
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+```
 
 ---
 

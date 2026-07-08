@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -7,26 +6,40 @@ import PageWrapper from "@/components/layout/PageWrapper";
 import { useYouTubePlayer } from "@/lib/hooks/useYouTubePlayer";
 import { useSessionArtifacts } from "@/lib/hooks/useSessionArtifacts";
 import { ProcessingStage } from "@/types";
-import YouTubePlayerPanel from "@/components/session/YouTubePlayerPanel";
-import SessionControls from "@/components/session/SessionControls";
 import { useSessionTelemetry } from "@/lib/hooks/useSessionTelemetry";
 import { useAssistantCueQueue } from "@/lib/hooks/useAssistantCueQueue";
 import { useSpokenCuePlayback } from "@/lib/hooks/useSpokenCuePlayback";
 import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
 import { useHapticEventDelivery } from "@/lib/hooks/useHapticEventDelivery";
-import { InterruptionLevel, AssistantVerbosity, AudioCoexistenceSettings, RuntimeCueSelectionResponse } from "@/types";
+import {
+  InterruptionLevel,
+  AssistantVerbosity,
+  AudioCoexistenceSettings,
+  RuntimeCueSelectionResponse,
+} from "@/types";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 import { useAutomaticCue } from "@/lib/hooks/useAutomaticCue";
 import { useQnAChat } from "@/lib/hooks/useQnAChat";
 import { useLiveVoiceCommands } from "@/lib/hooks/useLiveVoiceCommands";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
-import CurrentAutomaticCuePanel from "@/components/session/CurrentAutomaticCuePanel";
-import QnAChatPanel from "@/components/session/QnAChatPanel";
-import VoiceControlPanel from "@/components/session/VoiceControlPanel";
-import PerformanceSummaryPanel from "@/components/session/PerformanceSummaryPanel";
+import { initSpeechRegistryMonkeyPatch } from "@/lib/voice/speechRegistry";
 import { useSessionEnd } from "@/lib/hooks/useSessionEnd";
 import { useLiveCueDelivery } from "@/lib/hooks/useLiveCueDelivery";
-import { usePrototypePoseSessionEvents } from "@/lib/hooks/usePrototypePoseSessionEvents";
+import { usePoseSessionEvents } from "@/lib/hooks/usePoseSessionEvents";
+import { usePrototypePoseRuntime } from "@/lib/hooks/usePrototypePoseRuntime";
+import { useCameraStream, useCameraLifecycleCleanup } from "@/lib/hooks/useCameraStream";
+import { useMediaPipePoseRuntime } from "@/lib/hooks/useMediaPipePoseRuntime";
+import { getCameraPreference } from "@/lib/camera/cameraPreference";
+import { getExercisePoseProfile } from "@/lib/pose/exercisePoseProfiles";
+import { CameraPositioningGate } from "@/components/session/CameraPositioningGate";
+import { getPoseRequirementForAnchor } from "@/lib/pose/positioningGuide";
+import { usePlaybackPauseCoordinator } from "@/lib/hooks/usePlaybackPauseCoordinator";
+import { useLivePositioningGate } from "@/lib/hooks/useLivePositioningGate";
+import { useLiveSessionAnnouncements } from "@/lib/hooks/useLiveSessionAnnouncements";
+import { useLiveSessionNavigation } from "@/lib/hooks/useLiveSessionNavigation";
+import { useLiveSessionCueGlue } from "@/lib/hooks/useLiveSessionCueGlue";
+import { LiveSessionPlaybackColumn } from "@/components/session/LiveSessionPlaybackColumn";
+import { LiveSessionSidebar } from "@/components/session/LiveSessionSidebar";
 
 interface LiveSessionProps {
   params: {
@@ -51,15 +64,14 @@ function generateQnaCueId(): string {
   return `qna-${Date.now()}-${randomStr}`;
 }
 
-
-
 /** Inferred mapping of cue description text to haptic vibration category types. */
 function getCueTypeFromCue(text: string, metadata?: Record<string, unknown> | null): string {
   if (metadata?.cue_type && typeof metadata.cue_type === "string") return metadata.cue_type;
   const t = text.toLowerCase();
   if (t.includes("countdown")) return "countdown";
   if (t.includes("start")) return "start";
-  if (t.includes("cooldown") || t.includes("cool down") || t.includes("finish") || t.includes("done")) return "cooldown";
+  if (t.includes("cooldown") || t.includes("cool down") || t.includes("finish") || t.includes("done"))
+    return "cooldown";
   if (t.includes("speed up") || t.includes("faster") || t.includes("accelerate")) return "speed_up";
   if (t.includes("slow down") || t.includes("slower") || t.includes("pace")) {
     if (t.includes("slow")) return "slow_down";
@@ -90,28 +102,40 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const [announcement, setAnnouncement] = useState("");
   const { user: userProfile } = useUserProfile();
   const [recentlyDeliveredCueIds, setRecentlyDeliveredCueIds] = useState<string[]>([]);
-  const [currentSpokenCue, setCurrentSpokenCue] = useState<(RuntimeCueSelectionResponse & { timestampMs?: number }) | null>(null);
+  const [currentSpokenCue, setCurrentSpokenCue] = useState<
+    (RuntimeCueSelectionResponse & { timestampMs?: number }) | null
+  >(null);
   const [seekEpoch, setSeekEpoch] = useState(0);
 
-  const { status: hapticStatus, statusText: hapticStatusText, deviceStatuses, isLoading: isLoadingHapticStatus, error: hapticError } = useHapticDeviceStatus();
+  // Camera & lifecycle cleanup
+  useCameraLifecycleCleanup();
+  const cameraStream = useCameraStream();
 
+  const { statusText: hapticStatusText, deviceStatuses } = useHapticDeviceStatus();
 
-
+  // Initialize speech registry monkey-patch to prevent app speech feedback interference
+  React.useEffect(() => {
+    initSpeechRegistryMonkeyPatch();
+  }, []);
 
   const announce = React.useCallback((msg: string) => {
     setAnnouncement(msg);
   }, []);
 
-  const handleAudioCueAnnouncement = React.useCallback((text: string) => {
-    const isSpeechSynthAvailable = typeof window !== "undefined" && !!window.speechSynthesis;
-    if (!isSpeechSynthAvailable || assistantMuted) {
-      announce(`Assistant cue: ${text}`);
-    } else {
-      announce("New assistant cue.");
-    }
-  }, [assistantMuted, announce]);
+  const handleAudioCueAnnouncement = React.useCallback(
+    (text: string) => {
+      const isSpeechSynthAvailable =
+        typeof window !== "undefined" && !!window.speechSynthesis;
+      if (!isSpeechSynthAvailable || assistantMuted) {
+        announce(`Assistant cue: ${text}`);
+      } else {
+        announce("New assistant cue.");
+      }
+    },
+    [assistantMuted, announce]
+  );
 
-  // Hook into the YouTube IFrame player
+  // YouTube IFrame player
   const {
     containerRef,
     isReady,
@@ -131,7 +155,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     isPlayerMuted,
   } = useYouTubePlayer(youtubeId);
 
-  // Session playback interaction telemetry hook
+  // Session playback telemetry
   const { logSessionEvent, getBufferedEvents } = useSessionTelemetry({
     sessionId,
     isReady,
@@ -148,129 +172,521 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
 
-  const { latestAutomaticCue, isAutomaticCueActive, updateLatestAutomaticCue } = useAutomaticCue(currentTimeRef, currentTime);
+  const { latestAutomaticCue, isAutomaticCueActive, updateLatestAutomaticCue } = useAutomaticCue(
+    currentTimeRef,
+    currentTime
+  );
 
   const lastCheckedSecond = useRef<number>(-1);
 
-  const handleSeek = React.useCallback((seconds: number, reason?: string) => {
-    setSeekEpoch((prev) => prev + 1);
-    setCurrentSpokenCue(null);
+  const handleSeek = React.useCallback(
+    (seconds: number, reason?: string) => {
+      setSeekEpoch((prev) => prev + 1);
+      setCurrentSpokenCue(null);
 
-    if (seconds < currentTime - 1.5) {
-      setRecentlyDeliveredCueIds([]);
-      lastCheckedSecond.current = -1;
-    }
+      if (seconds < currentTime - 1.5) {
+        setRecentlyDeliveredCueIds([]);
+        lastCheckedSecond.current = -1;
+      }
 
-    seek(seconds);
+      seek(seconds);
+      if (reason) announce(reason);
+    },
+    [currentTime, seek, announce]
+  );
 
-    if (reason) {
-      announce(reason);
-    }
-  }, [currentTime, seek, announce]);
+  const handleHapticCueTrigger = React.useCallback(
+    (text: string, hapticCueRef: string | null, cueId: string | null) => {
+      const cueType = hapticCueRef || (text ? getCueTypeFromCue(text) : "per_rep_tick");
+      const vibrationId =
+        (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] ||
+        `${cueType}_001`;
+      const limbs = ["left_arm", "right_arm"];
 
-  const handleHapticCueTrigger = React.useCallback((text: string, hapticCueRef: string | null, cueId: string | null) => {
-    const cueType = hapticCueRef || (text ? getCueTypeFromCue(text) : "per_rep_tick");
-    const vibrationId = (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] || `${cueType}_001`;
-    const limbs = ["left_arm", "right_arm"];
+      triggerHapticEvent({
+        cueType,
+        vibrationId,
+        intensity: 0.7,
+        limbs,
+        text,
+        cueId,
+        currentTimeMs: currentTime * 1000,
+      }).catch((err) => {
+        console.error("Failed to trigger haptic cue:", err);
+      });
+    },
+    [userProfile, currentTime, triggerHapticEvent]
+  );
 
-    triggerHapticEvent({
-      cueType,
-      vibrationId,
-      intensity: 0.7,
-      limbs,
-      text,
-      cueId,
-      currentTimeMs: currentTime * 1000
-    }).catch((err) => {
-      console.error("Failed to trigger haptic cue:", err);
-    });
-  }, [userProfile, currentTime, triggerHapticEvent]);
+  // Screen-reader announcements (playback state + artifact loading)
+  useLiveSessionAnnouncements({
+    isReady,
+    isPlaying,
+    isBuffering,
+    hasEnded,
+    playerError,
+    youtubeId,
+    isLoadingArtifacts,
+    artifactsError,
+    manifest,
+    announce,
+  });
 
-  // Monitor playback states to populate the screen-reader announcement live region
-  const prevIsPlayingAnnouncement = useRef(false);
-  useEffect(() => {
-    if (playerError) {
-      announce(`Trainer player error: ${playerError}`);
-    } else if (hasEnded) {
-      announce("Trainer video playback ended.");
-    } else if (isBuffering) {
-      announce("Trainer video is buffering.");
-    } else if (isPlaying) {
-      announce("Trainer video playback started.");
-    } else if (!isPlaying && prevIsPlayingAnnouncement.current) {
-      announce("Trainer video playback paused.");
-    } else if (isReady) {
-      announce("Trainer video player is ready.");
-    } else if (!isReady && youtubeId) {
-      announce("Loading trainer video player.");
-    }
-    prevIsPlayingAnnouncement.current = isPlaying;
-  }, [isReady, isPlaying, isBuffering, hasEnded, playerError, youtubeId, announce]);
-
-
-  const currentExercise = manifest?.exercise_timeline_anchors.find(
-    (anchor) => currentTime >= anchor.start_time_seconds && currentTime <= anchor.end_time_seconds
-  ) || null;
+  const currentExercise =
+    manifest?.exercise_timeline_anchors.find(
+      (anchor) =>
+        currentTime >= anchor.start_time_seconds && currentTime <= anchor.end_time_seconds
+    ) || null;
 
   const currentTimeMs = currentTime * 1000;
 
-  // Setup the prototype pose runtime hook and buffer reps & form errors locally
+  // Playback pause coordinator
+  const pauseCoordinator = usePlaybackPauseCoordinator(
+    play,
+    pause,
+    logSessionEvent,
+    currentTimeMs,
+    () => isEnding
+  );
+
+  const {
+    isLiveGateOpen,
+    liveGateExerciseName,
+    isLiveCountdownActive,
+    liveCancelCountdownTrigger,
+    setLiveCancelCountdownTrigger,
+    liveGuidance,
+    setLiveGuidance,
+    handleSkipLiveGate,
+    handleCompleteLiveGate,
+    cameraGatesDisabled,
+    handleDisableCameraGates,
+    handleRetryAlignment,
+    setIsLiveCountdownActive,
+  } = useLivePositioningGate({
+    isReady,
+    manifest,
+    currentExercise,
+    currentTime,
+    currentTimeMs,
+    cameraStream,
+    pauseCoordinator,
+    logSessionEvent,
+    announce,
+    handleSeek,
+  });
+
+  const handleManualPlay = React.useCallback(() => {
+    pauseCoordinator.releasePause("user_manual", "Manual user play trigger");
+  }, [pauseCoordinator]);
+
+  const handleManualPause = React.useCallback(() => {
+    pauseCoordinator.requestPause("user_manual", "Manual user pause trigger");
+  }, [pauseCoordinator]);
+
+  // Sync IFrame direct play/pause to the pause coordinator user_manual owner
+  useEffect(() => {
+    if (!isPlaying) {
+      const hasProgrammaticOwner =
+        pauseCoordinator.activeOwners.has("positioning_gate") ||
+        pauseCoordinator.activeOwners.has("assistant_speech");
+      if (!hasProgrammaticOwner && !pauseCoordinator.activeOwners.has("user_manual")) {
+        pauseCoordinator.requestPause("user_manual", "IFrame manual pause detected");
+      }
+    } else {
+      if (pauseCoordinator.activeOwners.has("user_manual")) {
+        pauseCoordinator.releasePause("user_manual", "IFrame manual play detected");
+      }
+    }
+  }, [isPlaying, pauseCoordinator]);
+
+  // Instantiate prototype pose runtime fallback
+  const prototypePoseRuntime = usePrototypePoseRuntime({
+    currentTimeMs,
+    activeAnchor: currentExercise,
+    isPlaying,
+  });
+
+  // Instantiate real browser-local MediaPipe live pose runtime
+  const mediaPipePoseRuntime = useMediaPipePoseRuntime({
+    stream: cameraStream.stream,
+    currentExercise,
+    currentTimeMs,
+    isPlaying,
+  });
+
+  // Determine active runtime based on usability, readiness, and visibility
+  const isMediaPipeUsable = React.useMemo(() => {
+    if (cameraGatesDisabled) return false;
+    if (!mediaPipePoseRuntime.isReady) return false;
+    if (mediaPipePoseRuntime.runtimeStatus !== "active") return false;
+    if (!mediaPipePoseRuntime.poseAvailable) return false;
+    if (!mediaPipePoseRuntime.requiredLandmarksVisible) return false;
+
+    // Check if exercise is supported
+    const profile = getExercisePoseProfile(currentExercise);
+    if (!profile.supported) return false;
+
+    return true;
+  }, [mediaPipePoseRuntime.isReady, mediaPipePoseRuntime.runtimeStatus, mediaPipePoseRuntime.poseAvailable, mediaPipePoseRuntime.requiredLandmarksVisible, currentExercise, cameraGatesDisabled]);
+
+  const activePoseRuntime = isMediaPipeUsable ? mediaPipePoseRuntime : prototypePoseRuntime;
+
+  // Automatically start the active pose runtime tracking when the session is loaded/running
+  React.useEffect(() => {
+    if (!activePoseRuntime.isTracking) {
+      activePoseRuntime.startTracking();
+    }
+  }, [activePoseRuntime]);
+
+  // Start camera using the preferred device ID on mount exactly once
+  const autoStartRanRef = useRef(false);
+  useEffect(() => {
+    if (autoStartRanRef.current) return;
+    autoStartRanRef.current = true;
+    const pref = getCameraPreference();
+    cameraStream.requestCamera(pref?.deviceId).catch((err) => {
+      console.error("Failed to auto-start camera on session mount:", err);
+    });
+  }, [cameraStream.requestCamera]);
+
+  // Auto-request camera if idle on exercise transition
+  useEffect(() => {
+    if (!isReady || !currentExercise || cameraGatesDisabled) return;
+    if (cameraStream.status === "idle") {
+      cameraStream.requestCamera().catch((err: any) => {
+        console.error("Auto camera request on transition failed:", err);
+      });
+    }
+  }, [currentExercise, isReady, cameraGatesDisabled, cameraStream.status, cameraStream.requestCamera]);
+
+  // Monitor camera stream changes and announce status to screen reader
+  const lastStreamDeviceIdRef = useRef<string | null>(null);
+  const lastStreamStatusRef = useRef<string>("idle");
+
+  useEffect(() => {
+    if (cameraStream.status === "ready" && cameraStream.stream) {
+      const activeDeviceId = cameraStream.activeDeviceId;
+      const devicesList = cameraStream.devices || [];
+      const activeDevice = devicesList.find((d: any) => d.deviceId === activeDeviceId);
+      const label = activeDevice?.label || "";
+
+      // Only announce if the device ID has actually changed (or transitioned to ready)
+      if (activeDeviceId !== lastStreamDeviceIdRef.current || lastStreamStatusRef.current !== "ready") {
+        lastStreamDeviceIdRef.current = activeDeviceId;
+        lastStreamStatusRef.current = "ready";
+
+        const labelLower = label.toLowerCase();
+        const isIntegrated =
+          labelLower.includes("integrated") ||
+          labelLower.includes("built-in") ||
+          labelLower.includes("facetime") ||
+          labelLower.includes("front") ||
+          labelLower.includes("isight") ||
+          labelLower.includes("internal");
+
+        // Check if user had a preferred external camera that failed
+        const pref = getCameraPreference();
+        const prefWasExternal = pref && !((pref.label || "").toLowerCase().includes("integrated") ||
+                                          (pref.label || "").toLowerCase().includes("built-in") ||
+                                          (pref.label || "").toLowerCase().includes("facetime") ||
+                                          (pref.label || "").toLowerCase().includes("front") ||
+                                          (pref.label || "").toLowerCase().includes("isight") ||
+                                          (pref.label || "").toLowerCase().includes("internal"));
+
+        if (isIntegrated) {
+          if (prefWasExternal && activeDeviceId !== pref?.deviceId) {
+            announce("External webcam unavailable. Switched to integrated webcam.");
+          } else {
+            announce("Using integrated webcam.");
+          }
+        } else {
+          announce("Using external webcam.");
+        }
+      }
+    } else if (
+      cameraStream.status !== "idle" &&
+      cameraStream.status !== "requesting" &&
+      cameraStream.status !== lastStreamStatusRef.current
+    ) {
+      lastStreamStatusRef.current = cameraStream.status;
+      lastStreamDeviceIdRef.current = null;
+      announce("Camera unavailable. Using simulated fallback.");
+    }
+  }, [cameraStream.status, cameraStream.stream, cameraStream.activeDeviceId, cameraStream.devices, announce]);
+
+  const runtimeObservationContext = React.useMemo(() => {
+    const mpActive = mediaPipePoseRuntime.runtimeStatus === "active";
+    const mpAvailable = mediaPipePoseRuntime.poseAvailable;
+    const mpVisible = mediaPipePoseRuntime.requiredLandmarksVisible;
+    const profile = getExercisePoseProfile(currentExercise);
+    const exerciseSupported = profile.supported;
+
+    let pose_available = false;
+    let observation_capability: "not_available" | "available" | "low_confidence" = "not_available";
+    let notes = "";
+
+    if (isMediaPipeUsable && mpAvailable && mpVisible) {
+      pose_available = true;
+      observation_capability = "available";
+      notes = "Real-time camera observation using browser-local MediaPipe is active and reliable.";
+    } else if (mpActive && (!mpAvailable || !mpVisible)) {
+      pose_available = false;
+      observation_capability = "low_confidence";
+      notes = "Camera is present and active, but posture detection confidence is low or required joints are obscured.";
+    } else {
+      pose_available = false;
+      observation_capability = "not_available";
+      if (!exerciseSupported && currentExercise) {
+        notes = `Pose tracking is not supported for exercise: ${currentExercise.name}. Falling back to prototype simulation.`;
+      } else if (mediaPipePoseRuntime.runtimeStatus === "initializing") {
+        notes = "Camera pose tracking is initializing (loading model).";
+      } else {
+        notes = "Camera is offline or fallback simulation is active. The assistant cannot see you.";
+      }
+    }
+
+    const pose_confidence = mpActive ? mediaPipePoseRuntime.landmarkConfidence : null;
+
+    const latest_form_error = (pose_available && mediaPipePoseRuntime.latestFormError)
+      ? {
+          joint: mediaPipePoseRuntime.latestFormError.joint,
+          observed_angle: mediaPipePoseRuntime.latestFormError.observed_angle,
+          expected_range: mediaPipePoseRuntime.latestFormError.expected_range,
+          severity: mediaPipePoseRuntime.latestFormError.severity,
+          message: mediaPipePoseRuntime.latestFormError.message,
+          provider: "camera_mediapipe",
+        }
+      : null;
+
+    const latest_rep_event = (pose_available && mediaPipePoseRuntime.latestRepEvent)
+      ? {
+          rep_count: mediaPipePoseRuntime.latestRepEvent.rep_count,
+          exercise_id: mediaPipePoseRuntime.latestRepEvent.exercise_id,
+          provider: "camera_mediapipe",
+        }
+      : null;
+
+    return {
+      pose_available,
+      pose_confidence,
+      observation_capability,
+      latest_form_error,
+      latest_rep_event,
+      notes,
+    };
+  }, [mediaPipePoseRuntime, isMediaPipeUsable, currentExercise]);
+
   const {
     startPoseTracking,
     stopPoseTracking,
     isPrototypeTracking,
     currentAngles,
-    trackingStatusLabel,
     latestRepCount,
     repsBufferRef,
     formErrorsBufferRef,
-  } = usePrototypePoseSessionEvents({
+  } = usePoseSessionEvents({
     sessionId,
     currentTimeMs,
     currentExercise,
-    isPlaying,
     userProfile,
     announce,
     updateLatestAutomaticCue,
     logSessionEvent,
     triggerHapticEvent,
+    activePoseRuntime,
   });
 
-  // Monitor session artifacts loading updates
-  const prevIsLoadingArtifacts = useRef(false);
-  const prevArtifactsError = useRef<string | null>(null);
+  // Keep screen-reader status text for tracking system and fallback reason
+  const fallbackReason = !isMediaPipeUsable
+    ? !mediaPipePoseRuntime.isReady
+      ? "MediaPipe model is loading"
+      : mediaPipePoseRuntime.runtimeStatus !== "active"
+      ? "Camera stream is inactive"
+      : !mediaPipePoseRuntime.poseAvailable
+      ? "User body not fully detected by camera"
+      : !mediaPipePoseRuntime.requiredLandmarksVisible
+      ? "Required joints not visible in camera view"
+      : "Exercise not supported for camera tracking"
+    : null;
+
+  const activePoseProvider = isMediaPipeUsable ? "camera_mediapipe" : "prototype_pose";
+
+  const handleSelectCameraDevice = React.useCallback(async (deviceId?: string, isExplicit = true) => {
+    const devices = cameraStream.devices || [];
+    const device = devices.find((d: any) => d.deviceId === deviceId);
+    logSessionEvent(SESSION_EVENTS.CAMERA_DEVICE_SELECTED, currentTimeMs, {
+      selectedDeviceId: deviceId || "",
+      selectedDeviceLabel: device?.label || "",
+    });
+    await cameraStream.requestCamera(deviceId, isExplicit);
+  }, [cameraStream.devices, cameraStream.requestCamera, logSessionEvent, currentTimeMs]);
+
+  const cameraPoseStatusLabel = React.useMemo(() => {
+    if (cameraGatesDisabled || cameraStream.status === "idle") {
+      return "Camera off. Using fallback tracking.";
+    }
+    if (cameraStream.status === "requesting") {
+      const devicesList = cameraStream.devices || [];
+      const device = devicesList.find((d: any) => d.deviceId === cameraStream.selectedDeviceId);
+      return `Trying ${device?.label || "Camera"}...`;
+    }
+    if (cameraStream.status === "ready") {
+      if (cameraStream.selectedDeviceId !== cameraStream.activeDeviceId) {
+        const devicesList = cameraStream.devices || [];
+        const selDevice = devicesList.find((d: any) => d.deviceId === cameraStream.selectedDeviceId);
+        return `${selDevice?.label || "Selected camera"} failed. Using integrated webcam fallback.`;
+      }
+      return "Camera ready. Retry alignment available.";
+    }
+    if (cameraStream.status === "error" || cameraStream.status === "permission_denied" || cameraStream.status === "not_found") {
+      const devicesList = cameraStream.devices || [];
+      const selDevice = devicesList.find((d: any) => d.deviceId === cameraStream.selectedDeviceId);
+      return `${selDevice?.label || "Camera"} did not start. Using fallback tracking.`;
+    }
+    return "Camera unavailable.";
+  }, [cameraGatesDisabled, cameraStream.status, cameraStream.selectedDeviceId, cameraStream.activeDeviceId, cameraStream.devices]);
+
+  const cameraPoseGuidance = React.useMemo(() => {
+    if (activePoseProvider === "camera_mediapipe") {
+      return mediaPipePoseRuntime.poseStatusDetails?.guidance || "Real-time camera observation is active.";
+    }
+    return "Simulated fallback tracking is active. Assistive voice and haptic guidance are fully operational.";
+  }, [activePoseProvider, mediaPipePoseRuntime.poseStatusDetails]);
+
+  // Telemetry event logging for camera stream
+  const prevCameraStatusRef = useRef<string>("idle");
+  const prevDeviceIdRef = useRef<string>("");
+
   useEffect(() => {
-    if (isLoadingArtifacts && !prevIsLoadingArtifacts.current) {
-      announce("Assisted playback session artifacts are loading.");
+    if (!isReady) return;
+
+    const currentStatus = cameraStream.status;
+    const activeDeviceId = cameraStream.activeDeviceId;
+    const selectedDeviceId = cameraStream.selectedDeviceId;
+    const prevStatus = prevCameraStatusRef.current;
+    const prevDeviceId = prevDeviceIdRef.current;
+
+    const devicesList = cameraStream.devices || [];
+    const activeDevice = devicesList.find((d: any) => d.deviceId === activeDeviceId);
+    const activeLabel = activeDevice?.label || "";
+    
+    const selectedDevice = devicesList.find((d: any) => d.deviceId === selectedDeviceId);
+    const selectedLabel = selectedDevice?.label || "";
+
+    // 1. CAMERA_REQUESTED
+    if (currentStatus === "requesting" && prevStatus !== "requesting") {
+      logSessionEvent(SESSION_EVENTS.CAMERA_REQUESTED, currentTimeMs, {
+        requestedDeviceId: selectedDeviceId,
+        requestedDeviceLabel: selectedLabel,
+      });
     }
-    if (!isLoadingArtifacts && prevIsLoadingArtifacts.current && manifest) {
-      announce("Assisted playback session artifacts loaded successfully.");
+
+    // 2. CAMERA_READY
+    if (currentStatus === "ready" && prevStatus !== "ready") {
+      logSessionEvent(SESSION_EVENTS.CAMERA_READY, currentTimeMs, {
+        activeDeviceId: activeDeviceId,
+        activeDeviceLabel: activeLabel,
+        selectedDeviceId: selectedDeviceId,
+        selectedDeviceLabel: selectedLabel,
+        status: currentStatus,
+        provider: "camera_mediapipe",
+      });
     }
-    if (artifactsError && artifactsError !== prevArtifactsError.current) {
-      announce(`Failed to load assisted playback artifacts: ${artifactsError}`);
+
+    // 3. CAMERA_FAILED
+    if (
+      (currentStatus === "permission_denied" || currentStatus === "not_found" || currentStatus === "error") &&
+      prevStatus !== currentStatus
+    ) {
+      logSessionEvent(SESSION_EVENTS.CAMERA_FAILED, currentTimeMs, {
+        status: currentStatus,
+        error: cameraStream.errorMessage || "Unknown camera error",
+        fallbackReason: currentStatus === "permission_denied" ? "permission_denied" : "device_not_found",
+        selectedDeviceId: selectedDeviceId,
+        selectedDeviceLabel: selectedLabel,
+      });
     }
-    prevIsLoadingArtifacts.current = isLoadingArtifacts;
-    prevArtifactsError.current = artifactsError;
-  }, [isLoadingArtifacts, manifest, artifactsError, announce]);
+
+    // 4. CAMERA_DEVICE_CHANGED
+    if (
+      currentStatus === "ready" &&
+      prevStatus === "ready" &&
+      activeDeviceId !== prevDeviceId &&
+      prevDeviceId !== ""
+    ) {
+      logSessionEvent(SESSION_EVENTS.CAMERA_DEVICE_CHANGED, currentTimeMs, {
+        previousDeviceId: prevDeviceId,
+        activeDeviceId: activeDeviceId,
+        activeDeviceLabel: activeLabel,
+      });
+    }
+
+    prevCameraStatusRef.current = currentStatus;
+    prevDeviceIdRef.current = activeDeviceId;
+  }, [cameraStream.status, cameraStream.activeDeviceId, cameraStream.selectedDeviceId, cameraStream.devices, isReady, currentTimeMs, logSessionEvent]);
+
+  // Telemetry for fallback and runtime changes
+  const prevPoseProviderRef = useRef<string>("prototype_pose");
+  useEffect(() => {
+    if (!isReady) return;
+    if (activePoseProvider === "prototype_pose" && prevPoseProviderRef.current === "camera_mediapipe") {
+      logSessionEvent(SESSION_EVENTS.CAMERA_FALLBACK_USED, currentTimeMs, {
+        reason: fallbackReason || "camera_disabled_or_unavailable",
+        provider: "prototype_pose",
+      });
+    }
+    prevPoseProviderRef.current = activePoseProvider;
+  }, [activePoseProvider, fallbackReason, isReady, currentTimeMs, logSessionEvent]);
+
+  const prevRuntimeStatusRef = useRef<string>("");
+  useEffect(() => {
+    if (!isReady) return;
+    const status = mediaPipePoseRuntime.runtimeStatus;
+    if (status !== prevRuntimeStatusRef.current) {
+      logSessionEvent(SESSION_EVENTS.POSE_RUNTIME_STATUS_CHANGED, currentTimeMs, {
+        status,
+        provider: "camera_mediapipe",
+      });
+      prevRuntimeStatusRef.current = status;
+    }
+  }, [mediaPipePoseRuntime.runtimeStatus, isReady, currentTimeMs, logSessionEvent]);
+
+  const prevGatesDisabledRef = useRef(false);
+  useEffect(() => {
+    if (!isReady) return;
+    if (cameraGatesDisabled && !prevGatesDisabledRef.current) {
+      logSessionEvent(SESSION_EVENTS.CAMERA_DISABLED_FOR_SESSION, currentTimeMs, {
+        reason: "user_disabled_gates",
+      });
+    }
+    prevGatesDisabledRef.current = cameraGatesDisabled;
+  }, [cameraGatesDisabled, isReady, currentTimeMs, logSessionEvent]);
 
   const searchLevel = searchParams.get("overrideLevel");
   const searchPause = searchParams.get("overridePause");
 
-  const coexistenceSettings = React.useMemo<AudioCoexistenceSettings>(() => {
-    return {
+  const coexistenceSettings = React.useMemo<AudioCoexistenceSettings>(
+    () => ({
       interruption_level: assistantMuted
         ? InterruptionLevel.HAPTIC_ONLY
-        : ((searchLevel as InterruptionLevel) || userProfile?.audio_coexistence?.interruption_level || InterruptionLevel.BRIEF_SPEECH),
-      assistant_verbosity: userProfile?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
-      pause_before_speaking: searchPause !== null
-        ? searchPause === "true"
-        : (userProfile?.audio_coexistence?.pause_before_speaking !== undefined
+        : ((searchLevel as InterruptionLevel) ||
+            userProfile?.audio_coexistence?.interruption_level ||
+            InterruptionLevel.BRIEF_SPEECH),
+      assistant_verbosity:
+        userProfile?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
+      pause_before_speaking:
+        searchPause !== null
+          ? searchPause === "true"
+          : userProfile?.audio_coexistence?.pause_before_speaking !== undefined
           ? userProfile.audio_coexistence.pause_before_speaking
-          : true),
+          : true,
       correction_frequency: userProfile?.audio_coexistence?.correction_frequency || "medium",
-    };
-  }, [assistantMuted, searchLevel, userProfile, searchPause]);
+    }),
+    [assistantMuted, searchLevel, userProfile, searchPause]
+  );
 
+  // Invalidate stale cues on seek or mute/video change
   const prevTimeRef = useRef<number>(0);
   useEffect(() => {
     const diff = Math.abs(currentTime - prevTimeRef.current);
@@ -284,12 +700,13 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     prevTimeRef.current = currentTime;
   }, [currentTime]);
 
-  // Invalidate stale cues on mute or video change
   useEffect(() => {
     setCurrentSpokenCue(null);
   }, [assistantMuted, params.videoId]);
 
-  // Live cue plan candidate selection and delivery orchestration
+
+
+  // Live cue plan delivery
   useLiveCueDelivery({
     cuePlan,
     currentTime,
@@ -304,16 +721,34 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     logSessionEvent,
     announce,
     setCurrentSpokenCue,
+    isGateOpen: isLiveGateOpen,
   });
 
-  // Wire up the assistant cue queue (legacy fallback)
+  // Legacy fallback cue path (only active when no cuePlan)
   const { activeCue } = useAssistantCueQueue(
     cuePlan ? null : manifest,
     currentTimeMs,
     coexistenceSettings
   );
 
-  // Hook for spoken cue playback
+  // Wire legacy activeCue to spoken/haptic/telemetry systems
+  useLiveSessionCueGlue({
+    activeCue,
+    currentTime,
+    currentTimeMs,
+    isLiveGateOpen,
+    coexistenceSettings,
+    userProfile,
+    announce,
+    handleAudioCueAnnouncement,
+    updateLatestAutomaticCue,
+    logSessionEvent,
+    triggerHapticEvent,
+    setCurrentSpokenCue,
+    getCueTypeFromCue,
+  });
+
+  // Spoken cue playback
   useSpokenCuePlayback({
     cueId: currentSpokenCue?.cue_id,
     shouldDeliver: currentSpokenCue?.should_deliver,
@@ -328,8 +763,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     sessionId,
     currentTime,
     isPlaying,
-    play,
-    pause,
+    requestPause: pauseCoordinator.requestPause,
+    releasePause: pauseCoordinator.releasePause,
     getVolume,
     setVolume,
     isPlayerMuted,
@@ -337,21 +772,33 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     seekEpoch,
   });
 
-
-
-  const handleAssistantAnswerReady = React.useCallback((answerText: string) => {
-    const qnaId = generateQnaCueId();
-    setCurrentSpokenCue({
-      cue_id: qnaId,
-      should_deliver: true,
-      modality: "audio",
-      text: answerText,
-      haptic_cue_ref: null,
-      interruption_policy_hint: null,
-      recommended_playback_action: coexistenceSettings.pause_before_speaking ? "pause_before_speaking" : "none",
-      reason: "Assistant Q&A response",
-    });
-  }, [coexistenceSettings.pause_before_speaking]);
+  // Q&A answer delivery (gate-aware)
+  const handleAssistantAnswerReady = React.useCallback(
+    (answerText: string) => {
+      if (isLiveGateOpen) {
+        logSessionEvent(SESSION_EVENTS.QA_SPEECH_SUPPRESSED_BY_GATE, currentTimeMs, {
+          text: answerText,
+          reason: "positioning_gate_active",
+        });
+        announce(`Answer received (text only): ${answerText}`);
+        return;
+      }
+      const qnaId = generateQnaCueId();
+      setCurrentSpokenCue({
+        cue_id: qnaId,
+        should_deliver: true,
+        modality: "audio",
+        text: answerText,
+        haptic_cue_ref: null,
+        interruption_policy_hint: null,
+        recommended_playback_action: coexistenceSettings.pause_before_speaking
+          ? "pause_before_speaking"
+          : "none",
+        reason: "Assistant Q&A response",
+      });
+    },
+    [coexistenceSettings.pause_before_speaking, isLiveGateOpen, currentTimeMs, logSessionEvent, announce]
+  );
 
   const {
     qaMessages,
@@ -377,120 +824,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     announce,
     logSessionEvent,
     onAssistantAnswerReady: handleAssistantAnswerReady,
+    runtimeObservationContext,
   });
 
-  // Append new cues to the message feed as they trigger
-  const lastRecordedCueKey = useRef<string | null>(null);
-  useEffect(() => {
-    if (activeCue) {
-      const cueKey = `${activeCue.timestamp_ms}-${activeCue.text}`;
-      if (lastRecordedCueKey.current === cueKey) return;
-      lastRecordedCueKey.current = cueKey;
-
-      updateLatestAutomaticCue(activeCue.text, "legacy");
-
-      // Expose as announcement for screen readers
-      if (activeCue.modality === "audio") {
-        handleAudioCueAnnouncement(activeCue.text);
-        setCurrentSpokenCue({
-          cue_id: `legacy-${activeCue.timestamp_ms}-${activeCue.text}`,
-          should_deliver: true,
-          modality: "audio",
-          text: activeCue.text,
-          haptic_cue_ref: null,
-          interruption_policy_hint: null,
-          recommended_playback_action: coexistenceSettings.pause_before_speaking ? "pause_before_speaking" : "none",
-          reason: "Legacy fallback cue",
-          timestampMs: activeCue.timestamp_ms || currentTime * 1000
-        });
-      } else if (activeCue.modality === "haptic") {
-        announce(`Haptic cue requested: ${activeCue.text}`);
-      }
-
-      const isHaptic = activeCue.modality === "haptic";
-
-      if (!isHaptic) {
-        logSessionEvent(SESSION_EVENTS.ASSISTANT_CUE_DELIVERED, activeCue.timestamp_ms || currentTime * 1000, {
-          text: activeCue.text,
-          modality: activeCue.modality,
-          priority: activeCue.priority,
-          persona: activeCue.persona
-        });
-      }
-
-      if (isHaptic) {
-        const cueType = getCueTypeFromCue(activeCue.text, activeCue.metadata);
-        const vibrationId = (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] || `${cueType}_001`;
-        const intensity = typeof activeCue.metadata?.intensity === "number" ? activeCue.metadata.intensity : 0.7;
-
-        const limbs: string[] = [];
-        const requestSleeves = (activeCue.metadata?.sleeve_sides || activeCue.metadata?.sleeves || ["both"]) as string[];
-        requestSleeves.forEach(s => {
-          if (s === "left") limbs.push("left_arm");
-          else if (s === "right") limbs.push("right_arm");
-          else if (s === "both") limbs.push("left_arm", "right_arm");
-        });
-        if (limbs.length === 0) {
-          limbs.push("left_arm", "right_arm");
-        }
-
-        triggerHapticEvent({
-          cueType,
-          vibrationId,
-          intensity,
-          limbs,
-          text: activeCue.text,
-          cueId: `legacy-${activeCue.timestamp_ms}-${activeCue.text}`,
-          currentTimeMs: activeCue.timestamp_ms || currentTime * 1000
-        }).catch((err) => {
-          console.error("Failed to trigger haptic event:", err);
-        });
-      }
-    }
-  }, [activeCue, sessionId, currentTime, userProfile, announce, coexistenceSettings, handleAudioCueAnnouncement, updateLatestAutomaticCue, logSessionEvent, triggerHapticEvent]);
-
-  const handleRepeatTrainerInstruction = () => {
-    if (!manifest || !manifest.trainer_instruction_events) return;
-    const priorEvents = manifest.trainer_instruction_events.filter(
-      (evt) => evt.start_ms !== null && evt.start_ms !== undefined && evt.start_ms <= currentTimeMs
-    );
-    if (priorEvents.length > 0) {
-      priorEvents.sort((a, b) => (b.start_ms ?? 0) - (a.start_ms ?? 0));
-      const latestEvent = priorEvents[0];
-      if (latestEvent.start_ms !== null && latestEvent.start_ms !== undefined) {
-        handleSeek(latestEvent.start_ms / 1000, `Repeating trainer instruction: "${latestEvent.text}"`);
-        logSessionEvent(SESSION_EVENTS.TRAINER_INSTRUCTION_REPEATED, currentTimeMs, {
-          text: latestEvent.text,
-          timestamp_ms: latestEvent.start_ms
-        });
-      }
-    } else {
-      announce("No prior trainer instructions found in this workout session.");
-    }
-  };
-
-  const handleSkipSection = () => {
-    if (!manifest || !manifest.exercise_timeline_anchors) return;
-    const nextAnchor = manifest.exercise_timeline_anchors.find(
-      (anchor) => anchor.start_time_seconds > currentTime + 1.0
-    );
-    if (nextAnchor) {
-      handleSeek(nextAnchor.start_time_seconds, `Skipped to section: ${nextAnchor.name}`);
-      logSessionEvent(SESSION_EVENTS.SECTION_SKIPPED, currentTimeMs, {
-        section_name: nextAnchor.name,
-        start_time_seconds: nextAnchor.start_time_seconds
-      });
-    } else {
-      announce("No more exercise sections found in this workout.");
-    }
-  };
-
   // Session end orchestration
-  const {
-    isEnding,
-    endError,
-    handleEndSession,
-  } = useSessionEnd({
+  const { isEnding, endError, handleEndSession } = useSessionEnd({
     sessionId,
     videoId: params.videoId,
     playbackEventsBuffer: getBufferedEvents(),
@@ -499,39 +837,68 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     announce,
   });
 
-
-
   const handleToggleMute = (muted: boolean) => {
     setAssistantMuted(muted);
     announce(muted ? "Assistant voice muted." : "Assistant voice unmuted.");
   };
 
-  // Live voice command orchestration
-  const {
-    voiceStatus,
-    startVoice,
-    stopVoice,
-    lastTranscript: voiceLastTranscript,
-    voiceError,
-  } = useLiveVoiceCommands({
-    isPlaying,
-    play,
-    pause,
-    seek: handleSeek,
-    currentTime,
-    playbackRate,
-    setPlaybackRate,
-    handleSkipSection,
-    handleRepeatTrainerInstruction,
-    assistantMuted,
-    setAssistantMuted: handleToggleMute,
-    submitQuestion,
-    announce,
-    logSessionEvent,
-    currentTimeMs,
-    isQnAPending: isPending,
-  });
+  // Navigation handlers (repeat, skip, previous, read current)
+  const { handleRepeatTrainerInstruction, handleSkipSection, handlePreviousSection, handleReadCurrentSection } =
+    useLiveSessionNavigation({
+      manifest,
+      currentTime,
+      currentTimeMs,
+      currentExercise,
+      handleSeek,
+      logSessionEvent,
+      announce,
+    });
 
+  // Live voice command orchestration
+  const { voiceStatus, startVoice, stopVoice, lastTranscript: voiceLastTranscript, voiceError } =
+    useLiveVoiceCommands({
+      isPlaying,
+      play: handleManualPlay,
+      pause: handleManualPause,
+      seek: handleSeek,
+      currentTime,
+      playbackRate,
+      setPlaybackRate,
+      handleSkipSection,
+      handleRepeatTrainerInstruction,
+      assistantMuted,
+      setAssistantMuted: handleToggleMute,
+      submitQuestion,
+      announce,
+      logSessionEvent,
+      currentTimeMs,
+      isQnAPending: isPending,
+      isGateOpen: isLiveGateOpen,
+      isCountdownActive: isLiveCountdownActive,
+      activeOwners: pauseCoordinator.activeOwners,
+      cameraDevices: cameraStream.devices,
+      selectedCameraDeviceId: cameraStream.selectedDeviceId,
+      requestCamera: cameraStream.requestCamera,
+      onRepeatGuidance: () => {
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(liveGuidance);
+          window.speechSynthesis.speak(utterance);
+        }
+      },
+      onCancelCountdown: () => {
+        setLiveCancelCountdownTrigger((prev) => prev + 1);
+      },
+      onSkipAlignment: () => {
+        handleSkipLiveGate();
+      },
+      handlePreviousSection,
+      handleReadCurrentSection,
+    });
+
+  // ---------------------------------------------------------------------------
+  // Early-return guards
+  // ---------------------------------------------------------------------------
 
   if (!sessionId) {
     return (
@@ -545,16 +912,12 @@ function LiveSessionContent({ params }: LiveSessionProps) {
             An active session is required to record your workout and view telemetry. Please configure your session first.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
-            <Link
-              href={`/session/${params.videoId}/setup`}
-              className="px-5 py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-            >
+            <Link href={`/session/${params.videoId}/setup`}
+              className="px-5 py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
               Go to Session Setup
             </Link>
-            <Link
-              href="/video-library"
-              className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-            >
+            <Link href="/video-library"
+              className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
               Back to Video Library
             </Link>
           </div>
@@ -584,10 +947,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           </svg>
           <h2 className="text-xl font-bold text-white mb-2">Failed to Load Session</h2>
           <p className="text-sm text-slate-400 mb-6">{artifactsError}</p>
-          <Link
-            href="/video-library"
-            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-          >
+          <Link href="/video-library"
+            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
             Back to Video Library
           </Link>
         </div>
@@ -601,22 +962,22 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
           <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
           <h2 className="text-xl font-bold text-white mb-2">Preparation in Progress</h2>
-          <p className="text-sm text-slate-400 mb-2">
-            Workout assistance preparation is not complete yet.
-          </p>
+          <p className="text-sm text-slate-400 mb-2">Workout assistance preparation is not complete yet.</p>
           <p className="text-sm text-yellow-400 font-semibold bg-yellow-400/10 border border-yellow-400/20 px-3 py-1.5 rounded-full mb-6">
             Current Stage: {jobStage ? jobStage.replace(/_/g, " ") : "unknown"}
           </p>
-          <Link
-            href="/video-library"
-            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-          >
+          <Link href="/video-library"
+            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
             Back to Video Library
           </Link>
         </div>
       </PageWrapper>
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
 
   return (
     <PageWrapper id="live-session-wrapper">
@@ -625,200 +986,77 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         {announcement}
       </div>
 
-      {/* Top Bar: Sleeve Calibration & Device Strip */}
-      <div className="mb-6 flex flex-col gap-2">
-        <section className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-md" aria-label="Device Status Bar">
-          <div className="flex items-center gap-2 shrink-0">
-            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-              hapticStatus === "connected" || hapticStatus === "partially_connected"
-                ? "bg-emerald-500 animate-ping"
-                : hapticStatus === "initialized_no_devices" || isLoadingHapticStatus
-                ? "bg-yellow-500 animate-pulse"
-                : "bg-red-500"
-            }`} />
-            <span className="text-sm font-semibold text-slate-300">
-              Haptic Status: {hapticStatusText}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 xl:gap-4 w-full xl:w-auto" aria-label="Individual Sleeve Connection Statuses">
-            {deviceStatuses.map((s) => {
-              const dotColor = s.connected
-                ? "bg-yellow-400 animate-pulse"
-                : "bg-red-500";
-              return (
-                <div key={s.key} className="flex items-center gap-2 p-2 bg-slate-950 border border-slate-800/60 rounded-xl min-w-0" aria-label={`${s.name}: ${s.status_text}`}>
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} aria-hidden="true" />
-                  <div className="text-xs font-bold text-slate-300 min-w-0">
-                    <span className="text-yellow-400">{s.name}: </span>
-                    <span className="block md:inline font-semibold text-slate-400" title={s.status_text}>{s.status_text}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-        {hapticError && (
-          <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs rounded-xl" id="session-haptic-error">
-            Unable to refresh haptic provider status. Indicator mode may still work once the backend is available.
-          </div>
-        )}
-      </div>
-
-      {/* Haptic Event Delivery Feed */}
-      {recentEvents.length > 0 && (
-        <section
-          className="p-4 bg-slate-900 border border-slate-800 rounded-2xl mb-6 shadow-md"
-          aria-live="polite"
-          aria-atomic="true"
-          aria-labelledby="haptic-feed-heading"
-        >
-          <h2 id="haptic-feed-heading" className="text-xs uppercase font-extrabold text-yellow-400 tracking-wider mb-2">
-            Haptic Event Feed (Live Delivery)
-          </h2>
-          <div className="space-y-2">
-            {recentEvents.map((evt, idx) => (
-              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 bg-slate-950 rounded-xl border border-slate-850 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                    evt.deliveryMode === "hardware"
-                      ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                      : evt.deliveryMode === "indicator" || evt.deliveryMode === "dry_run"
-                      ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
-                      : "bg-red-500/10 border border-red-500/20 text-red-400"
-                  }`}>
-                    {evt.deliveryMode}
-                  </span>
-                  <span className="font-bold text-slate-200">{evt.eventName}</span>
-                  <span className="text-slate-500">on {evt.targetLimbs.join(", ")}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-400">
-                  <span className="font-medium italic text-slate-300">{evt.statusMessage}</span>
-                  <span className="text-slate-600 font-medium ml-2">
-                    {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        {/* Left/Center Column: YouTube Embedded Player & Playback Controls */}
-        <div className="lg:col-span-8 flex flex-col gap-6 order-2 lg:order-1">
-          <YouTubePlayerPanel
-            containerRef={containerRef}
-            isReady={isReady}
-            playerError={playerError}
-            metadata={metadata ? {
-              title: metadata.title || undefined,
-              channel_name: metadata.channel_name || undefined,
-              duration: metadata.duration || undefined,
-            } : null}
-            currentTime={currentTime}
-            duration={duration}
-            playbackRate={playbackRate}
-            formatTime={formatTime}
-          >
-            <SessionControls
-              currentTime={currentTime}
-              playbackRate={playbackRate}
-              assistantMuted={assistantMuted}
-              seek={handleSeek}
-              setPlaybackRate={setPlaybackRate}
-              setAssistantMuted={handleToggleMute}
-              handleRepeatTrainerInstruction={handleRepeatTrainerInstruction}
-              isPlaying={isPlaying}
-              play={play}
-              pause={pause}
-              handleSkipSection={handleSkipSection}
-            />
-          </YouTubePlayerPanel>
+        <LiveSessionPlaybackColumn
+          containerRef={containerRef}
+          isReady={isReady}
+          playerError={playerError}
+          metadata={metadata}
+          currentTime={currentTime}
+          duration={duration}
+          playbackRate={playbackRate}
+          assistantMuted={assistantMuted}
+          isPlaying={isPlaying}
+          isPrototypeTracking={isPrototypeTracking}
+          currentAngles={currentAngles}
+          handleSeek={handleSeek}
+          setPlaybackRate={setPlaybackRate}
+          handleToggleMute={handleToggleMute}
+          handleRepeatTrainerInstruction={handleRepeatTrainerInstruction}
+          play={play}
+          pause={pause}
+          handleSkipSection={handleSkipSection}
+          stopPoseTracking={stopPoseTracking}
+          startPoseTracking={startPoseTracking}
+          formatTime={formatTime}
+          cameraPoseStatusLabel={cameraPoseStatusLabel}
+          cameraPoseGuidance={cameraPoseGuidance}
+          cameraPoseAvailable={mediaPipePoseRuntime.poseAvailable}
+          activePoseProvider={activePoseProvider}
+          fallbackReason={fallbackReason}
+          cameraDevices={cameraStream.devices}
+          selectedCameraDeviceId={cameraStream.selectedDeviceId}
+          activeDeviceId={cameraStream.activeDeviceId}
+          pendingDeviceId={cameraStream.pendingDeviceId}
+          onSelectCameraDevice={handleSelectCameraDevice}
+          cameraStatus={cameraStream.status}
+          onRetryCamera={() => cameraStream.requestCamera(cameraStream.selectedDeviceId, true)}
+          onTurnCameraOff={handleDisableCameraGates}
+          onRetryAlignment={handleRetryAlignment}
+        />
 
-          {/* Bottom Pose Feed Panel */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4" aria-label="Pose Tracker Cam">
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all ${isPrototypeTracking ? "bg-emerald-950/40 border-emerald-500/20 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-600"}`}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">{trackingStatusLabel}</h3>
-                <p className="text-xs text-slate-400">
-                  {isPrototypeTracking
-                    ? "Simulating time-varying joint angles from manifest coordinates."
-                    : "Mock tracking coordinates are currently offline."}
-                </p>
-                {isPrototypeTracking && Object.keys(currentAngles).length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-slate-300">
-                    {Object.entries(currentAngles).map(([joint, val]) => (
-                      <span key={joint} className="bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
-                        {joint.replace("_", " ")}: {val.toFixed(0)}{"\u00b0"}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
-              <button
-                type="button"
-                onClick={isPrototypeTracking ? stopPoseTracking : startPoseTracking}
-                className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 ${isPrototypeTracking
-                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                    : "bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-400"
-                  }`}
-                aria-label={isPrototypeTracking ? "Stop prototype pose tracking" : "Start prototype pose tracking"}
-              >
-                {isPrototypeTracking ? "Stop Simulating" : "Start Simulating"}
-              </button>
-            </div>
-          </section>
-        </div>
-
-        {/* Right Column: Tracked Performance & Assistant Cue Feed */}
-        <div className="lg:col-span-4 flex flex-col gap-6 order-1 lg:order-2">
-          <PerformanceSummaryPanel
-            currentExercise={currentExercise}
-            lastHandledRep={latestRepCount}
-            currentTime={currentTime}
-            formatTime={formatTime}
-          />
-
-          <CurrentAutomaticCuePanel
-            latestAutomaticCue={latestAutomaticCue}
-            isAutomaticCueActive={isAutomaticCueActive}
-            formatTime={formatTime}
-            isLoadingCuePlan={isLoadingArtifacts}
-            cuePlanError={artifactsError}
-            isLoadingManifest={isLoadingArtifacts}
-            manifestError={artifactsError}
-          />
-
-          <VoiceControlPanel
-            voiceStatus={voiceStatus}
-            startVoice={startVoice}
-            stopVoice={stopVoice}
-            lastTranscript={voiceLastTranscript}
-            voiceError={voiceError}
-          />
-
-          <QnAChatPanel
-            qaMessages={qaMessages}
-            chatInput={chatInput}
-            setChatInput={setChatInput}
-            isPending={isPending}
-            qaError={qaError}
-            handleSendMessage={handleSendMessage}
-          />
-        </div>
+        <LiveSessionSidebar
+          currentExercise={currentExercise}
+          latestRepCount={latestRepCount}
+          currentTime={currentTime}
+          formatTime={formatTime}
+          latestAutomaticCue={latestAutomaticCue}
+          isAutomaticCueActive={isAutomaticCueActive}
+          isLoadingArtifacts={isLoadingArtifacts}
+          artifactsError={artifactsError}
+          voiceStatus={voiceStatus}
+          startVoice={startVoice}
+          stopVoice={stopVoice}
+          voiceLastTranscript={voiceLastTranscript}
+          voiceError={voiceError}
+          deviceStatuses={deviceStatuses}
+          recentEvents={recentEvents}
+          hapticStatusText={hapticStatusText}
+          qaMessages={qaMessages}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          isPending={isPending}
+          qaError={qaError}
+          handleSendMessage={handleSendMessage}
+        />
       </div>
 
       {/* Bottom Bar: Action buttons */}
-      <section className="flex flex-wrap items-center justify-center gap-3 mt-8 pt-6 border-t border-slate-900" aria-label="Playback and Session Controls">
+      <section
+        className="flex flex-wrap items-center justify-center gap-3 mt-8 pt-6 border-t border-slate-900"
+        aria-label="Playback and Session Controls"
+      >
         <div className="flex flex-col items-center gap-1.5">
           {endError && (
             <span className="text-sm text-red-400 font-semibold animate-pulse" role="alert">
@@ -836,20 +1074,53 @@ function LiveSessionContent({ params }: LiveSessionProps) {
           </button>
         </div>
       </section>
+
+      {/* Positioning Gate Modal */}
+      {isLiveGateOpen && liveGateExerciseName && (() => {
+        const poseReq = getPoseRequirementForAnchor(liveGateExerciseName);
+        return (
+          <CameraPositioningGate
+            isOpen={isLiveGateOpen}
+            onClose={handleSkipLiveGate}
+            stream={cameraStream.stream}
+            requiredCameraOrientation={poseReq.cameraOrientation}
+            requiredBodyOrientation={poseReq.bodyOrientation}
+            onComplete={handleCompleteLiveGate}
+            isActionPending={false}
+            actionButtonLabel="Skip Camera Alignment"
+            title="Camera Positioning Gate"
+            subtitle={`Position yourself for ${liveGateExerciseName}. Live session playback will resume once you are aligned.`}
+            currentGuidance={liveGuidance}
+            onGuidanceChange={setLiveGuidance}
+            onCountdownActiveChange={setIsLiveCountdownActive}
+            cancelCountdownTrigger={liveCancelCountdownTrigger}
+            cameraStatus={cameraStream.status}
+            cameraErrorMessage={cameraStream.errorMessage}
+            cameraDevices={cameraStream.devices}
+            selectedCameraDeviceId={cameraStream.selectedDeviceId}
+            onRequestCamera={cameraStream.requestCamera}
+            onDisableCameraGatesForSession={handleDisableCameraGates}
+            preferredCameraLabel={getCameraPreference()?.label}
+            announce={announce}
+          />
+        );
+      })()}
     </PageWrapper>
   );
 }
 
 export default function LiveSession({ params }: LiveSessionProps) {
   return (
-    <Suspense fallback={
-      <PageWrapper id="live-session-suspense-wrapper">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
-          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Loading Player Page</h2>
-        </div>
-      </PageWrapper>
-    }>
+    <Suspense
+      fallback={
+        <PageWrapper id="live-session-suspense-wrapper">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+            <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
+            <h2 className="text-xl font-bold text-white mb-2">Loading Player Page</h2>
+          </div>
+        </PageWrapper>
+      }
+    >
       <LiveSessionContent params={params} />
     </Suspense>
   );

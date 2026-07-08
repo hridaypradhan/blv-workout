@@ -237,7 +237,8 @@ class TestDynamoDBStorage(unittest.TestCase):
                     "observed_angle": 120.0,
                     "expected_range": [0.0, 90.0],
                     "severity": "warning",
-                    "message": "Knee alignment error"
+                    "message": "Knee alignment error",
+                    "metadata": {"provider": "camera_mediapipe"}
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -249,6 +250,11 @@ class TestDynamoDBStorage(unittest.TestCase):
         success = storage.finalize_session(session_id, playback_events, reps, form_errors)
         self.assertTrue(success)
         self.assertEqual(mock_batch.put_item.call_count, 3)
+
+        # Verify that form_error was put with metadata successfully
+        error_put_item = mock_batch.put_item.call_args_list[2][1]["Item"]
+        self.assertEqual(error_put_item["type"], "error")
+        self.assertEqual(error_put_item["form_error"]["metadata"]["provider"], "camera_mediapipe")
 
     def test_session_exists_and_active(self) -> None:
         storage = DynamoDBSessionStorage()

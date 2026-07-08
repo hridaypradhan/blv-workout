@@ -75,6 +75,7 @@ describe("useLiveVoiceCommands", () => {
     announce: vi.fn(),
     logSessionEvent: vi.fn(),
     currentTimeMs: 120000,
+    autoStart: false,
     ...overrides,
   });
 
@@ -363,7 +364,23 @@ describe("useLiveVoiceCommands", () => {
 
   // --- Speech synthesis collision guard ---
 
-  test("skips command when speechSynthesis is speaking", () => {
+  test("skips non-priority command silently when speechSynthesis is speaking", () => {
+    const props = createProps();
+    Object.defineProperty(window, "speechSynthesis", {
+      value: { speaking: true },
+      writable: true,
+      configurable: true,
+    });
+
+    setMockResult("rewind");
+
+    renderHook(() => useLiveVoiceCommands(props));
+
+    expect(props.seek).not.toHaveBeenCalled();
+    expect(props.announce).not.toHaveBeenCalled();
+  });
+
+  test("allows priority command (pause) when speechSynthesis is speaking", () => {
     const props = createProps();
     Object.defineProperty(window, "speechSynthesis", {
       value: { speaking: true },
@@ -375,10 +392,7 @@ describe("useLiveVoiceCommands", () => {
 
     renderHook(() => useLiveVoiceCommands(props));
 
-    expect(props.pause).not.toHaveBeenCalled();
-    expect(props.announce).toHaveBeenCalledWith(
-      "Please wait for assistant to finish speaking."
-    );
+    expect(props.pause).toHaveBeenCalledTimes(1);
   });
 
   // --- Status and error passthrough ---
@@ -476,5 +490,29 @@ describe("useLiveVoiceCommands", () => {
 
     expect(onAfter).toHaveBeenCalledTimes(1);
     expect(mockStopListening).toHaveBeenCalledTimes(1);
+  });
+
+  test("auto-starts listening on mount when autoStart is enabled and status is idle", () => {
+    mockStatus = "idle";
+    const props = createProps({ autoStart: true });
+    renderHook(() => useLiveVoiceCommands(props));
+
+    expect(mockStartListening).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not auto-start if autoStart is disabled", () => {
+    mockStatus = "idle";
+    const props = createProps({ autoStart: false });
+    renderHook(() => useLiveVoiceCommands(props));
+
+    expect(mockStartListening).not.toHaveBeenCalled();
+  });
+
+  test("does not auto-start if status is unsupported", () => {
+    mockStatus = "unsupported";
+    const props = createProps({ autoStart: true });
+    renderHook(() => useLiveVoiceCommands(props));
+
+    expect(mockStartListening).not.toHaveBeenCalled();
   });
 });

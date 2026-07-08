@@ -163,6 +163,54 @@ export function parseVoiceCommand(transcript: string): VoiceCommand {
     }
   }
 
+  // --- Scroll & Navigation ---
+  if (normalized === "scroll down" || normalized.includes("scroll down")) {
+    return { type: "scroll_down" };
+  }
+  if (normalized === "scroll up" || normalized.includes("scroll up")) {
+    return { type: "scroll_up" };
+  }
+  if (normalized === "page down" || normalized.includes("page down")) {
+    return { type: "page_down" };
+  }
+  if (normalized === "page up" || normalized.includes("page up")) {
+    return { type: "page_up" };
+  }
+  if (
+    normalized === "previous section" ||
+    normalized.includes("previous section") ||
+    normalized.includes("previous exercise") ||
+    normalized.includes("go back a section")
+  ) {
+    return { type: "previous_section" };
+  }
+  if (
+    normalized === "read current section" ||
+    normalized === "read section" ||
+    normalized.includes("read current section") ||
+    normalized.includes("read section")
+  ) {
+    return { type: "read_current_section" };
+  }
+
+  // --- Cancel Countdown ---
+  if (normalized === "cancel countdown") {
+    return { type: "cancel_countdown" };
+  }
+
+  // --- Skip Alignment ---
+  if (normalized === "skip alignment" || normalized === "skip positioning") {
+    return { type: "skip_alignment" };
+  }
+
+  // --- Change Camera ---
+  if (normalized === "change camera" || normalized === "switch camera") {
+    return { type: "change_camera", target: "next" };
+  }
+  if (normalized === "use external camera" || normalized === "switch to external camera" || normalized === "use external webcam") {
+    return { type: "change_camera", target: "external" };
+  }
+
   // --- Unrecognized ---
   return { type: "rejected", reason: "unrecognized", transcript: raw };
 }

@@ -40,11 +40,50 @@ vi.mock("@/components/layout/UserProfileContext", () => ({
   UserProfileProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+const mockMediaPipePoseRuntime = {
+  isReady: false,
+  runtimeStatus: "offline",
+  poseAvailable: false,
+  requiredLandmarksVisible: false,
+  landmarkConfidence: null as number | null,
+  latestFormError: null as unknown,
+  latestRepEvent: null as unknown,
+  isTracking: false,
+  startTracking: vi.fn(),
+  stopTracking: vi.fn(),
+};
+
+const mockPrototypePoseRuntime = {
+  isReady: true,
+  runtimeStatus: "active",
+  poseAvailable: true,
+  requiredLandmarksVisible: true,
+  landmarkConfidence: 0.9,
+  latestFormError: null as unknown,
+  latestRepEvent: null as unknown,
+  isTracking: false,
+  startTracking: vi.fn(),
+  stopTracking: vi.fn(),
+};
+
+vi.mock("@/lib/hooks/useMediaPipePoseRuntime", () => ({
+  useMediaPipePoseRuntime: () => mockMediaPipePoseRuntime,
+}));
+
+vi.mock("@/lib/hooks/usePrototypePoseRuntime", () => ({
+  usePrototypePoseRuntime: () => mockPrototypePoseRuntime,
+}));
+
 // Mock artifacts loading
 vi.mock("@/lib/hooks/useSessionArtifacts", () => ({
   useSessionArtifacts: () => ({
     job: { youtube_id: "yt-123", stage: "completed" },
-    manifest: { exercise_timeline_anchors: [], trainer_instruction_events: [] },
+    manifest: {
+      exercise_timeline_anchors: [
+        { exercise_id: "ex-1", name: "Squats", start_time_seconds: 0, end_time_seconds: 120 }
+      ],
+      trainer_instruction_events: []
+    },
     cuePlan: { cue_candidates: [] },
     transcript: null,
     isLoading: false,
@@ -90,8 +129,8 @@ vi.mock("@/lib/hooks/useHapticDeviceStatus", () => ({
     error: null,
   }),
 }));
-vi.mock("@/lib/hooks/usePrototypePoseSessionEvents", () => ({
-  usePrototypePoseSessionEvents: () => ({
+vi.mock("@/lib/hooks/usePoseSessionEvents", () => ({
+  usePoseSessionEvents: () => ({
     startPoseTracking: vi.fn(),
     stopPoseTracking: vi.fn(),
     isPrototypeTracking: false,
@@ -185,5 +224,110 @@ describe("LiveSession Q&A Speech Integration", () => {
     const lastPlaybackProps = mockUseSpokenCuePlayback.mock.calls[mockUseSpokenCuePlayback.mock.calls.length - 1][0];
     expect(lastPlaybackProps.text).toBe("Do not pause video.");
     expect(lastPlaybackProps.recommendedPlaybackAction).toBe("none");
+  });
+
+  test("constructs reliable MediaPipe context when camera is active and landmarks visible", () => {
+    // Setup MediaPipe to be active and visible
+    mockMediaPipePoseRuntime.isReady = true;
+    mockMediaPipePoseRuntime.runtimeStatus = "active";
+    mockMediaPipePoseRuntime.poseAvailable = true;
+    mockMediaPipePoseRuntime.requiredLandmarksVisible = true;
+    mockMediaPipePoseRuntime.landmarkConfidence = 0.85;
+    mockMediaPipePoseRuntime.latestFormError = {
+      joint: "left_knee",
+      observed_angle: 60,
+      expected_range: [75, 180],
+      severity: "medium",
+      message: "Drift error",
+    };
+    mockMediaPipePoseRuntime.latestRepEvent = {
+      rep_count: 5,
+      exercise_id: "ex-1",
+    };
+
+    // Setup Prototype to also have a mock error
+    mockPrototypePoseRuntime.latestFormError = {
+      joint: "right_knee",
+      observed_angle: 50,
+      expected_range: [75, 180],
+      severity: "high",
+      message: "Proto error",
+    };
+
+
+
+    render(<LiveSessionPage params={{ videoId: "video-123" }} />);
+
+    const qnaProps = mockUseQnAChat.mock.calls[0][0];
+    const context = qnaProps.runtimeObservationContext;
+
+    expect(context.pose_available).toBe(true);
+    expect(context.observation_capability).toBe("available");
+    expect(context.pose_confidence).toBe(0.85);
+    // Should extract ONLY from mediaPipePoseRuntime
+    expect(context.latest_form_error?.joint).toBe("left_knee");
+    expect(context.latest_form_error?.provider).toBe("camera_mediapipe");
+    expect(context.latest_rep_event?.rep_count).toBe(5);
+    expect(context.latest_rep_event?.provider).toBe("camera_mediapipe");
+  });
+
+  test("constructs low-confidence context when camera is present but landmarks are hidden", () => {
+    mockMediaPipePoseRuntime.isReady = true;
+    mockMediaPipePoseRuntime.runtimeStatus = "active";
+    mockMediaPipePoseRuntime.poseAvailable = true;
+    mockMediaPipePoseRuntime.requiredLandmarksVisible = false; // Hidden landmarks!
+    mockMediaPipePoseRuntime.latestFormError = {
+      joint: "left_knee",
+      observed_angle: 60,
+      expected_range: [75, 180],
+      severity: "medium",
+      message: "Drift error",
+    };
+
+    mockPrototypePoseRuntime.latestFormError = {
+      joint: "right_knee",
+      observed_angle: 50,
+      expected_range: [75, 180],
+      severity: "high",
+      message: "Proto error",
+    };
+
+    render(<LiveSessionPage params={{ videoId: "video-123" }} />);
+
+    const qnaProps = mockUseQnAChat.mock.calls[0][0];
+    const context = qnaProps.runtimeObservationContext;
+
+    expect(context.pose_available).toBe(false);
+    expect(context.observation_capability).toBe("low_confidence");
+    // Should not include simulated prototype events as real observation
+    expect(context.latest_form_error).toBeNull();
+    expect(context.latest_rep_event).toBeNull();
+  });
+
+  test("constructs fallback context when falling back to prototype simulation", () => {
+    // MediaPipe offline/unusable
+    mockMediaPipePoseRuntime.isReady = false;
+    mockMediaPipePoseRuntime.runtimeStatus = "offline";
+    mockMediaPipePoseRuntime.poseAvailable = false;
+
+    mockPrototypePoseRuntime.latestFormError = {
+      joint: "right_knee",
+      observed_angle: 50,
+      expected_range: [75, 180],
+      severity: "high",
+      message: "Proto error",
+    };
+
+    render(<LiveSessionPage params={{ videoId: "video-123" }} />);
+
+    const qnaProps = mockUseQnAChat.mock.calls[0][0];
+    const context = qnaProps.runtimeObservationContext;
+
+    expect(context.pose_available).toBe(false);
+    expect(context.observation_capability).toBe("not_available");
+    // Should not include simulated form/rep events in real observation context fields
+    expect(context.latest_form_error).toBeNull();
+    expect(context.latest_rep_event).toBeNull();
+    expect(context.notes).toContain("Camera is offline or fallback simulation is active");
   });
 });

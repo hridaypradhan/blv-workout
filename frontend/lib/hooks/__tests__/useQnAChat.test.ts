@@ -147,4 +147,40 @@ describe("useQnAChat Hook Q&A Speech Integration", () => {
     expect(announceMock).toHaveBeenCalledWith("Assistant response received.");
     vi.unstubAllGlobals();
   });
+
+  test("passes custom runtimeObservationContext to askAssistant when provided", async () => {
+    vi.mocked(askAssistant).mockResolvedValue({
+      answer_text: "Observation test response.",
+      answer_kind: "general_guidance",
+      provider: "test-provider",
+      grounding_sources: [],
+      spoken_safe: true,
+    });
+
+    const mockObservation = {
+      pose_available: true,
+      pose_confidence: 0.85,
+      observation_capability: "available" as const,
+      latest_form_error: { joint: "left_knee", observed_angle: 60, expected_range: [75, 180] as [number, number], severity: "medium" },
+      latest_rep_event: { rep_count: 3, exercise_id: "ex-1" },
+      notes: "Clear line of sight.",
+    };
+
+    const props = {
+      ...defaultProps,
+      runtimeObservationContext: mockObservation,
+    };
+
+    const { result } = renderHook(() => useQnAChat(props));
+
+    await act(async () => {
+      await result.current.submitQuestion("How's my posture?", "typed");
+    });
+
+    expect(askAssistant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtime_observation_context: mockObservation,
+      })
+    );
+  });
 });

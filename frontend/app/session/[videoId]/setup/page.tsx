@@ -13,6 +13,18 @@ import { SleeveSide, AssistantPersona, QARequest, InterruptionLevel, AudioCoexis
 import { useUserProfile } from "@/components/layout/UserProfileContext";
 import { useSessionArtifacts } from "@/lib/hooks/useSessionArtifacts";
 import { buildFrontendQnAContext } from "@/lib/qnaContextBuilder";
+import { useCameraStream, useCameraLifecycleCleanup } from "@/lib/hooks/useCameraStream";
+import { saveCameraPreference } from "@/lib/camera/cameraPreference";
+import { getPoseRequirementForAnchor } from "@/lib/pose/positioningGuide";
+import { SetupAlignmentMode } from "@/components/session/SetupAlignmentMode";
+import { useSetupVoiceCommands } from "@/lib/hooks/useSetupVoiceCommands";
+import { initSpeechRegistryMonkeyPatch } from "@/lib/voice/speechRegistry";
+import { SetupDifficultySection } from "@/components/session/SetupDifficultySection";
+import { SetupAudioCoexistenceSection } from "@/components/session/SetupAudioCoexistenceSection";
+import { SetupSleeveStatusSection } from "@/components/session/SetupSleeveStatusSection";
+import { SetupAskAssistantSection } from "@/components/session/SetupAskAssistantSection";
+import { SetupVoiceSection } from "@/components/session/SetupVoiceSection";
+import { CameraAlignmentSection } from "@/components/session/CameraAlignmentSection";
 
 interface SetupPageProps {
   params: {
@@ -41,6 +53,20 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
   const [pauseBeforeSpeaking, setPauseBeforeSpeaking] = useState(true);
   const [difficulty, setDifficulty] = useState("diff-norm");
+
+  // Initialize speech registry monkey-patch to prevent app speech feedback interference
+  useEffect(() => {
+    initSpeechRegistryMonkeyPatch();
+  }, []);
+
+  // Camera stream & Positioning state
+  useCameraLifecycleCleanup();
+  const cameraStream = useCameraStream();
+  const [isCameraPositionedReady, setIsCameraPositionedReady] = useState(false);
+  const [isAlignmentOpen, setIsAlignmentOpen] = useState(false);
+  const [currentGuidance, setCurrentGuidance] = useState("Position yourself in front of the camera.");
+  const [isSetupCountdownActive, setIsSetupCountdownActive] = useState(false);
+  const [cancelCountdownTrigger, setCancelCountdownTrigger] = useState(0);
 
   // Ask Assistant states
   const [askInput, setAskInput] = useState("");
@@ -82,40 +108,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
     }
   }, [user]);
 
-  if (isLoadingArtifacts) {
-    return (
-      <PageWrapper id="session-setup-loading">
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6">
-          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
-          <h1 className="text-xl font-bold text-white mb-2">Loading workout settings...</h1>
-          <p className="text-slate-400 text-sm">Preloading manifest, cue plan, and transcript for camera-free playback.</p>
-        </div>
-      </PageWrapper>
-    );
-  }
-
-  if (artifactsError) {
-    return (
-      <PageWrapper id="session-setup-error">
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 max-w-md mx-auto">
-          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-full mb-4 text-red-400">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h1 className="text-xl font-bold text-white mb-2">Failed to load session settings</h1>
-          <p className="text-slate-400 text-sm mb-6">{artifactsError}</p>
-          <Link href="/process" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-bold text-white rounded-lg border border-slate-700">
-            Back to Prepare Assistance
-          </Link>
-        </div>
-      </PageWrapper>
-    );
-  }
-
-  const handleAskQuestion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = askInput.trim();
+  const executeAskQuestion = async (query: string) => {
     if (!query || isPending) return;
 
     setIsPending(true);
@@ -178,7 +171,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
           observation_capability: "not_available",
           latest_form_error: null,
           latest_rep_event: null,
-          notes: "Pre-session setup does not have camera or pose observation available."
+          notes: "Pre-session setup-only MediaPipe positioning guide may be available locally, but the assistant does not receive camera frames or live form telemetry, and live workout form observation is still unavailable."
         },
         session_context: fullContext
       };
@@ -195,6 +188,11 @@ export default function SessionSetup({ params }: SetupPageProps) {
     } finally {
       setIsPending(false);
     }
+  };
+
+  const handleAskQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeAskQuestion(askInput);
   };
 
   const handleTestSleeve = async (sleeveKey: string, name: string) => {
@@ -231,6 +229,12 @@ export default function SessionSetup({ params }: SetupPageProps) {
         throw new Error("Backend response did not contain a valid session ID.");
       }
 
+      // Save camera preference on starting workout if a device is selected
+      if (cameraStream.selectedDeviceId) {
+        const dev = cameraStream.devices.find((d: MediaDeviceInfo) => d.deviceId === cameraStream.selectedDeviceId);
+        saveCameraPreference(cameraStream.selectedDeviceId, dev?.label || "");
+      }
+
       // Do NOT patch user settings from pre-session setup. Pass overrides via query params instead.
       const queryParams = new URLSearchParams();
       queryParams.set("sessionId", session.id);
@@ -247,6 +251,62 @@ export default function SessionSetup({ params }: SetupPageProps) {
       setIsStarting(false);
     }
   };
+
+  // Setup Voice Commands Hook
+  const setupVoice = useSetupVoiceCommands({
+    requestCamera: () => cameraStream.requestCamera(),
+    stopCamera: () => cameraStream.stopCamera(),
+    onStartAlignment: () => setIsAlignmentOpen(true),
+    onCancelAlignment: () => setIsAlignmentOpen(false),
+    onRepeatGuidance: () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(currentGuidance);
+        window.speechSynthesis.speak(utterance);
+      }
+    },
+    onCancelCountdown: () => {
+      setCancelCountdownTrigger((prev) => prev + 1);
+    },
+    onStartWorkout: () => handleStartWorkout(),
+    onChooseDifficulty: (diff) => setDifficulty(diff),
+    onAskAssistant: (query) => executeAskQuestion(query),
+    isAlignmentOpen,
+    isCountdownActive: isSetupCountdownActive,
+    isCameraStreamReady: cameraStream.status === "ready" && cameraStream.stream !== null,
+    isStarting,
+  });
+
+  if (isLoadingArtifacts) {
+    return (
+      <PageWrapper id="session-setup-loading">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6">
+          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
+          <h1 className="text-xl font-bold text-white mb-2">Loading workout settings...</h1>
+          <p className="text-slate-400 text-sm">Preloading manifest, cue plan, and transcript for camera-free playback.</p>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (artifactsError) {
+    return (
+      <PageWrapper id="session-setup-error">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 max-w-md mx-auto">
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-full mb-4 text-red-400">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-white mb-2">Failed to load session settings</h1>
+          <p className="text-slate-400 text-sm mb-6">{artifactsError}</p>
+          <Link href="/process" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-bold text-white rounded-lg border border-slate-700">
+            Back to Prepare Assistance
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
 
   const sleeveStatus = (deviceStatuses.length > 0 ? deviceStatuses : [
     { key: "left_arm", name: "Left Arm", status_text: "Disconnected", connected: false },
@@ -279,318 +339,45 @@ export default function SessionSetup({ params }: SetupPageProps) {
         </div>
 
         <div className="space-y-8">
-          {/* Main Grid: Camera & Sleeve Checks */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Camera Check */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between" aria-labelledby="camera-heading">
-              <div>
-                <h2 id="camera-heading" className="text-lg font-bold text-white mb-2">
-                  Prototype Pose Tracking (Camera-Free)
-                </h2>
-                <p className="text-sm text-slate-300 mb-4">
-                  In this prototype, joint angles are simulated mathematically based on playback timestamps. No camera permission or video stream processing is requested.
-                </p>
-              </div>
+          <SetupDifficultySection
+            difficulty={difficulty}
+            setDifficulty={setDifficulty}
+          />
 
-              {/* Camera Preview Box Placeholder */}
-              <div className="flex-1 min-h-[180px] bg-slate-950 border border-slate-800 rounded-2xl flex flex-col items-center justify-center p-6 text-center">
-                <svg
-                  className="w-10 h-10 text-slate-600 mb-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1.5"
-                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  />
-                </svg>
-                <p className="text-sm text-slate-200 font-bold mb-1">Camera Feed Disabled in Prototype</p>
-                <p className="text-sm text-slate-400">Workout tracking is mathematically simulated. Camera access is not requested.</p>
-              </div>
-            </section>
+          <SetupAudioCoexistenceSection
+            interruptionLevel={interruptionLevel}
+            setInterruptionLevel={setInterruptionLevel}
+            pauseBeforeSpeaking={pauseBeforeSpeaking}
+            setPauseBeforeSpeaking={setPauseBeforeSpeaking}
+          />
 
-            {/* Sleeve Status */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col justify-between" aria-labelledby="sleeve-heading">
-              <div>
-                <div className="flex items-center justify-between flex-wrap gap-4 mb-2">
-                  <h2 id="sleeve-heading" className="text-lg font-bold text-white">
-                    Haptic Sleeve Status
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={refreshHaptic}
-                    disabled={isHapticLoading}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 disabled:bg-slate-900 text-slate-300 hover:text-white font-bold rounded-lg text-xs border border-slate-700 transition-all flex items-center gap-1.5"
-                    id="refresh-haptic-setup-btn"
-                  >
-                    {isHapticLoading ? (
-                      <span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <span>Refresh Status</span>
-                    )}
-                  </button>
-                </div>
-                <p className="text-sm text-slate-300 mb-4">
-                  Verify sleeve readiness. If physical sleeves are connected to your bHaptics Player, they will receive test pulses.
-                </p>
+          <SetupSleeveStatusSection
+            refreshHaptic={refreshHaptic}
+            isHapticLoading={isHapticLoading}
+            hapticStatus={hapticStatus}
+            hapticError={hapticError}
+            hapticStatusText={hapticStatusText}
+            sleeveStatus={sleeveStatus}
+            testingSleeves={testingSleeves}
+            sleeveResults={sleeveResults}
+            handleTestSleeve={handleTestSleeve}
+          />
 
-                {/* Warning Alert Banner for unavailable states or status errors */}
-                {(hapticStatus === "player_unavailable" || hapticStatus === "not_configured" || hapticStatus === "sdk_unavailable" || hapticStatus === "python_unsupported" || hapticError) && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl text-xs mb-4">
-                    <strong className="block font-bold mb-0.5">
-                      {hapticError ? "Haptic Provider Unreachable" :
-                       hapticStatus === "player_unavailable" ? "bHaptics Player Offline" :
-                       hapticStatus === "not_configured" ? "bHaptics Credentials Missing" :
-                       hapticStatus === "sdk_unavailable" ? "bHaptics SDK Not Installed" :
-                       "Python Version Unsupported"}
-                    </strong>
-                    <span>
-                      {hapticError ? "Unable to refresh haptic provider status. Indicator mode may still work once the backend is available." :
-                       hapticStatus === "player_unavailable" ? "Please launch the bHaptics Player app on your machine and pair your sleeves there." :
-                       hapticStatus === "not_configured" ? "Please set your bHaptics APP_ID and API_KEY in settings to connect." :
-                       "The bHaptics software library could not be loaded on this environment."}
-                    </span>
-                    <span className="block mt-1 text-slate-400 font-medium">
-                      You can safely continue workout playback anyway; the session will fall back to using accessibility screen-reader and visual indicators.
-                    </span>
-                  </div>
-                )}
+          <SetupAskAssistantSection
+            handleAskQuestion={handleAskQuestion}
+            askInput={askInput}
+            setAskInput={setAskInput}
+            isPending={isPending}
+            qaError={qaError}
+            assistantResponse={assistantResponse}
+          />
 
-                {/* Connection Status Text */}
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl mb-4 text-xs font-semibold text-slate-300">
-                  Provider status: <span className="text-slate-100 font-bold">{hapticStatusText}</span>
-                </div>
-              </div>
+          <SetupVoiceSection setupVoice={setupVoice} />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {sleeveStatus.map((sleeve) => {
-                  const isTesting = !!testingSleeves[sleeve.key];
-                  const testResult = sleeveResults[sleeve.key];
-                  return (
-                    <div
-                      key={sleeve.key}
-                      className="flex flex-col justify-between p-4 bg-slate-950 border border-slate-800 rounded-xl gap-3"
-                    >
-                      {/* Top: Sleeve Name */}
-                      <div>
-                        <span className="text-sm font-semibold text-slate-200 block">
-                          {sleeve.name}
-                        </span>
-                      </div>
-
-                      {/* Middle: Connection Status */}
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${sleeve.colorClass}`}
-                          aria-hidden="true"
-                        />
-                        <span className="text-sm font-semibold text-slate-300">
-                          {sleeve.statusText}
-                        </span>
-                      </div>
-
-                      {/* Bottom/Action Row */}
-                      <div className="flex flex-col gap-2 pt-2 border-t border-slate-900 mt-auto">
-                        <button
-                          type="button"
-                          onClick={() => handleTestSleeve(sleeve.key, sleeve.name)}
-                          disabled={isTesting}
-                          className="w-full px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-xs font-bold text-slate-200 border border-slate-700 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all text-center shrink-0"
-                          aria-label={`Test ${sleeve.name} haptic cue`}
-                        >
-                          {isTesting ? "Testing..." : "Test Pulse"}
-                        </button>
-                        {testResult && (
-                          <span
-                            className={`text-[10px] font-semibold font-mono px-2 py-0.5 rounded text-center block ${
-                              testResult.includes("Hardware")
-                                ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                                : testResult === "Failed"
-                                ? "bg-red-500/10 border border-red-500/20 text-red-400"
-                                : "bg-blue-500/10 border border-blue-500/20 text-blue-400"
-                            }`}
-                          >
-                            {testResult}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-
-          {/* Assistant Interruption & Tolerances Selector */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="difficulty-heading">
-            <h2 id="difficulty-heading" className="text-lg font-bold text-white mb-2">
-              How are you feeling today?
-            </h2>
-            <p className="text-sm text-slate-300 mb-4">
-              The assistant adjusts its interruption level and haptic tolerances based on your current state (applicable for this session only).
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="radiogroup" aria-labelledby="difficulty-heading">
-              {[
-                { id: "diff-fresh", label: "Fresh", desc: "Push for perfect posture tolerances." },
-                { id: "diff-norm", label: "Normal", desc: "Standard tolerances & correction rates." },
-                { id: "diff-tired", label: "Tired", desc: "Relaxed threshold, gentle voice encouragement." },
-              ].map((diff) => (
-                <label
-                  key={diff.id}
-                  htmlFor={diff.id}
-                  className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 text-center ${
-                    difficulty === diff.id
-                      ? "bg-slate-950 border-2 border-yellow-400"
-                      : "bg-slate-950 border border-slate-800 hover:border-slate-700"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    id={diff.id}
-                    name="difficulty"
-                    value={diff.id}
-                    checked={difficulty === diff.id}
-                    onChange={(e) => setDifficulty(e.target.value)}
-                    className="sr-only"
-                  />
-                  <span className="text-sm font-bold text-white mb-1">{diff.label}</span>
-                  <span className="text-sm text-slate-300 leading-normal">{diff.desc}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          {/* Audio Coexistence Preferences */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="audio-coexistence-heading">
-            <h2 id="audio-coexistence-heading" className="text-lg font-bold text-white mb-2">
-              Audio Coexistence (Session Overrides)
-            </h2>
-            <p className="text-sm text-slate-300 mb-4">
-              Configure how the assistant coexists with the trainer&apos;s audio. (These selections will override your saved defaults for this session only).
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6" role="radiogroup" aria-labelledby="audio-coexistence-heading">
-              {[
-                { id: "setup-int-silent", value: "silent", label: "Silent", desc: "No voice feedback. Playback is entirely uninterrupted." },
-                { id: "setup-int-haptic", value: "haptic_only", label: "Haptic Only", desc: "Vibration cues on sleeves. Speech is fully silenced." },
-                { id: "setup-int-brief", value: "brief_speech", label: "Brief Speech", desc: "Short correction words only during clear speech gaps." },
-                { id: "setup-int-full", value: "full_speech", label: "Full Speech", desc: "Ducks YouTube audio to deliver complete form guidance." },
-              ].map((lvl) => (
-                <label
-                  key={lvl.id}
-                  htmlFor={lvl.id}
-                  className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 ${
-                    interruptionLevel === lvl.value
-                      ? "bg-slate-950 border-2 border-yellow-400"
-                      : "bg-slate-950 border border-slate-800 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      id={lvl.id}
-                      name="interruption-level"
-                      value={lvl.value}
-                      checked={interruptionLevel === lvl.value}
-                      onChange={(e) => setInterruptionLevel(e.target.value)}
-                      className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400"
-                    />
-                    <span className="text-sm font-bold text-white">{lvl.label}</span>
-                  </div>
-                  <span className="text-sm text-slate-300 mt-1.5">{lvl.desc}</span>
-                </label>
-              ))}
-            </div>
-
-            {/* Pause Before Speaking Toggle */}
-            <div className="flex items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
-              <div className="flex flex-col gap-0.5">
-                <label htmlFor="pause-before-speaking" className="text-sm font-bold text-slate-200 cursor-pointer">
-                  Pause Before Speaking
-                </label>
-                <span className="text-sm text-slate-300">Briefly pauses the YouTube video when the assistant speaks a correction.</span>
-              </div>
-              <input
-                type="checkbox"
-                id="pause-before-speaking"
-                checked={pauseBeforeSpeaking}
-                onChange={(e) => setPauseBeforeSpeaking(e.target.checked)}
-                className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
-              />
-            </div>
-          </section>
-
-          {/* Assistant pre-workout Q&A */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="ask-heading">
-            <h2 id="ask-heading" className="text-lg font-bold text-white mb-1">
-              Ask Assistant
-            </h2>
-            <p className="text-sm text-slate-300 mb-4">
-              Have questions about the moves? Ask the assistant for supplementary tips before starting.
-            </p>
-
-            <form onSubmit={handleAskQuestion} className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                placeholder="Ask e.g. 'How do I align my feet for a squats setup?'"
-                value={askInput}
-                onChange={(e) => setAskInput(e.target.value)}
-                className="flex-1 px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
-                aria-label="Ask about today's exercises before starting"
-                id="setup-ask-input"
-              />
-              <button
-                type="submit"
-                disabled={isPending}
-                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-slate-100 font-bold rounded-xl text-sm border border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 transition-all min-w-[80px] flex items-center justify-center"
-                id="setup-ask-btn"
-                aria-label={isPending ? "Assistant is responding" : undefined}
-              >
-                {isPending ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-slate-200 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
-                    <span className="sr-only">Assistant is responding</span>
-                  </>
-                ) : (
-                  "Send"
-                )}
-              </button>
-            </form>
-
-            {qaError && (
-              <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 font-medium flex items-center gap-2" role="alert">
-                <svg
-                  className="w-5 h-5 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <span>{qaError}</span>
-              </div>
-            )}
-
-            {assistantResponse && (
-              <div className="mt-4 p-4 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200">
-                <span className="font-bold text-yellow-400 block mb-1">Assistant Response:</span>
-                <p>{assistantResponse}</p>
-              </div>
-            )}
-          </section>
+          <CameraAlignmentSection
+            cameraStream={cameraStream}
+            setIsAlignmentOpen={setIsAlignmentOpen}
+          />
 
           {/* Start Assisted Playback Button */}
           <div className="pt-2">
@@ -617,6 +404,11 @@ export default function SessionSetup({ params }: SetupPageProps) {
                 <span>{error}</span>
               </div>
             )}
+            {isCameraPositionedReady && (
+              <p className="text-xs font-semibold text-emerald-400 mb-2" id="camera-positioned-msg">
+                Stance is ready and confirmed.
+              </p>
+            )}
             <button
               onClick={handleStartWorkout}
               disabled={isStarting}
@@ -635,6 +427,27 @@ export default function SessionSetup({ params }: SetupPageProps) {
           </div>
         </div>
       </div>
+
+      {isAlignmentOpen && (() => {
+        const firstExerciseName = manifest?.exercise_timeline_anchors?.[0]?.name || "standing";
+        const poseReq = getPoseRequirementForAnchor(firstExerciseName);
+        return (
+          <SetupAlignmentMode
+            isOpen={isAlignmentOpen}
+            onClose={() => setIsAlignmentOpen(false)}
+            stream={cameraStream.stream}
+            requiredCameraOrientation={poseReq.cameraOrientation}
+            requiredBodyOrientation={poseReq.bodyOrientation}
+            onStartWorkout={handleStartWorkout}
+            isStarting={isStarting}
+            onReadyChange={setIsCameraPositionedReady}
+            currentGuidance={currentGuidance}
+            onGuidanceChange={setCurrentGuidance}
+            onCountdownActiveChange={setIsSetupCountdownActive}
+            cancelCountdownTrigger={cancelCountdownTrigger}
+          />
+        );
+      })()}
     </PageWrapper>
   );
 }

@@ -5,6 +5,15 @@ import { useSpeechRecognition, SpeechRecognitionStatus } from "./useSpeechRecogn
 import { parseVoiceCommand } from "@/lib/voice/voiceCommandParser";
 import { VoiceCommand } from "@/lib/voice/voiceCommandTypes";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
+import {
+  handlePlaybackCommand,
+  handleNavigationCommand,
+  handleSpeechCommand,
+  handleQnACommand,
+  handleCameraCommand,
+} from "@/lib/voice/liveVoiceCommandHandlers";
+import { isSpeakingOrRecentlySpoken } from "@/lib/voice/speechRegistry";
+import { PauseOwner } from "./usePlaybackPauseCoordinator";
 
 export interface UseLiveVoiceCommandsProps {
   isPlaying: boolean;
@@ -28,6 +37,18 @@ export interface UseLiveVoiceCommandsProps {
   onBeforeListening?: () => void;
   /** Optional callback invoked after the mic stops listening. */
   onAfterListening?: () => void;
+  isGateOpen?: boolean;
+  isCountdownActive?: boolean;
+  onRepeatGuidance?: () => void;
+  onCancelCountdown?: () => void;
+  onSkipAlignment?: () => void;
+  handlePreviousSection?: () => void;
+  handleReadCurrentSection?: () => void;
+  autoStart?: boolean;
+  cameraDevices?: MediaDeviceInfo[];
+  selectedCameraDeviceId?: string;
+  requestCamera?: (deviceId?: string) => Promise<void>;
+  activeOwners?: Set<PauseOwner>;
 }
 
 export interface UseLiveVoiceCommandsReturn {
@@ -47,6 +68,7 @@ const MAX_PROCESSED_IDS = 200;
  *
  * Connects the browser SpeechRecognition adapter and the deterministic
  * command parser to the live session's playback and Q&A actions.
+ * Command dispatch logic lives in liveVoiceCommandHandlers.ts.
  */
 export function useLiveVoiceCommands({
   isPlaying,
@@ -54,7 +76,8 @@ export function useLiveVoiceCommands({
   pause,
   seek,
   currentTime,
-  playbackRate,
+  // playbackRate is part of the public interface but not consumed in this hook body;
+  // setPlaybackRate is forwarded to the pure playback handler instead.
   setPlaybackRate,
   handleSkipSection,
   handleRepeatTrainerInstruction,
@@ -67,6 +90,18 @@ export function useLiveVoiceCommands({
   isQnAPending = false,
   onBeforeListening,
   onAfterListening,
+  isGateOpen = false,
+  isCountdownActive = false,
+  onRepeatGuidance,
+  onCancelCountdown,
+  onSkipAlignment,
+  handlePreviousSection,
+  handleReadCurrentSection,
+  autoStart = true,
+  cameraDevices,
+  selectedCameraDeviceId,
+  requestCamera,
+  activeOwners,
 }: UseLiveVoiceCommandsProps): UseLiveVoiceCommandsReturn {
   const {
     status: voiceStatus,
@@ -82,15 +117,23 @@ export function useLiveVoiceCommands({
   // Dedup guard: track processed result IDs to prevent reprocessing
   const processedIdsRef = useRef<Set<string>>(new Set());
 
-  // Stable refs for current values to avoid stale closures in the effect
+  // Stable refs for current values (avoids stale closures)
   const currentTimeRef = useRef(currentTime);
   const currentTimeMsRef = useRef(currentTimeMs);
-  const playbackRateRef = useRef(playbackRate);
   const isPlayingRef = useRef(isPlaying);
-  const assistantMutedRef = useRef(assistantMuted);
+  const isGateOpenRef = useRef(isGateOpen);
+  const isCountdownActiveRef = useRef(isCountdownActive);
   const isQnAPendingRef = useRef(isQnAPending);
+  const assistantMutedRef = useRef(assistantMuted);
+  void assistantMutedRef; // read via deps in handlers
 
-  // Stable refs for callback props to keep executeCommand identity stable
+  const playbackRateRef = useRef(playbackRate);
+  const activeOwnersRef = useRef(activeOwners || new Set());
+
+  useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
+  useEffect(() => { activeOwnersRef.current = activeOwners || new Set(); }, [activeOwners]);
+
+  // Stable refs for callback props
   const submitQuestionRef = useRef(submitQuestion);
   const announceRef = useRef(announce);
   const logSessionEventRef = useRef(logSessionEvent);
@@ -101,13 +144,20 @@ export function useLiveVoiceCommands({
   const handleSkipSectionRef = useRef(handleSkipSection);
   const handleRepeatTrainerInstructionRef = useRef(handleRepeatTrainerInstruction);
   const setAssistantMutedRef = useRef(setAssistantMuted);
+  const onRepeatGuidanceRef = useRef(onRepeatGuidance);
+  const onCancelCountdownRef = useRef(onCancelCountdown);
+  const onSkipAlignmentRef = useRef(onSkipAlignment);
+  const handlePreviousSectionRef = useRef(handlePreviousSection);
+  const handleReadCurrentSectionRef = useRef(handleReadCurrentSection);
 
+  // Keep all refs current
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   useEffect(() => { currentTimeMsRef.current = currentTimeMs; }, [currentTimeMs]);
-  useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
-  useEffect(() => { assistantMutedRef.current = assistantMuted; }, [assistantMuted]);
+  useEffect(() => { isGateOpenRef.current = isGateOpen; }, [isGateOpen]);
+  useEffect(() => { isCountdownActiveRef.current = isCountdownActive; }, [isCountdownActive]);
   useEffect(() => { isQnAPendingRef.current = isQnAPending; }, [isQnAPending]);
+  useEffect(() => { assistantMutedRef.current = assistantMuted; }, [assistantMuted]);
   useEffect(() => { submitQuestionRef.current = submitQuestion; }, [submitQuestion]);
   useEffect(() => { announceRef.current = announce; }, [announce]);
   useEffect(() => { logSessionEventRef.current = logSessionEvent; }, [logSessionEvent]);
@@ -118,6 +168,19 @@ export function useLiveVoiceCommands({
   useEffect(() => { handleSkipSectionRef.current = handleSkipSection; }, [handleSkipSection]);
   useEffect(() => { handleRepeatTrainerInstructionRef.current = handleRepeatTrainerInstruction; }, [handleRepeatTrainerInstruction]);
   useEffect(() => { setAssistantMutedRef.current = setAssistantMuted; }, [setAssistantMuted]);
+  useEffect(() => { handlePreviousSectionRef.current = handlePreviousSection; }, [handlePreviousSection]);
+  useEffect(() => { handleReadCurrentSectionRef.current = handleReadCurrentSection; }, [handleReadCurrentSection]);
+  useEffect(() => { onRepeatGuidanceRef.current = onRepeatGuidance; }, [onRepeatGuidance]);
+  useEffect(() => { onCancelCountdownRef.current = onCancelCountdown; }, [onCancelCountdown]);
+  useEffect(() => { onSkipAlignmentRef.current = onSkipAlignment; }, [onSkipAlignment]);
+
+  const cameraDevicesRef = useRef(cameraDevices);
+  const selectedCameraDeviceIdRef = useRef(selectedCameraDeviceId);
+  const requestCameraRef = useRef(requestCamera);
+
+  useEffect(() => { cameraDevicesRef.current = cameraDevices; }, [cameraDevices]);
+  useEffect(() => { selectedCameraDeviceIdRef.current = selectedCameraDeviceId; }, [selectedCameraDeviceId]);
+  useEffect(() => { requestCameraRef.current = requestCamera; }, [requestCamera]);
 
   const startVoice = useCallback(() => {
     onBeforeListening?.();
@@ -133,20 +196,14 @@ export function useLiveVoiceCommands({
     announceRef.current("Voice control deactivated.");
   }, [stopListening, onAfterListening]);
 
-  // --- Speech recognition error telemetry ---
-  // Tracks the last error we logged to avoid spamming repeated identical errors.
+  // Speech recognition error telemetry (deduped)
   const lastLoggedErrorRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!voiceRawError) {
-      // Error was cleared (e.g. retry or stop) — reset the dedup guard
       lastLoggedErrorRef.current = null;
       return;
     }
-
-    // Don't log the same raw error code twice in a row without user action
     if (lastLoggedErrorRef.current === voiceRawError) return;
-
     lastLoggedErrorRef.current = voiceRawError;
     logSessionEventRef.current(SESSION_EVENTS.VOICE_RECOGNITION_ERROR, currentTimeMsRef.current, {
       rawError: voiceRawError,
@@ -155,159 +212,78 @@ export function useLiveVoiceCommands({
   }, [voiceRawError, voiceError]);
 
   /**
-   * Execute a parsed voice command against the live session handlers.
-   * Uses refs for all callback props to keep this callback's identity stable.
+   * Dispatch a parsed voice command using the extracted pure handler functions.
+   * All state values are accessed via stable refs to keep callback identity stable.
    */
   const executeCommand = useCallback((command: VoiceCommand, rawTranscript: string) => {
     const tsMs = currentTimeMsRef.current;
     const ct = currentTimeRef.current;
+    const cmd = { ...command, rawText: rawTranscript };
 
-    // Check if speech synthesis is actively speaking — avoid command collision
-    if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
-      announceRef.current("Please wait for assistant to finish speaking.");
-      return;
+    // Avoid echo / app fighting voice recognition when TTS is speaking or recently spoke
+    if (isSpeakingOrRecentlySpoken(rawTranscript)) {
+      const isPriority = command.type === "pause" || 
+                         command.type === "cancel_countdown" || 
+                         command.type === "skip_alignment";
+      if (!isPriority) {
+        return; // Silently ignore non-priority command or noise during/after TTS
+      }
     }
 
     try {
-      switch (command.type) {
-        case "pause":
-          pauseRef.current();
-          announceRef.current("Paused.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "pause",
-            transcript: rawTranscript,
-          });
-          break;
+      if (handlePlaybackCommand(cmd, tsMs, ct, {
+        pause: pauseRef.current,
+        play: playRef.current,
+        seek: seekRef.current,
+        setPlaybackRate: setPlaybackRateRef.current,
+        announce: announceRef.current,
+        logSessionEvent: logSessionEventRef.current,
+        activeOwners: activeOwnersRef.current,
+        playbackRate: playbackRateRef.current,
+      })) return;
 
-        case "resume":
-          playRef.current();
-          announceRef.current("Resumed.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "resume",
-            transcript: rawTranscript,
-          });
-          break;
+      if (handleNavigationCommand(cmd, tsMs, {
+        handleSkipSection: handleSkipSectionRef.current,
+        handlePreviousSection: handlePreviousSectionRef.current,
+        handleReadCurrentSection: handleReadCurrentSectionRef.current,
+        announce: announceRef.current,
+        logSessionEvent: logSessionEventRef.current,
+        isGateOpen: isGateOpenRef.current,
+      })) return;
 
-        case "rewind": {
-          const target = Math.max(ct - command.seconds, 0);
-          seekRef.current(target, `Rewound ${command.seconds} seconds.`);
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "rewind",
-            seconds: command.seconds,
-            transcript: rawTranscript,
-          });
-          break;
-        }
+      if (handleSpeechCommand(cmd, tsMs, {
+        setAssistantMuted: setAssistantMutedRef.current,
+        handleRepeatTrainerInstruction: handleRepeatTrainerInstructionRef.current,
+        onRepeatGuidance: onRepeatGuidanceRef.current,
+        onCancelCountdown: onCancelCountdownRef.current,
+        onSkipAlignment: onSkipAlignmentRef.current,
+        announce: announceRef.current,
+        logSessionEvent: logSessionEventRef.current,
+        isGateOpen: isGateOpenRef.current,
+        isCountdownActive: isCountdownActiveRef.current,
+      })) return;
 
-        case "forward": {
-          const target = ct + command.seconds;
-          seekRef.current(target, `Skipped ahead ${command.seconds} seconds.`);
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "forward",
-            seconds: command.seconds,
-            transcript: rawTranscript,
-          });
-          break;
-        }
+      if (handleQnACommand(cmd, tsMs, {
+        submitQuestion: submitQuestionRef.current,
+        announce: announceRef.current,
+        logSessionEvent: logSessionEventRef.current,
+        isQnAPending: isQnAPendingRef.current,
+      })) return;
 
-        case "slow_down":
-          setPlaybackRateRef.current(0.75);
-          announceRef.current("Slowed to 0.75x.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "slow_down",
-            transcript: rawTranscript,
-          });
-          break;
+      if (handleCameraCommand(cmd, tsMs, {
+        cameraDevices: cameraDevicesRef.current,
+        selectedCameraDeviceId: selectedCameraDeviceIdRef.current,
+        requestCamera: requestCameraRef.current,
+        announce: announceRef.current,
+        logSessionEvent: logSessionEventRef.current,
+      })) return;
 
-        case "normal_speed":
-          setPlaybackRateRef.current(1.0);
-          announceRef.current("Speed set to normal.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "normal_speed",
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "speed_up":
-          setPlaybackRateRef.current(1.5);
-          announceRef.current("Speed set to 1.5x.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "speed_up",
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "next_section":
-          handleSkipSectionRef.current();
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "next_section",
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "repeat_instruction":
-          handleRepeatTrainerInstructionRef.current();
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "repeat_instruction",
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "mute_assistant":
-          setAssistantMutedRef.current(true);
-          announceRef.current("Assistant muted.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "mute_assistant",
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "unmute_assistant":
-          setAssistantMutedRef.current(false);
-          announceRef.current("Assistant unmuted.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "unmute_assistant",
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "ask_question":
-          // Guard: do not submit another voice Q&A while current one is pending
-          if (isQnAPendingRef.current) {
-            announceRef.current("Please wait for the current question to finish.");
-            logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-              command: "ask_question",
-              question: command.question,
-              transcript: rawTranscript,
-              skipped: true,
-              reason: "qna_pending",
-            });
-            break;
-          }
-          submitQuestionRef.current(command.question, "voice");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "ask_question",
-            question: command.question,
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "end_session":
-          announceRef.current("To end the session, please use the End & Save Session button.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_EXECUTED, tsMs, {
-            command: "end_session",
-            confirmation_needed: true,
-            transcript: rawTranscript,
-          });
-          break;
-
-        case "rejected":
-          announceRef.current("Voice command not recognized.");
-          logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_REJECTED, tsMs, {
-            reason: command.reason,
-            transcript: rawTranscript,
-          });
-          break;
+      if (command.type === "rejected") {
+        announceRef.current("Voice command not recognized.");
+        logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_REJECTED, tsMs, {
+          reason: command.reason,
+          transcript: rawTranscript,
+        });
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Unknown error";
@@ -318,39 +294,41 @@ export function useLiveVoiceCommands({
         transcript: rawTranscript,
       });
     }
-  }, []); // No dependencies — all values accessed via refs
+  }, []); // No deps — all values accessed via refs
 
-  // Watch for new final results (by ID) and process them
+  // Process new final recognition results (deduped by ID)
   useEffect(() => {
     if (!lastResult) return;
+    if (processedIdsRef.current.has(lastResult.id)) return;
 
-    // Dedup: skip if this result ID was already processed
-    if (processedIdsRef.current.has(lastResult.id)) {
-      return;
-    }
-
-    // Mark as processed
     processedIdsRef.current.add(lastResult.id);
-
-    // Prevent unbounded growth of the processed set
     if (processedIdsRef.current.size > MAX_PROCESSED_IDS) {
       const idsArray = Array.from(processedIdsRef.current);
       processedIdsRef.current = new Set(idsArray.slice(idsArray.length - 100));
     }
 
-    // Log recognition
     logSessionEventRef.current(SESSION_EVENTS.VOICE_COMMAND_RECOGNIZED, currentTimeMsRef.current, {
       transcript: lastResult.transcript,
       resultId: lastResult.id,
     });
 
-    // Parse and execute
     const command = parseVoiceCommand(lastResult.transcript);
     executeCommand(command, lastResult.transcript);
-
-    // Clear the result after processing
     clearLastResult();
   }, [lastResult, executeCommand, clearLastResult]);
+
+  // Auto-start voice control on mount if supported
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStart && !autoStartedRef.current && voiceStatus === "idle") {
+      autoStartedRef.current = true;
+      try {
+        startVoice();
+      } catch (err) {
+        console.error("Auto-start voice control failed:", err);
+      }
+    }
+  }, [autoStart, voiceStatus, startVoice]);
 
   return {
     voiceStatus,

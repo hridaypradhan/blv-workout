@@ -41,10 +41,21 @@ export default function MovementCorrectionLog({ session }: MovementCorrectionLog
               {session.form_errors.map((err, idx) => (
                 <div key={idx} className="flex flex-col gap-1.5 p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs">
                   <div className="flex justify-between items-center text-slate-200">
-                    <span className="font-semibold text-red-400 capitalize">{err.joint} Drift</span>
-                    <span className="px-1.5 py-0.5 rounded bg-red-950/40 text-xs text-red-400 font-bold uppercase border border-red-900/30">
-                      {err.severity}
-                    </span>
+                    <span className="font-semibold text-red-400 capitalize">{err.joint.replace(/_/g, " ")} Drift</span>
+                    <div className="flex items-center gap-1.5">
+                      {err.metadata?.provider === "camera_mediapipe" ? (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-950/40 text-[10px] text-emerald-400 font-bold uppercase border border-emerald-900/30">
+                          Camera
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800/40 text-[10px] text-slate-450 font-bold uppercase border border-slate-700/30">
+                          Simulated
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded bg-red-950/40 text-xs text-red-400 font-bold uppercase border border-red-900/30">
+                        {err.severity}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-slate-300 italic">Observed: {err.observed_angle}{"\u00b0"} (Expected: {err.expected_range?.[0]}{"\u00b0"} - {err.expected_range?.[1]}{"\u00b0"})</p>
                   {err.message && <p className="text-slate-400">{err.message}</p>}

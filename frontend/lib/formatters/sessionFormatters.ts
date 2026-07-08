@@ -157,6 +157,8 @@ export function getSessionEventLabel(eventType: string, metadata?: any): string 
     [SESSION_EVENTS.SECTION_SKIPPED]: "Section Skipped",
     [SESSION_EVENTS.PROTOTYPE_REP_DETECTED]: "Repetition Detected",
     [SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED]: "Form Warning",
+    [SESSION_EVENTS.POSE_REP_DETECTED]: "Repetition Detected",
+    [SESSION_EVENTS.POSE_FORM_ERROR_DETECTED]: "Form Warning",
   };
   return labels[eventType] || eventType.replace(/_/g, " ");
 }
@@ -238,13 +240,15 @@ export function formatSessionEventDetails(evt: { event_type: string; metadata?: 
     const exerciseLabel = metadata.active_exercise ? ` during ${metadata.active_exercise}` : "";
     return `Asked: "${metadata.question || ""}"${exerciseLabel}`;
   }
-  if (type === SESSION_EVENTS.PROTOTYPE_REP_DETECTED) {
-    return `Tracked repetition #${metadata.rep_count || 1} completed (${metadata.exercise_name || "exercise"})`;
+  if (type === SESSION_EVENTS.PROTOTYPE_REP_DETECTED || type === SESSION_EVENTS.POSE_REP_DETECTED) {
+    const providerSuffix = metadata.provider === "camera_mediapipe" ? " (camera)" : "";
+    return `Tracked repetition #${metadata.rep_count || 1} completed (${metadata.exercise_name || "exercise"})${providerSuffix}`;
   }
-  if (type === SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED) {
+  if (type === SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED || type === SESSION_EVENTS.POSE_FORM_ERROR_DETECTED) {
     const jointLabel = metadata.joint ? metadata.joint.replace(/_/g, " ") : "joint";
     const observed = typeof metadata.observed_angle === "number" ? metadata.observed_angle.toFixed(0) : "0";
-    return `Warning on ${jointLabel} (${observed}\u00b0): "${metadata.message || ""}"`;
+    const providerSuffix = metadata.provider === "camera_mediapipe" ? " (camera)" : "";
+    return `Warning on ${jointLabel} (${observed}\u00b0): "${metadata.message || ""}"${providerSuffix}`;
   }
   
   return typeof metadata === "object" ? JSON.stringify(metadata) : type;
@@ -298,10 +302,10 @@ export function getSessionEventStyle(eventType: string, metadata?: any): string 
   ) {
     return "text-purple-400";
   }
-  if (eventType === SESSION_EVENTS.PROTOTYPE_REP_DETECTED) {
+  if (eventType === SESSION_EVENTS.PROTOTYPE_REP_DETECTED || eventType === SESSION_EVENTS.POSE_REP_DETECTED) {
     return "text-yellow-400 font-bold";
   }
-  if (eventType === SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED) {
+  if (eventType === SESSION_EVENTS.PROTOTYPE_FORM_ERROR_DETECTED || eventType === SESSION_EVENTS.POSE_FORM_ERROR_DETECTED) {
     return "text-amber-400 font-bold";
   }
   if (

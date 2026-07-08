@@ -433,3 +433,100 @@ class TestAssistantQnA(unittest.TestCase):
             response = qna_service.answer_question(request)
             self.assertIsNotNone(response.diagnostics_ref)
             mock_save.assert_called_once()
+
+    def test_qna_with_runtime_observation_context_available(self):
+        """Verify Q&A prototype provider reports issue when pose is available with form error."""
+        settings.AI_PROVIDER = "prototype"
+        video_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
+
+        request = QARequest(
+            question="Am I doing this right?",
+            video_id=video_id,
+            session_id=session_id,
+            current_timestamp_ms=500.0,
+            runtime_observation_context=RuntimeObservationContext(
+                pose_available=True,
+                pose_confidence=0.8,
+                observation_capability="available",
+                latest_form_error={"joint": "left_knee", "observed_angle": 60, "expected_range": [75, 180], "severity": "medium", "message": "Observed left knee angle (60°) is outside range [75°, 180°]."},
+                latest_rep_event=None,
+                notes="Camera pose is active."
+            )
+        )
+
+        response = qna_service.answer_question(request)
+        self.assertIn("reports a potential issue", response.answer_text)
+        self.assertIn("Observed left knee angle (60°)", response.answer_text)
+
+    def test_qna_with_runtime_observation_context_unavailable(self):
+        """Verify Q&A prototype provider reports fallback when pose is unavailable."""
+        settings.AI_PROVIDER = "prototype"
+        video_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
+
+        request = QARequest(
+            question="Am I doing this right?",
+            video_id=video_id,
+            session_id=session_id,
+            current_timestamp_ms=500.0,
+            runtime_observation_context=RuntimeObservationContext(
+                pose_available=False,
+                pose_confidence=0.0,
+                observation_capability="not_available",
+                latest_form_error=None,
+                latest_rep_event=None,
+                notes="Fallback simulation."
+            )
+        )
+
+        response = qna_service.answer_question(request)
+        self.assertIn("I can't see or check your form right now", response.answer_text)
+
+    def test_session_finalize_preserves_form_error_metadata(self):
+        """Verify that FormError.metadata is accepted and preserved during session finalization."""
+        from app.core.session_store import SessionStore
+        from app.models.schemas import Session
+
+        store = SessionStore()
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        video_id = str(uuid.uuid4())
+
+        # Initialize session
+        store._sessions[session_id] = Session(
+            id=session_id,
+            user_id=user_id,
+            video_id=video_id,
+            started_at=datetime.now(timezone.utc),
+            status="active"
+        )
+
+        exercise_id = uuid.uuid4()
+        form_errors = [
+            {
+                "exercise_id": str(exercise_id),
+                "form_error": {
+                    "joint": "left_knee",
+                    "observed_angle": 60.0,
+                    "expected_range": [75.0, 180.0],
+                    "severity": "medium",
+                    "message": "Observed left knee angle (60°) is outside range [75°, 180°].",
+                    "metadata": {"provider": "camera_mediapipe", "fallback_reason": None}
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+
+        success = store.finalize_session(
+            session_id=session_id,
+            playback_events=[],
+            reps=[],
+            form_errors=form_errors
+        )
+
+        self.assertTrue(success)
+        finalized = store.get_session(session_id)
+        self.assertIsNotNone(finalized)
+        self.assertEqual(len(finalized.form_errors), 1)
+        self.assertEqual(finalized.form_errors[0].metadata.get("provider"), "camera_mediapipe")

@@ -49,7 +49,13 @@ class PrototypeAssistantQnAProvider(AssistantQnAProvider):
                 # If pose is available and confident
                 kind = "video_grounded"
                 if latest_form_error:
-                    answer = f"The available pose signal reports a potential issue: {latest_form_error}. Keep following the trainer's cue."
+                    if isinstance(latest_form_error, dict) and latest_form_error.get("message"):
+                        msg = latest_form_error.get("message")
+                    elif hasattr(latest_form_error, "message") and getattr(latest_form_error, "message"):
+                        msg = getattr(latest_form_error, "message")
+                    else:
+                        msg = str(latest_form_error)
+                    answer = f"The available pose signal reports a potential issue: {msg}. Keep following the trainer's cue."
                 else:
                     answer = "I don't have a specific form warning from the available signal right now. Keep following the trainer's cue."
                 

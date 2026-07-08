@@ -32,6 +32,7 @@ export async function finalizeSession(
       expected_range: [number, number];
       severity: string;
       message?: string | null;
+      metadata?: object;
     };
     timestamp: string;
   }>,

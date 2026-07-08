@@ -351,6 +351,7 @@ class FormError(BaseModel):
     expected_range: tuple[float, float]
     severity: str
     message: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class PlaybackEvent(BaseModel):

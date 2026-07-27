@@ -64,7 +64,6 @@ export function LiveSessionPlaybackColumn({
   startPoseTracking,
   formatTime,
   cameraPoseStatusLabel,
-  cameraPoseAvailable,
   cameraPoseGuidance,
   activePoseProvider,
   fallbackReason,

@@ -122,18 +122,19 @@ class PrototypeCuePlanProvider(CuePlanProvider):
                         "end_ms": risk_end,
                         "priority": "high",
                         "intent": "form_reminder",
-                        "allowed_modalities": [CueModality.AUDIO, CueModality.HAPTIC],
+                        "allowed_modalities": [CueModality.AUDIO],
                         "text_variants": {
                             "brief": f"Keep {risk.joint} stable.",
                             "moderate": f"Form reminder: {risk.correction_cue or 'Maintain proper alignment.'}",
                             "detailed": f"Form alert for {anchor.name}: {risk.risk_description or 'Watch your joint extension.'}. {risk.correction_cue or 'Adjust your form.'}"
                         },
-                        "haptic_cue_ref": "form_warning_above",
+                        "haptic_cue_ref": None,
                         "interruption_policy_hint": "duck_speak"
                     })
                     
         # Generate haptic candidates from speaking opportunity map or haptic profiles
         for win_idx, w in enumerate(manifest.speaking_opportunity_map):
+            is_countdown = "countdown" in (w.context or "").lower()
             cue_candidates.append({
                 "id": f"haptic_win_{win_idx}",
                 "exercise_anchor_id": None,
@@ -145,7 +146,7 @@ class PrototypeCuePlanProvider(CuePlanProvider):
                 "intent": "haptic_prompt",
                 "allowed_modalities": [CueModality.HAPTIC],
                 "text_variants": None,
-                "haptic_cue_ref": "countdown" if "countdown" in (w.context or "").lower() else "per_rep_tick",
+                "haptic_cue_ref": None if is_countdown else "reps",
                 "interruption_policy_hint": "haptic_only"
             })
             

@@ -13,6 +13,7 @@
 import { useEffect, useRef } from "react";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 import { AudioCoexistenceSettings, RuntimeCueSelectionResponse, User } from "@/types";
+import { inferHapticCategoryFromCue, HAPTIC_CATEGORY_DEFAULT_IDS } from "@/lib/userPreferences";
 
 // A minimal shape of an activeCue from useAssistantCueQueue
 interface ActiveCueItem {
@@ -45,7 +46,6 @@ interface UseLiveSessionCueGlueProps {
     currentTimeMs: number;
   }) => Promise<unknown>;
   setCurrentSpokenCue: (cue: (RuntimeCueSelectionResponse & { timestampMs?: number }) | null) => void;
-  getCueTypeFromCue: (text: string, metadata?: Record<string, unknown> | null) => string;
 }
 
 export function useLiveSessionCueGlue({
@@ -61,7 +61,6 @@ export function useLiveSessionCueGlue({
   logSessionEvent,
   triggerHapticEvent,
   setCurrentSpokenCue,
-  getCueTypeFromCue,
 }: UseLiveSessionCueGlueProps) {
   const lastRecordedCueKey = useRef<string | null>(null);
 
@@ -123,10 +122,14 @@ export function useLiveSessionCueGlue({
     }
 
     if (activeCue.modality === "haptic") {
-      const cueType = getCueTypeFromCue(activeCue.text, activeCue.metadata);
+      const category = inferHapticCategoryFromCue(activeCue.text, activeCue.metadata);
+      if (!category) {
+        // Countdown, Form Warning, or unclassifiable cue -> suppress haptics
+        return;
+      }
       const vibrationId =
-        (userProfile?.haptic_preferences as Record<string, string | null | undefined> | null | undefined)?.[cueType] ||
-        `${cueType}_001`;
+        (userProfile?.haptic_preferences as Record<string, string | null | undefined> | null | undefined)?.[category] ||
+        HAPTIC_CATEGORY_DEFAULT_IDS[category];
       const intensity =
         typeof activeCue.metadata?.intensity === "number" ? activeCue.metadata.intensity : 0.7;
 
@@ -141,7 +144,7 @@ export function useLiveSessionCueGlue({
       if (limbs.length === 0) limbs.push("left_arm", "right_arm");
 
       triggerHapticEvent({
-        cueType,
+        cueType: category,
         vibrationId,
         intensity,
         limbs,
@@ -165,6 +168,5 @@ export function useLiveSessionCueGlue({
     logSessionEvent,
     triggerHapticEvent,
     setCurrentSpokenCue,
-    getCueTypeFromCue,
   ]);
 }

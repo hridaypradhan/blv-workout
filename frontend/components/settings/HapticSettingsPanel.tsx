@@ -128,7 +128,7 @@ export default function HapticSettingsPanel({
         const selectedId = hapticPreferences[key as keyof HapticPreferences] || "";
         const selectedCandidate = candidates.find((c) => c.id === selectedId);
         const selectedWav = selectedCandidate?.source_wav;
-        const resolvedEventName = item.bhaptics_event_name;
+        const resolvedEventName = selectedCandidate?.bhaptics_event_name || item.bhaptics_event_name;
 
         return (
           <div key={key} className="flex flex-col gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
@@ -150,11 +150,24 @@ export default function HapticSettingsPanel({
                   onChange={(e) => onHapticPrefChange(key, e.target.value)}
                   className="flex-1 md:w-64 px-4 py-3 bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all cursor-pointer"
                 >
-                  {candidates.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label} {c.duration_ms ? `(${Math.round(c.duration_ms)}ms)` : ""}
-                    </option>
-                  ))}
+                  {candidates.filter(c => c.pleasantness_band === "high").length > 0 && (
+                    <optgroup label="Higher pleasantness" className="bg-slate-900 text-slate-400 font-semibold">
+                      {candidates.filter(c => c.pleasantness_band === "high").map((c) => (
+                        <option key={c.id} value={c.id} className="bg-slate-900 text-slate-200">
+                          {c.label} {c.duration_ms ? `(${Math.round(c.duration_ms)}ms)` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {candidates.filter(c => c.pleasantness_band === "low" || c.pleasantness_band !== "high").length > 0 && (
+                    <optgroup label="Lower pleasantness" className="bg-slate-900 text-slate-400 font-semibold">
+                      {candidates.filter(c => c.pleasantness_band === "low" || c.pleasantness_band !== "high").map((c) => (
+                        <option key={c.id} value={c.id} className="bg-slate-900 text-slate-200">
+                          {c.label} {c.duration_ms ? `(${Math.round(c.duration_ms)}ms)` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                   {candidates.length === 0 && (
                     <option value="">No vibrations found</option>
                   )}

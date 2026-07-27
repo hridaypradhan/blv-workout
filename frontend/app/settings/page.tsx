@@ -3,16 +3,28 @@
 import React, { useState, useEffect } from "react";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { getActiveUserId, notifyActiveUserUpdated } from "@/lib/prototypeUser";
-import { updateUserSettings, getHapticVibrations } from "@/lib/api";
+import { updateUserSettings } from "@/lib/api";
 import { mergeUserPreferences } from "@/lib/userPreferences";
-import { AssistantPersona, InterruptionLevel, AssistantVerbosity, HapticVibrationCandidate, HapticPreferences } from "@/types";
+import { AssistantPersona, InterruptionLevel, AssistantVerbosity } from "@/types";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
 import HapticSettingsPanel from "@/components/settings/HapticSettingsPanel";
+import { useHapticPreferenceSettings } from "@/lib/hooks/useHapticPreferenceSettings";
+import {
+  AssistantPersonaSettingsSection,
+  ProfileBasicsSettingsSection,
+} from "@/components/settings/ProfileSettingsSections";
 
 export default function Settings() {
   const { user, loading } = useUserProfile();
   const [activeUserId, setActiveUserId] = useState("");
-  const [isVibrationsLoading, setIsVibrationsLoading] = useState(true);
+
+  // Haptic preference state — sole owner is the extracted hook
+  const {
+    hapticPreferences,
+    vibrations,
+    isVibrationsLoading,
+    handleHapticPrefChange,
+  } = useHapticPreferenceSettings(user?.haptic_preferences);
 
   // Settings state variables
   const [name, setName] = useState("");
@@ -26,35 +38,11 @@ export default function Settings() {
   const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
   const [hapticFirst, setHapticFirst] = useState(true);
   const [assistantVerbosity, setAssistantVerbosity] = useState("moderate");
-  const [vibrations, setVibrations] = useState<HapticVibrationCandidate[]>([]);
-  const [hapticPreferences, setHapticPreferences] = useState<HapticPreferences>({
-    start: "start_001",
-    countdown: "countdown_001",
-    per_rep_tick: "per_rep_tick_001",
-    speed_up: "speed_up_001",
-    slow_down: "slow_down_001",
-    form_warning_above: "form_warning_above_001",
-    cooldown: "cooldown_001",
-  });
 
   // Status feedback state
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    async function loadVibrations() {
-      try {
-        const vList = await getHapticVibrations();
-        setVibrations(vList);
-      } catch (err) {
-        console.error("Failed to load haptic options:", err);
-      } finally {
-        setIsVibrationsLoading(false);
-      }
-    }
-    loadVibrations();
-  }, []);
 
   useEffect(() => {
     if (user) {
@@ -89,9 +77,6 @@ export default function Settings() {
         setInterruptionLevel(prefs.audio_coexistence.interruption_level ?? "brief_speech");
         setAssistantVerbosity(prefs.audio_coexistence.assistant_verbosity ?? "moderate");
         setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking !== false);
-      }
-      if (prefs.haptic_preferences) {
-        setHapticPreferences(prefs.haptic_preferences);
       }
     }
   }, [user]);
@@ -142,13 +127,6 @@ export default function Settings() {
     }
   };
 
-  const handleHapticPrefChange = (cueType: string, val: string) => {
-    setHapticPreferences((prev) => ({
-      ...prev,
-      [cueType]: val,
-    }));
-  };
-
   const previewWav = (wavUrl: string) => {
     if (typeof window !== "undefined") {
       const audio = new Audio(wavUrl);
@@ -190,131 +168,19 @@ export default function Settings() {
         </div>
 
         <form onSubmit={handleSaveSettings} className="space-y-8">
-          {/* Section 0: Profile & Accessibility Basics */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="profile-basics-heading">
-            <h2 id="profile-basics-heading" className="text-xl font-bold text-white mb-2">
-              Profile & Accessibility Basics
-            </h2>
-            <p className="text-xs text-slate-400 mb-6">
-              Update your name, degree of vision loss, and screen reader preferences.
-            </p>
+          <ProfileBasicsSettingsSection
+            name={name}
+            visionLoss={visionLoss}
+            screenReader={screenReader}
+            onNameChange={setName}
+            onVisionLossChange={setVisionLoss}
+            onScreenReaderChange={setScreenReader}
+          />
 
-            <div className="space-y-6">
-              {/* Name Input */}
-              <div className="space-y-2">
-                <label htmlFor="user-name" className="block text-sm font-semibold text-slate-200">
-                  Full Name / Preferred Name
-                </label>
-                <input
-                  type="text"
-                  id="user-name"
-                  required
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all"
-                />
-              </div>
-
-              {/* Degree of Vision Loss */}
-              <div className="space-y-3">
-                <span className="block text-sm font-semibold text-slate-200" id="vision-loss-label">
-                  Degree of Vision Loss
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-labelledby="vision-loss-label">
-                  {[
-                    { id: "vl-blind", label: "Totally Blind", desc: "Primarily relies on Speech & Haptic responses" },
-                    { id: "vl-legal", label: "Legally Blind", desc: "High-contrast guides & Audio descriptions" },
-                    { id: "vl-low", label: "Moderate Low Vision", desc: "Large fonts, scaling, & outline guidance" },
-                    { id: "vl-mild", label: "Mild Low Vision", desc: "Slight text adjustments & voice cues" },
-                  ].map((level) => (
-                    <label
-                      key={level.id}
-                      htmlFor={level.id}
-                      className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all duration-200 focus-within:ring-2 focus-within:ring-yellow-400 ${
-                        visionLoss === level.id
-                          ? "bg-slate-950 border-2 border-yellow-400"
-                          : "bg-slate-950 border border-slate-800 hover:border-slate-700"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          id={level.id}
-                          name="vision-loss"
-                          value={level.id}
-                          checked={visionLoss === level.id}
-                          onChange={(e) => setVisionLoss(e.target.value)}
-                          className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
-                        />
-                        <span className="text-sm font-bold text-white">{level.label}</span>
-                      </div>
-                      <span className="text-xs text-slate-400 mt-1 pl-7">{level.desc}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Screen Reader Dropdown */}
-              <div className="space-y-2">
-                <label htmlFor="screen-reader-select" className="block text-sm font-semibold text-slate-200">
-                  Primary Screen Reader Helper
-                </label>
-                <select
-                  id="screen-reader-select"
-                  value={screenReader}
-                  onChange={(e) => setScreenReader(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all cursor-pointer"
-                >
-                  <option value="none">None / Standard Audio Synthesis Only</option>
-                  <option value="voiceover">Apple VoiceOver</option>
-                  <option value="nvda">NVDA (NonVisual Desktop Access)</option>
-                  <option value="jaws">JAWS (Job Access With Speech)</option>
-                  <option value="talkback">Android TalkBack</option>
-                  <option value="other">Other Screen Reader</option>
-                </select>
-              </div>
-            </div>
-          </section>
-
-          {/* Section 1: Assistant Persona */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="persona-heading">
-            <h2 id="persona-heading" className="text-xl font-bold text-white mb-2">
-              Assistant Persona
-            </h2>
-            <p className="text-xs text-slate-400 mb-6">
-              Choose the vocal style of FitA11y&apos;s assistant. This does not affect the creator&apos;s YouTube trainer audio.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" role="radiogroup" aria-labelledby="persona-heading">
-              {[
-                { id: "supportive", label: "Supportive", desc: "Encouraging, reassuring, focuses on steady progress." },
-                { id: "direct", label: "Direct", desc: "Concise corrections, anatomical landmarks, clear verbal cues." },
-                { id: "energetic", label: "Energetic", desc: "High energy, enthusiastic, pushes pace targets." },
-                { id: "calm", label: "Calm", desc: "Gentle tones, quiet cues, low-stimulation pacing." },
-              ].map((p) => (
-                <label
-                  key={p.id}
-                  htmlFor={p.id}
-                  className="relative flex flex-col p-5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-2xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400"
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      id={p.id}
-                      name="assistant-persona"
-                      value={p.id}
-                      checked={assistantPersona === p.id}
-                      onChange={(e) => setAssistantPersona(e.target.value)}
-                      className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
-                    />
-                    <span className="text-sm font-bold text-white">{p.label}</span>
-                  </div>
-                  <span className="text-xs text-slate-400 mt-2">{p.desc}</span>
-                </label>
-              ))}
-            </div>
-          </section>
+          <AssistantPersonaSettingsSection
+            assistantPersona={assistantPersona}
+            onAssistantPersonaChange={setAssistantPersona}
+          />
 
           {/* Section 2: Voice & Coexistence Settings */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="voice-heading">

@@ -1,6 +1,10 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useSetupVoiceCommands } from "../useSetupVoiceCommands";
+import {
+  resetSpeechRegistry,
+  setLastSpeechEndTime,
+} from "../../voice/speechRegistry";
 
 // Mock base speech recognition hook
 vi.mock("../useSpeechRecognition", () => ({
@@ -123,7 +127,6 @@ describe("useSetupVoiceCommands Hook", () => {
   });
 
   test("ignores unrecognized command silently when isSpeakingOrRecentlySpoken is true", () => {
-    const { setLastSpeechEndTime, resetSpeechRegistry } = require("../../voice/speechRegistry");
     resetSpeechRegistry();
     setLastSpeechEndTime(Date.now()); // simulates just finished speaking
 
@@ -142,7 +145,6 @@ describe("useSetupVoiceCommands Hook", () => {
   });
 
   test("allows priority cancel command to run even when isSpeakingOrRecentlySpoken is true", () => {
-    const { setLastSpeechEndTime, resetSpeechRegistry } = require("../../voice/speechRegistry");
     resetSpeechRegistry();
     setLastSpeechEndTime(Date.now()); // simulates just finished speaking
 

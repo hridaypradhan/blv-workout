@@ -12,6 +12,7 @@ import {
   handleCameraCommand,
 } from "../liveVoiceCommandHandlers";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
+import { PauseOwner } from "@/lib/hooks/usePlaybackPauseCoordinator";
 
 // ---------------------------------------------------------------------------
 // Shared mock factories
@@ -67,7 +68,7 @@ describe("handlePlaybackCommand", () => {
   });
 
   test("resume command is blocked by positioning_gate", () => {
-    const activeOwners = new Set<any>(["positioning_gate"]);
+    const activeOwners = new Set<PauseOwner>(["positioning_gate"]);
     const handled = handlePlaybackCommand({ type: "resume" }, 1000, 30, { ...deps(), activeOwners });
     expect(handled).toBe(true);
     expect(play).not.toHaveBeenCalled();
@@ -80,7 +81,7 @@ describe("handlePlaybackCommand", () => {
   });
 
   test("resume command is blocked by assistant_speech", () => {
-    const activeOwners = new Set<any>(["assistant_speech"]);
+    const activeOwners = new Set<PauseOwner>(["assistant_speech"]);
     const handled = handlePlaybackCommand({ type: "resume" }, 1000, 30, { ...deps(), activeOwners });
     expect(handled).toBe(true);
     expect(play).not.toHaveBeenCalled();

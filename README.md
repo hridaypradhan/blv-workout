@@ -281,6 +281,34 @@ For development, testing, and normal runs without hardware, the app operates ful
 
 ---
 
+### 3.1 Haptic Vibration System & bHaptics Integration
+
+The application features a curated haptic vibration asset library and bHaptics event mapping system designed for blind and low-vision (BLV) workout guidance.
+
+#### Haptic Categories & Candidate Library
+- **5 Canonical Categories**:
+  - `start`: Workout / active phase commencement.
+  - `finish`: Workout completion or cooldown phase.
+  - `reps`: Per-repetition detection tick.
+  - `speed_up`: Pace acceleration guidance.
+  - `slow_down`: Pace deceleration guidance.
+- **28 Curated Candidates**: Curated patterns sourced from the VibViz research dataset with quantitative pleasantness ratings categorized into **Higher pleasantness** and **Lower pleasantness** optgroups. Note that pleasantness groups represent aggregated research ratings rather than individual user guarantees, and these patterns have not yet been validated specifically for FitA11y users or bHaptics sleeves.
+- **User Preference Customization**: Users select their preferred vibration candidate for each category in the Settings UI ([HapticSettingsPanel.tsx](frontend/components/settings/HapticSettingsPanel.tsx)).
+- **Browser Audio WAV Preview**: Clicking "Audio Preview" plays an in-browser audio preview of the source WAV asset. WAV audio playback is for browser preview purposes only; physical haptic sleeve playback requires bHaptics pattern registration.
+
+#### bHaptics Event Resolution & Hardware Readiness
+- **Candidate-Specific Event Mapping**: Each selectable vibration candidate maps to its own unique bHaptics event name (e.g., `assist_start_high_01`, `assist_reps_high_01`).
+- **Resolution Order**:
+  1. Valid manifest candidate `bhaptics_event_name` (e.g., `assist_start_high_01`)
+  2. Explicit candidate event name when provided
+  3. Canonical category fallback (`assist_start`, `assist_finish`, `assist_reps`, `assist_speed_up`, `assist_slow_down`)
+  4. Neutral fallback (`assist_attention_double`)
+- **Dry-Run & Indicator Modes**: When hardware is unavailable or the SDK is offline, the backend deterministically returns `delivery_mode="indicator"` or `"would_trigger"` with screen-reader feedback, ensuring complete testability without physical sleeves.
+- **External bHaptics Authoring Requirement**: All 28 candidate bHaptics patterns (`assist_start_high_01` through `assist_slow_down_low_02`) remain pending external authoring and must be created in [bHaptics Designer](https://designer.bhaptics.com) and registered in the bHaptics Player. Candidates are marked with `conversion_status="pending_bhaptics_authoring"` until physical `.tact` files are deployed.
+- **Form Warning & Countdown Policy**: Countdown and Form Warning cues operate exclusively via non-haptic modalities (speech announcements, countdown timing, visual UI overlays, and assistant form corrections). They do not request or deliver haptic feedback.
+
+---
+
 ### 4. Frontend Setup & Run
 
 Go to the `frontend` directory:

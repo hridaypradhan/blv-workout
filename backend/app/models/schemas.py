@@ -57,21 +57,6 @@ class FeedbackModality(str, Enum):
     VISUAL = "visual"
 
 
-class SleeveSide(str, Enum):
-    """Haptic sleeve side selections."""
-
-    LEFT = "left"
-    RIGHT = "right"
-    BOTH = "both"
-
-
-class HapticLimb(str, Enum):
-    """Logical haptic limb targets."""
-
-    LEFT_ARM = "left_arm"
-    RIGHT_ARM = "right_arm"
-    LEFT_LEG = "left_leg"
-    RIGHT_LEG = "right_leg"
 
 
 class TrainerInstructionEventType(str, Enum):
@@ -284,30 +269,23 @@ class AudioCoexistenceSettings(BaseModel):
     correction_frequency: str = "medium"
 
 
-class HapticPreferences(BaseModel):
-    """User selections of vibration candidates for haptic cue categories."""
+# Haptic schemas — canonical definitions in app.models.haptic_schemas
+from app.models.haptic_schemas import (  # noqa: E402
+    SleeveSide,
+    HapticLimb,
+    HapticPreferences,
+    HapticVibrationCandidate,
+    HapticTestRequest,
+    HapticTriggerRequest,
+    HapticPattern,
+    HapticTestResponse,
+    HapticTriggerResponse,
+    HapticStatusResponse,
+    HapticEventMappingItem,
+    DEFAULT_HAPTIC_CATEGORY_IDS,
+    CANONICAL_HAPTIC_CATEGORIES,
+)
 
-    start: str | None = "start_001"
-    countdown: str | None = "countdown_001"
-    per_rep_tick: str | None = "per_rep_tick_001"
-    speed_up: str | None = "speed_up_001"
-    slow_down: str | None = "slow_down_001"
-    form_warning_above: str | None = "form_warning_above_001"
-    cooldown: str | None = "cooldown_001"
-
-
-class HapticVibrationCandidate(BaseModel):
-    """Individual haptic vibration configuration entry from the manifest."""
-
-    id: str
-    cue_type: str
-    label: str
-    source_wav: str
-    filename: str
-    duration_ms: float
-    conversion_status: str = "raw_wav"
-    bhaptics_event_name: str | None = None
-    provider_notes: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -538,90 +516,7 @@ class UserSettingsUpdate(BaseModel):
     haptic_preferences: HapticPreferences | None = None
 
 
-class HapticTestRequest(BaseModel):
-    """Request body for firing a haptic sleeve test pulse."""
 
-    sleeve_side: SleeveSide
-
-
-class HapticTriggerRequest(BaseModel):
-    """Request body for triggering a named haptic/spatial assistance cue pattern."""
-
-    sleeve_sides: list[SleeveSide] | None = None
-    pattern_name: str | None = None
-    intensity: float
-    cue_type: str | None = None
-    vibration_id: str | None = None
-    limbs: list[HapticLimb] | None = None
-    bhaptics_event_name: str | None = None
-
-
-class HapticPattern(BaseModel):
-    """Available haptic pattern description with metadata."""
-
-    name: str
-    label: str
-    purpose: str
-    duration_ms: int
-    pulse_count: int
-    default_intensity: float
-    replace_with: str = "haptic_hardware_provider"
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class HapticTestResponse(BaseModel):
-    """Response returned from a successful calibration/test pulse."""
-
-    success: bool
-    sleeve_side: SleeveSide
-    message: str
-    source: str = "prototype"
-    provider: str = "bhaptics_dry_run"
-    replace_with: str = "haptic_hardware_provider"
-
-
-class HapticTriggerResponse(BaseModel):
-    """Response returned from triggering a haptic pattern."""
-
-    status: str
-    pattern_name: str | None = None
-    sleeve_sides: list[SleeveSide] | None = None
-    intensity: float
-    source: str = "prototype"
-    provider: str = "bhaptics_dry_run"
-    replace_with: str = "haptic_hardware_provider"
-    cue_type: str | None = None
-    selected_vibration_id: str | None = None
-    selected_wav: str | None = None
-    target_limbs: list[HapticLimb] | None = None
-    bhaptics_event_name: str | None = None
-    delivery_mode: Literal["hardware", "indicator", "dry_run", "failed"] | None = None
-    hardware_available: bool = False
-    player_available: bool | None = None
-    request_id: str | None = None
-    status_message: str | None = None
-    resolved_cue_type: str | None = None
-    target_positions: list[str] | None = None
-
-
-class HapticStatusResponse(BaseModel):
-    """Response returned from checking haptic device connection status."""
-
-    status: str
-    provider: str
-    hardware_available: bool
-    player_available: bool | None = None
-    devices: dict[str, Any] = Field(default_factory=dict)
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class HapticEventMappingItem(BaseModel):
-    """Canonical mapping item of cue category to neutral bHaptics event name."""
-
-    cue_type: str
-    bhaptics_event_name: str
-    label: str
-    description: str
 
 
 class TranscriptArtifact(BaseModel):

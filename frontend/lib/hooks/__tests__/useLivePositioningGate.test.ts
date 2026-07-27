@@ -13,7 +13,7 @@ describe("useLivePositioningGate hook", () => {
   const mockReleasePause = vi.fn();
 
   const mockCameraStream = {
-    stream: {} as any,
+    stream: {} as MediaStream | null,
     status: "ready",
     requestCamera: mockRequestCamera,
     stopCamera: mockStopCamera,
@@ -38,7 +38,7 @@ describe("useLivePositioningGate hook", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCameraStream.stream = {} as any;
+    mockCameraStream.stream = {} as MediaStream;
     mockCameraStream.status = "ready";
   });
 

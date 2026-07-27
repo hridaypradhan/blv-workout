@@ -90,10 +90,8 @@ export async function pingHapticProvider(): Promise<unknown> {
  */
 export const DEFAULT_HAPTIC_EVENT_MAP: HapticEventMappingItem[] = [
   { cue_type: "start", bhaptics_event_name: "assist_start", label: "Session Start Cue", description: "Tactile vibration signifying the start of the workout or active phase." },
-  { cue_type: "countdown", bhaptics_event_name: "assist_countdown", label: "Countdown Tick Cue", description: "Pulsing ticks counting down to the next movement or transition." },
-  { cue_type: "per_rep_tick", bhaptics_event_name: "assist_rep_tick", label: "Repetition Tick Cue", description: "Short pulse delivered on each completed repetition." },
+  { cue_type: "finish", bhaptics_event_name: "assist_finish", label: "Finish / Cooldown Cue", description: "Gentle pattern signifying workout completion." },
+  { cue_type: "reps", bhaptics_event_name: "assist_reps", label: "Repetition Guidance Cue", description: "Tactile pulse delivered on each completed repetition." },
   { cue_type: "speed_up", bhaptics_event_name: "assist_speed_up", label: "Speed Up Cue", description: "Ascending tactile sweep indicating you should increase your movement speed." },
   { cue_type: "slow_down", bhaptics_event_name: "assist_slow_down", label: "Slow Down Cue", description: "Descending tactile sweep indicating you should decrease your movement speed." },
-  { cue_type: "form_warning_above", bhaptics_event_name: "assist_form_warning_high", label: "Form Warning Cue", description: "Sharp warning buzz indicating joint/posture angle is too high." },
-  { cue_type: "cooldown", bhaptics_event_name: "assist_cooldown", label: "Cooldown / Session End Cue", description: "Gentle, dissipating pattern signifying workout completion." }
 ];

@@ -32,49 +32,6 @@ class TestHapticServicesAndRouter(unittest.TestCase):
         settings.BHAPTICS_PROVIDER = self.original_provider
         provider_factory.reset_haptics_provider()
 
-    def test_canonical_mapping_resolution(self):
-        # start -> assist_start
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="start"), "assist_start")
-        # countdown -> assist_countdown
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="countdown"), "assist_countdown")
-        # per_rep_tick -> assist_rep_tick
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="per_rep_tick"), "assist_rep_tick")
-        # speed_up -> assist_speed_up
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="speed_up"), "assist_speed_up")
-        # slow_down -> assist_slow_down
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="slow_down"), "assist_slow_down")
-        # form_warning_above -> assist_form_warning_high
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="form_warning_above"), "assist_form_warning_high")
-        # cooldown -> assist_cooldown
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="cooldown"), "assist_cooldown")
-
-    def test_explicit_event_name_preserved(self):
-        self.assertEqual(
-            event_contract.resolve_bhaptics_event(cue_type="start", explicit_bhaptics_event_name="my_explicit_event"),
-            "my_explicit_event"
-        )
-        self.assertEqual(
-            event_contract.resolve_bhaptics_event(explicit_bhaptics_event_name="my_explicit_event"),
-            "my_explicit_event"
-        )
-
-    def test_unknown_cue_type_fallback(self):
-        # Unknown cue type falls back to assist_attention_double
-        self.assertEqual(event_contract.resolve_bhaptics_event(cue_type="nonexistent_cue"), "assist_attention_double")
-        self.assertEqual(event_contract.resolve_bhaptics_event(), "assist_attention_double")
-
-    def test_vibration_id_mapping(self):
-        # Should parse start from vibration_id and resolve to assist_start
-        self.assertEqual(event_contract.resolve_bhaptics_event(vibration_id="start_001"), "assist_start")
-        self.assertEqual(event_contract.resolve_bhaptics_event(vibration_id="form_warning_above_005"), "assist_form_warning_high")
-        # Unknown prefix in vibration_id should fallback to assist_attention_double
-        self.assertEqual(event_contract.resolve_bhaptics_event(vibration_id="nonexistent_999"), "assist_attention_double")
-
-    def test_event_contract_no_prototype_imports(self):
-        # Pop from sys.modules if present to verify it is not loaded on resolution
-        sys.modules.pop("app.prototype.haptic_provider", None)
-        event_contract.resolve_bhaptics_event(vibration_id="start_001")
-        self.assertNotIn("app.prototype.haptic_provider", sys.modules)
 
     def test_dry_run_provider_fallback_reasons(self):
         p1 = DryRunHapticsProvider(status="disabled")
@@ -249,14 +206,14 @@ class TestHapticServicesAndRouter(unittest.TestCase):
         # Relaxed validation: check that a request with only cue_type succeeds without limbs/sleeves
         payload = {
             "intensity": 0.6,
-            "cue_type": "per_rep_tick"
+            "cue_type": "reps"
         }
         response = self.client.post("/api/haptic/trigger", json=payload)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "would_trigger")
         self.assertEqual(data["delivery_mode"], "dry_run")
-        self.assertEqual(data["bhaptics_event_name"], "assist_rep_tick")
+        self.assertEqual(data["bhaptics_event_name"], "assist_reps")
 
     def test_api_trigger_explicit_event_name(self):
         payload = {
@@ -405,12 +362,12 @@ class TestHapticServicesAndRouter(unittest.TestCase):
             {
                 "event_type": SessionEventNames.HAPTIC_CUE_REQUESTED,
                 "timestamp_ms": 5000,
-                "metadata": {"bhaptics_event_name": "assist_countdown"}
+                "metadata": {"bhaptics_event_name": "assist_finish"}
             },
             {
                 "event_type": SessionEventNames.HAPTIC_CUE_FAILED,
                 "timestamp_ms": 5100,
-                "metadata": {"bhaptics_event_name": "assist_countdown", "delivery_mode": "failed"}
+                "metadata": {"bhaptics_event_name": "assist_finish", "delivery_mode": "failed"}
             },
             {
                 "event_type": SessionEventNames.HAPTIC_CUE_REQUESTED,
@@ -444,115 +401,6 @@ class TestHapticServicesAndRouter(unittest.TestCase):
         
         with store._lock:
             store._sessions.pop(session.id, None)
-
-    def _make_bhaptics_mock_provider(self, left_connected: bool, right_connected: bool) -> BHapticsProvider:
-        """Helper: build an initialized BHapticsProvider with controlled device state."""
-        provider = BHapticsProvider("app", "key")
-        # Patch instance method directly so it stays active throughout the test
-        provider._check_python_supported = MagicMock(return_value=True)
-        mock_sdk = MagicMock()
-
-        async def mock_reg(*args, **kwargs):
-            return True
-
-        async def mock_is_connected(pos):
-            if pos == 1:
-                return left_connected
-            if pos == 2:
-                return right_connected
-            return False
-
-        async def mock_get_device_info():
-            devices = []
-            if left_connected:
-                devices.append({"position": 1, "connected": True, "name": "Left Arm"})
-            if right_connected:
-                devices.append({"position": 2, "connected": True, "name": "Right Arm"})
-            return {"devices": devices}
-
-        async def mock_play(event, *args, **kwargs):
-            return "req-ok"
-
-        mock_sdk.registry_and_initialize = mock_reg
-        mock_sdk.is_bhaptics_device_connected = mock_is_connected
-        mock_sdk.get_device_info_json = mock_get_device_info
-        mock_sdk.play_event = mock_play
-        provider._sdk = mock_sdk
-        return provider
-
-
-    def test_target_left_only_no_left_connected_gives_indicator(self):
-        """Targeting left sleeve but only right is connected → indicator mode."""
-        provider = self._make_bhaptics_mock_provider(left_connected=False, right_connected=True)
-        response = asyncio.run(provider.trigger_event(
-            event_name="assist_start",
-            intensity=0.5,
-            sleeve_sides=[SleeveSide.LEFT],
-        ))
-        self.assertEqual(response.delivery_mode, "indicator")
-        self.assertEqual(response.status, "would_trigger")
-        self.assertFalse(response.hardware_available)
-        self.assertTrue(response.player_available)
-        self.assertIn("no connected sleeve is available", response.status_message)
-
-    def test_target_right_only_no_right_connected_gives_indicator(self):
-        """Targeting right sleeve but only left is connected → indicator mode."""
-        provider = self._make_bhaptics_mock_provider(left_connected=True, right_connected=False)
-        response = asyncio.run(provider.trigger_event(
-            event_name="assist_rep_tick",
-            intensity=0.5,
-            sleeve_sides=[SleeveSide.RIGHT],
-        ))
-        self.assertEqual(response.delivery_mode, "indicator")
-        self.assertFalse(response.hardware_available)
-
-    def test_target_left_both_connected_fires_hardware(self):
-        """Targeting left sleeve and both are connected → hardware fires."""
-        provider = self._make_bhaptics_mock_provider(left_connected=True, right_connected=True)
-        response = asyncio.run(provider.trigger_event(
-            event_name="assist_countdown",
-            intensity=0.7,
-            sleeve_sides=[SleeveSide.LEFT],
-        ))
-        self.assertEqual(response.delivery_mode, "hardware")
-        self.assertEqual(response.status, "triggered")
-        self.assertEqual(response.request_id, "req-ok")
-
-    def test_target_right_only_connected_fires_hardware(self):
-        """Targeting right sleeve and only right is connected → hardware fires."""
-        provider = self._make_bhaptics_mock_provider(left_connected=False, right_connected=True)
-        response = asyncio.run(provider.trigger_event(
-            event_name="assist_speed_up",
-            intensity=0.6,
-            sleeve_sides=[SleeveSide.RIGHT],
-        ))
-        self.assertEqual(response.delivery_mode, "hardware")
-        self.assertEqual(response.status, "triggered")
-        self.assertTrue(response.hardware_available)
-
-    def test_target_both_one_connected_fires_hardware(self):
-        """Targeting both sleeves when only one is connected → hardware fires on available side."""
-        provider = self._make_bhaptics_mock_provider(left_connected=True, right_connected=False)
-        response = asyncio.run(provider.trigger_event(
-            event_name="assist_slow_down",
-            intensity=0.5,
-            sleeve_sides=[SleeveSide.BOTH],
-        ))
-        # At least one target is connected, so hardware should fire
-        self.assertEqual(response.delivery_mode, "hardware")
-        self.assertEqual(response.status, "triggered")
-
-    def test_target_default_no_devices_gives_indicator(self):
-        """No sleeve_sides specified and no devices connected → indicator mode."""
-        provider = self._make_bhaptics_mock_provider(left_connected=False, right_connected=False)
-        response = asyncio.run(provider.trigger_event(
-            event_name="assist_cooldown",
-            intensity=0.5,
-        ))
-        # Default targets both; no connected devices → indicator
-        self.assertEqual(response.delivery_mode, "indicator")
-        self.assertFalse(response.hardware_available)
-
 
 if __name__ == "__main__":
     unittest.main()

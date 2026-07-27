@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useEffect, useRef, Suspense } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { useYouTubePlayer } from "@/lib/hooks/useYouTubePlayer";
@@ -22,6 +21,7 @@ import { useAutomaticCue } from "@/lib/hooks/useAutomaticCue";
 import { useQnAChat } from "@/lib/hooks/useQnAChat";
 import { useLiveVoiceCommands } from "@/lib/hooks/useLiveVoiceCommands";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
+import { inferHapticCategoryFromCue, HAPTIC_CATEGORY_DEFAULT_IDS } from "@/lib/userPreferences";
 import { initSpeechRegistryMonkeyPatch } from "@/lib/voice/speechRegistry";
 import { useSessionEnd } from "@/lib/hooks/useSessionEnd";
 import { useLiveCueDelivery } from "@/lib/hooks/useLiveCueDelivery";
@@ -29,7 +29,6 @@ import { usePoseSessionEvents } from "@/lib/hooks/usePoseSessionEvents";
 import { usePrototypePoseRuntime } from "@/lib/hooks/usePrototypePoseRuntime";
 import { useCameraStream, useCameraLifecycleCleanup } from "@/lib/hooks/useCameraStream";
 import { useMediaPipePoseRuntime } from "@/lib/hooks/useMediaPipePoseRuntime";
-import { getCameraPreference } from "@/lib/camera/cameraPreference";
 import { getExercisePoseProfile } from "@/lib/pose/exercisePoseProfiles";
 import { CameraPositioningGate } from "@/components/session/CameraPositioningGate";
 import { getPoseRequirementForAnchor } from "@/lib/pose/positioningGuide";
@@ -38,7 +37,10 @@ import { useLivePositioningGate } from "@/lib/hooks/useLivePositioningGate";
 import { useLiveSessionAnnouncements } from "@/lib/hooks/useLiveSessionAnnouncements";
 import { useLiveSessionNavigation } from "@/lib/hooks/useLiveSessionNavigation";
 import { useLiveSessionCueGlue } from "@/lib/hooks/useLiveSessionCueGlue";
+import { useSessionLifecycleHaptics } from "@/lib/hooks/useSessionLifecycleHaptics";
+import { useLiveSessionCameraTelemetry } from "@/lib/hooks/useLiveSessionCameraTelemetry";
 import { LiveSessionPlaybackColumn } from "@/components/session/LiveSessionPlaybackColumn";
+import SessionStatusGuards from "@/components/session/SessionStatusGuards";
 import { LiveSessionSidebar } from "@/components/session/LiveSessionSidebar";
 
 interface LiveSessionProps {
@@ -62,23 +64,6 @@ function generateQnaCueId(): string {
   }
   const randomStr = Math.random().toString(36).substring(2, 15);
   return `qna-${Date.now()}-${randomStr}`;
-}
-
-/** Inferred mapping of cue description text to haptic vibration category types. */
-function getCueTypeFromCue(text: string, metadata?: Record<string, unknown> | null): string {
-  if (metadata?.cue_type && typeof metadata.cue_type === "string") return metadata.cue_type;
-  const t = text.toLowerCase();
-  if (t.includes("countdown")) return "countdown";
-  if (t.includes("start")) return "start";
-  if (t.includes("cooldown") || t.includes("cool down") || t.includes("finish") || t.includes("done"))
-    return "cooldown";
-  if (t.includes("speed up") || t.includes("faster") || t.includes("accelerate")) return "speed_up";
-  if (t.includes("slow down") || t.includes("slower") || t.includes("pace")) {
-    if (t.includes("slow")) return "slow_down";
-    if (t.includes("speed")) return "speed_up";
-  }
-  if (t.includes("rep") || t.includes("tick")) return "per_rep_tick";
-  return "form_warning_above";
 }
 
 function LiveSessionContent({ params }: LiveSessionProps) {
@@ -197,14 +182,19 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
   const handleHapticCueTrigger = React.useCallback(
     (text: string, hapticCueRef: string | null, cueId: string | null) => {
-      const cueType = hapticCueRef || (text ? getCueTypeFromCue(text) : "per_rep_tick");
+      const category = inferHapticCategoryFromCue(text, hapticCueRef ? { cue_type: hapticCueRef } : null);
+      if (!category) {
+        // Countdown, Form Warning, or unclassifiable cue -> suppress haptics
+        return;
+      }
+
+      const defaultId = HAPTIC_CATEGORY_DEFAULT_IDS[category];
       const vibrationId =
-        (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[cueType] ||
-        `${cueType}_001`;
+        (userProfile?.haptic_preferences as Record<string, string | null | undefined>)?.[category] || defaultId;
       const limbs = ["left_arm", "right_arm"];
 
       triggerHapticEvent({
-        cueType,
+        cueType: category,
         vibrationId,
         intensity: 0.7,
         limbs,
@@ -276,6 +266,18 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     handleSeek,
   });
 
+  // Session Start and Finish lifecycle haptic triggers
+  const { triggerFinishHaptic } = useSessionLifecycleHaptics({
+    sessionId,
+    isReady,
+    isPlaying,
+    hasEnded,
+    isLiveGateOpen,
+    currentTime,
+    userProfile,
+    triggerHapticEvent,
+  });
+
   const handleManualPlay = React.useCallback(() => {
     pauseCoordinator.releasePause("user_manual", "Manual user play trigger");
   }, [pauseCoordinator]);
@@ -339,144 +341,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     }
   }, [activePoseRuntime]);
 
-  // Start camera using the preferred device ID on mount exactly once
-  const autoStartRanRef = useRef(false);
-  useEffect(() => {
-    if (autoStartRanRef.current) return;
-    autoStartRanRef.current = true;
-    const pref = getCameraPreference();
-    cameraStream.requestCamera(pref?.deviceId).catch((err) => {
-      console.error("Failed to auto-start camera on session mount:", err);
-    });
-  }, [cameraStream.requestCamera]);
-
-  // Auto-request camera if idle on exercise transition
-  useEffect(() => {
-    if (!isReady || !currentExercise || cameraGatesDisabled) return;
-    if (cameraStream.status === "idle") {
-      cameraStream.requestCamera().catch((err: any) => {
-        console.error("Auto camera request on transition failed:", err);
-      });
-    }
-  }, [currentExercise, isReady, cameraGatesDisabled, cameraStream.status, cameraStream.requestCamera]);
-
-  // Monitor camera stream changes and announce status to screen reader
-  const lastStreamDeviceIdRef = useRef<string | null>(null);
-  const lastStreamStatusRef = useRef<string>("idle");
-
-  useEffect(() => {
-    if (cameraStream.status === "ready" && cameraStream.stream) {
-      const activeDeviceId = cameraStream.activeDeviceId;
-      const devicesList = cameraStream.devices || [];
-      const activeDevice = devicesList.find((d: any) => d.deviceId === activeDeviceId);
-      const label = activeDevice?.label || "";
-
-      // Only announce if the device ID has actually changed (or transitioned to ready)
-      if (activeDeviceId !== lastStreamDeviceIdRef.current || lastStreamStatusRef.current !== "ready") {
-        lastStreamDeviceIdRef.current = activeDeviceId;
-        lastStreamStatusRef.current = "ready";
-
-        const labelLower = label.toLowerCase();
-        const isIntegrated =
-          labelLower.includes("integrated") ||
-          labelLower.includes("built-in") ||
-          labelLower.includes("facetime") ||
-          labelLower.includes("front") ||
-          labelLower.includes("isight") ||
-          labelLower.includes("internal");
-
-        // Check if user had a preferred external camera that failed
-        const pref = getCameraPreference();
-        const prefWasExternal = pref && !((pref.label || "").toLowerCase().includes("integrated") ||
-                                          (pref.label || "").toLowerCase().includes("built-in") ||
-                                          (pref.label || "").toLowerCase().includes("facetime") ||
-                                          (pref.label || "").toLowerCase().includes("front") ||
-                                          (pref.label || "").toLowerCase().includes("isight") ||
-                                          (pref.label || "").toLowerCase().includes("internal"));
-
-        if (isIntegrated) {
-          if (prefWasExternal && activeDeviceId !== pref?.deviceId) {
-            announce("External webcam unavailable. Switched to integrated webcam.");
-          } else {
-            announce("Using integrated webcam.");
-          }
-        } else {
-          announce("Using external webcam.");
-        }
-      }
-    } else if (
-      cameraStream.status !== "idle" &&
-      cameraStream.status !== "requesting" &&
-      cameraStream.status !== lastStreamStatusRef.current
-    ) {
-      lastStreamStatusRef.current = cameraStream.status;
-      lastStreamDeviceIdRef.current = null;
-      announce("Camera unavailable. Using simulated fallback.");
-    }
-  }, [cameraStream.status, cameraStream.stream, cameraStream.activeDeviceId, cameraStream.devices, announce]);
-
-  const runtimeObservationContext = React.useMemo(() => {
-    const mpActive = mediaPipePoseRuntime.runtimeStatus === "active";
-    const mpAvailable = mediaPipePoseRuntime.poseAvailable;
-    const mpVisible = mediaPipePoseRuntime.requiredLandmarksVisible;
-    const profile = getExercisePoseProfile(currentExercise);
-    const exerciseSupported = profile.supported;
-
-    let pose_available = false;
-    let observation_capability: "not_available" | "available" | "low_confidence" = "not_available";
-    let notes = "";
-
-    if (isMediaPipeUsable && mpAvailable && mpVisible) {
-      pose_available = true;
-      observation_capability = "available";
-      notes = "Real-time camera observation using browser-local MediaPipe is active and reliable.";
-    } else if (mpActive && (!mpAvailable || !mpVisible)) {
-      pose_available = false;
-      observation_capability = "low_confidence";
-      notes = "Camera is present and active, but posture detection confidence is low or required joints are obscured.";
-    } else {
-      pose_available = false;
-      observation_capability = "not_available";
-      if (!exerciseSupported && currentExercise) {
-        notes = `Pose tracking is not supported for exercise: ${currentExercise.name}. Falling back to prototype simulation.`;
-      } else if (mediaPipePoseRuntime.runtimeStatus === "initializing") {
-        notes = "Camera pose tracking is initializing (loading model).";
-      } else {
-        notes = "Camera is offline or fallback simulation is active. The assistant cannot see you.";
-      }
-    }
-
-    const pose_confidence = mpActive ? mediaPipePoseRuntime.landmarkConfidence : null;
-
-    const latest_form_error = (pose_available && mediaPipePoseRuntime.latestFormError)
-      ? {
-          joint: mediaPipePoseRuntime.latestFormError.joint,
-          observed_angle: mediaPipePoseRuntime.latestFormError.observed_angle,
-          expected_range: mediaPipePoseRuntime.latestFormError.expected_range,
-          severity: mediaPipePoseRuntime.latestFormError.severity,
-          message: mediaPipePoseRuntime.latestFormError.message,
-          provider: "camera_mediapipe",
-        }
-      : null;
-
-    const latest_rep_event = (pose_available && mediaPipePoseRuntime.latestRepEvent)
-      ? {
-          rep_count: mediaPipePoseRuntime.latestRepEvent.rep_count,
-          exercise_id: mediaPipePoseRuntime.latestRepEvent.exercise_id,
-          provider: "camera_mediapipe",
-        }
-      : null;
-
-    return {
-      pose_available,
-      pose_confidence,
-      observation_capability,
-      latest_form_error,
-      latest_rep_event,
-      notes,
-    };
-  }, [mediaPipePoseRuntime, isMediaPipeUsable, currentExercise]);
-
   const {
     startPoseTracking,
     stopPoseTracking,
@@ -512,156 +376,25 @@ function LiveSessionContent({ params }: LiveSessionProps) {
 
   const activePoseProvider = isMediaPipeUsable ? "camera_mediapipe" : "prototype_pose";
 
-  const handleSelectCameraDevice = React.useCallback(async (deviceId?: string, isExplicit = true) => {
-    const devices = cameraStream.devices || [];
-    const device = devices.find((d: any) => d.deviceId === deviceId);
-    logSessionEvent(SESSION_EVENTS.CAMERA_DEVICE_SELECTED, currentTimeMs, {
-      selectedDeviceId: deviceId || "",
-      selectedDeviceLabel: device?.label || "",
-    });
-    await cameraStream.requestCamera(deviceId, isExplicit);
-  }, [cameraStream.devices, cameraStream.requestCamera, logSessionEvent, currentTimeMs]);
-
-  const cameraPoseStatusLabel = React.useMemo(() => {
-    if (cameraGatesDisabled || cameraStream.status === "idle") {
-      return "Camera off. Using fallback tracking.";
-    }
-    if (cameraStream.status === "requesting") {
-      const devicesList = cameraStream.devices || [];
-      const device = devicesList.find((d: any) => d.deviceId === cameraStream.selectedDeviceId);
-      return `Trying ${device?.label || "Camera"}...`;
-    }
-    if (cameraStream.status === "ready") {
-      if (cameraStream.selectedDeviceId !== cameraStream.activeDeviceId) {
-        const devicesList = cameraStream.devices || [];
-        const selDevice = devicesList.find((d: any) => d.deviceId === cameraStream.selectedDeviceId);
-        return `${selDevice?.label || "Selected camera"} failed. Using integrated webcam fallback.`;
-      }
-      return "Camera ready. Retry alignment available.";
-    }
-    if (cameraStream.status === "error" || cameraStream.status === "permission_denied" || cameraStream.status === "not_found") {
-      const devicesList = cameraStream.devices || [];
-      const selDevice = devicesList.find((d: any) => d.deviceId === cameraStream.selectedDeviceId);
-      return `${selDevice?.label || "Camera"} did not start. Using fallback tracking.`;
-    }
-    return "Camera unavailable.";
-  }, [cameraGatesDisabled, cameraStream.status, cameraStream.selectedDeviceId, cameraStream.activeDeviceId, cameraStream.devices]);
-
-  const cameraPoseGuidance = React.useMemo(() => {
-    if (activePoseProvider === "camera_mediapipe") {
-      return mediaPipePoseRuntime.poseStatusDetails?.guidance || "Real-time camera observation is active.";
-    }
-    return "Simulated fallback tracking is active. Assistive voice and haptic guidance are fully operational.";
-  }, [activePoseProvider, mediaPipePoseRuntime.poseStatusDetails]);
-
-  // Telemetry event logging for camera stream
-  const prevCameraStatusRef = useRef<string>("idle");
-  const prevDeviceIdRef = useRef<string>("");
-
-  useEffect(() => {
-    if (!isReady) return;
-
-    const currentStatus = cameraStream.status;
-    const activeDeviceId = cameraStream.activeDeviceId;
-    const selectedDeviceId = cameraStream.selectedDeviceId;
-    const prevStatus = prevCameraStatusRef.current;
-    const prevDeviceId = prevDeviceIdRef.current;
-
-    const devicesList = cameraStream.devices || [];
-    const activeDevice = devicesList.find((d: any) => d.deviceId === activeDeviceId);
-    const activeLabel = activeDevice?.label || "";
-    
-    const selectedDevice = devicesList.find((d: any) => d.deviceId === selectedDeviceId);
-    const selectedLabel = selectedDevice?.label || "";
-
-    // 1. CAMERA_REQUESTED
-    if (currentStatus === "requesting" && prevStatus !== "requesting") {
-      logSessionEvent(SESSION_EVENTS.CAMERA_REQUESTED, currentTimeMs, {
-        requestedDeviceId: selectedDeviceId,
-        requestedDeviceLabel: selectedLabel,
-      });
-    }
-
-    // 2. CAMERA_READY
-    if (currentStatus === "ready" && prevStatus !== "ready") {
-      logSessionEvent(SESSION_EVENTS.CAMERA_READY, currentTimeMs, {
-        activeDeviceId: activeDeviceId,
-        activeDeviceLabel: activeLabel,
-        selectedDeviceId: selectedDeviceId,
-        selectedDeviceLabel: selectedLabel,
-        status: currentStatus,
-        provider: "camera_mediapipe",
-      });
-    }
-
-    // 3. CAMERA_FAILED
-    if (
-      (currentStatus === "permission_denied" || currentStatus === "not_found" || currentStatus === "error") &&
-      prevStatus !== currentStatus
-    ) {
-      logSessionEvent(SESSION_EVENTS.CAMERA_FAILED, currentTimeMs, {
-        status: currentStatus,
-        error: cameraStream.errorMessage || "Unknown camera error",
-        fallbackReason: currentStatus === "permission_denied" ? "permission_denied" : "device_not_found",
-        selectedDeviceId: selectedDeviceId,
-        selectedDeviceLabel: selectedLabel,
-      });
-    }
-
-    // 4. CAMERA_DEVICE_CHANGED
-    if (
-      currentStatus === "ready" &&
-      prevStatus === "ready" &&
-      activeDeviceId !== prevDeviceId &&
-      prevDeviceId !== ""
-    ) {
-      logSessionEvent(SESSION_EVENTS.CAMERA_DEVICE_CHANGED, currentTimeMs, {
-        previousDeviceId: prevDeviceId,
-        activeDeviceId: activeDeviceId,
-        activeDeviceLabel: activeLabel,
-      });
-    }
-
-    prevCameraStatusRef.current = currentStatus;
-    prevDeviceIdRef.current = activeDeviceId;
-  }, [cameraStream.status, cameraStream.activeDeviceId, cameraStream.selectedDeviceId, cameraStream.devices, isReady, currentTimeMs, logSessionEvent]);
-
-  // Telemetry for fallback and runtime changes
-  const prevPoseProviderRef = useRef<string>("prototype_pose");
-  useEffect(() => {
-    if (!isReady) return;
-    if (activePoseProvider === "prototype_pose" && prevPoseProviderRef.current === "camera_mediapipe") {
-      logSessionEvent(SESSION_EVENTS.CAMERA_FALLBACK_USED, currentTimeMs, {
-        reason: fallbackReason || "camera_disabled_or_unavailable",
-        provider: "prototype_pose",
-      });
-    }
-    prevPoseProviderRef.current = activePoseProvider;
-  }, [activePoseProvider, fallbackReason, isReady, currentTimeMs, logSessionEvent]);
-
-  const prevRuntimeStatusRef = useRef<string>("");
-  useEffect(() => {
-    if (!isReady) return;
-    const status = mediaPipePoseRuntime.runtimeStatus;
-    if (status !== prevRuntimeStatusRef.current) {
-      logSessionEvent(SESSION_EVENTS.POSE_RUNTIME_STATUS_CHANGED, currentTimeMs, {
-        status,
-        provider: "camera_mediapipe",
-      });
-      prevRuntimeStatusRef.current = status;
-    }
-  }, [mediaPipePoseRuntime.runtimeStatus, isReady, currentTimeMs, logSessionEvent]);
-
-  const prevGatesDisabledRef = useRef(false);
-  useEffect(() => {
-    if (!isReady) return;
-    if (cameraGatesDisabled && !prevGatesDisabledRef.current) {
-      logSessionEvent(SESSION_EVENTS.CAMERA_DISABLED_FOR_SESSION, currentTimeMs, {
-        reason: "user_disabled_gates",
-      });
-    }
-    prevGatesDisabledRef.current = cameraGatesDisabled;
-  }, [cameraGatesDisabled, isReady, currentTimeMs, logSessionEvent]);
+  const {
+    runtimeObservationContext,
+    handleSelectCameraDevice,
+    cameraPoseStatusLabel,
+    cameraPoseGuidance,
+    preferredCameraLabel,
+  } = useLiveSessionCameraTelemetry({
+    cameraStream,
+    mediaPipePoseRuntime,
+    currentExercise,
+    currentTimeMs,
+    isReady,
+    cameraGatesDisabled,
+    isMediaPipeUsable,
+    activePoseProvider,
+    fallbackReason,
+    announce,
+    logSessionEvent,
+  });
 
   const searchLevel = searchParams.get("overrideLevel");
   const searchPause = searchParams.get("overridePause");
@@ -745,7 +478,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     logSessionEvent,
     triggerHapticEvent,
     setCurrentSpokenCue,
-    getCueTypeFromCue,
   });
 
   // Spoken cue playback
@@ -835,6 +567,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     repsBuffer: repsBufferRef.current,
     formErrorsBuffer: formErrorsBufferRef.current,
     announce,
+    onSuccess: triggerFinishHaptic,
   });
 
   const handleToggleMute = (muted: boolean) => {
@@ -896,84 +629,22 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       handleReadCurrentSection,
     });
 
+  // Early-return guards encapsulated in SessionStatusGuards component
+  if (!sessionId || isLoadingArtifacts || artifactsError || jobStage !== ProcessingStage.COMPLETED) {
+    return (
+      <SessionStatusGuards
+        sessionId={sessionId}
+        videoId={params.videoId}
+        isLoadingArtifacts={isLoadingArtifacts}
+        artifactsError={artifactsError}
+        jobStage={jobStage}
+      />
+    );
+  }
+
   // ---------------------------------------------------------------------------
-  // Early-return guards
+  // Main render
   // ---------------------------------------------------------------------------
-
-  if (!sessionId) {
-    return (
-      <PageWrapper id="live-session-no-id-wrapper">
-        <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
-          <svg className="w-12 h-12 text-yellow-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <h2 className="text-xl font-bold text-white mb-2">Session ID Missing</h2>
-          <p className="text-sm text-slate-400 mb-6">
-            An active session is required to record your workout and view telemetry. Please configure your session first.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
-            <Link href={`/session/${params.videoId}/setup`}
-              className="px-5 py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold rounded-xl text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
-              Go to Session Setup
-            </Link>
-            <Link href="/video-library"
-              className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
-              Back to Video Library
-            </Link>
-          </div>
-        </div>
-      </PageWrapper>
-    );
-  }
-
-  if (isLoadingArtifacts) {
-    return (
-      <PageWrapper id="live-session-loading-wrapper">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
-          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Loading Assisted Playback Session</h2>
-          <p className="text-sm text-slate-400">Fetching workout metadata and preparation details...</p>
-        </div>
-      </PageWrapper>
-    );
-  }
-
-  if (artifactsError) {
-    return (
-      <PageWrapper id="live-session-error-wrapper">
-        <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
-          <svg className="w-12 h-12 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <h2 className="text-xl font-bold text-white mb-2">Failed to Load Session</h2>
-          <p className="text-sm text-slate-400 mb-6">{artifactsError}</p>
-          <Link href="/video-library"
-            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
-            Back to Video Library
-          </Link>
-        </div>
-      </PageWrapper>
-    );
-  }
-
-  if (jobStage !== ProcessingStage.COMPLETED) {
-    return (
-      <PageWrapper id="live-session-pending-wrapper">
-        <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl mt-10">
-          <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Preparation in Progress</h2>
-          <p className="text-sm text-slate-400 mb-2">Workout assistance preparation is not complete yet.</p>
-          <p className="text-sm text-yellow-400 font-semibold bg-yellow-400/10 border border-yellow-400/20 px-3 py-1.5 rounded-full mb-6">
-            Current Stage: {jobStage ? jobStage.replace(/_/g, " ") : "unknown"}
-          </p>
-          <Link href="/video-library"
-            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm border border-slate-700 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
-            Back to Video Library
-          </Link>
-        </div>
-      </PageWrapper>
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Main render
@@ -1100,7 +771,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
             selectedCameraDeviceId={cameraStream.selectedDeviceId}
             onRequestCamera={cameraStream.requestCamera}
             onDisableCameraGatesForSession={handleDisableCameraGates}
-            preferredCameraLabel={getCameraPreference()?.label}
+            preferredCameraLabel={preferredCameraLabel}
             announce={announce}
           />
         );

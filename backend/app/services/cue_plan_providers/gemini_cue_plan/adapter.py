@@ -90,6 +90,15 @@ def convert_gemini_to_canonical(gemini_plan: CuePlanGemini, youtube_id: str) -> 
                 "detailed": c.text_variants.detailed,
             }
             
+        haptic_ref = c.haptic_cue_ref
+        if haptic_ref:
+            if haptic_ref == "per_rep_tick":
+                haptic_ref = "reps"
+            elif haptic_ref == "cooldown":
+                haptic_ref = "finish"
+            elif haptic_ref not in ("start", "finish", "reps", "speed_up", "slow_down"):
+                haptic_ref = None
+
         cue_candidates.append({
             "id": c.id,
             "exercise_anchor_id": c.exercise_anchor_id,
@@ -101,7 +110,7 @@ def convert_gemini_to_canonical(gemini_plan: CuePlanGemini, youtube_id: str) -> 
             "intent": intent,
             "allowed_modalities": modalities,
             "text_variants": text_variants,
-            "haptic_cue_ref": c.haptic_cue_ref,
+            "haptic_cue_ref": haptic_ref,
             "interruption_policy_hint": policy,
         })
         

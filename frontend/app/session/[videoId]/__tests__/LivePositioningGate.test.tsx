@@ -400,6 +400,8 @@ describe("LiveSession Per-Exercise Positioning Gate", () => {
     rerender(<LiveSessionPage params={{ videoId: "video-123" }} />);
     expect(queryByTestId("live-positioning-gate")).toBeDefined();
 
+    mockTriggerHapticEvent.mockClear();
+
     // 3. Set the active legacy cue while the gate is already open
     act(() => {
       mockActiveCue = {

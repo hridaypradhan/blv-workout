@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
@@ -76,8 +77,7 @@ export function useLiveVoiceCommands({
   pause,
   seek,
   currentTime,
-  // playbackRate is part of the public interface but not consumed in this hook body;
-  // setPlaybackRate is forwarded to the pure playback handler instead.
+  playbackRate = 1.0,
   setPlaybackRate,
   handleSkipSection,
   handleRepeatTrainerInstruction,
@@ -128,10 +128,10 @@ export function useLiveVoiceCommands({
   void assistantMutedRef; // read via deps in handlers
 
   const playbackRateRef = useRef(playbackRate);
-  const activeOwnersRef = useRef(activeOwners || new Set());
+  const activeOwnersRef = useRef<Set<PauseOwner>>(activeOwners || new Set<PauseOwner>());
 
   useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
-  useEffect(() => { activeOwnersRef.current = activeOwners || new Set(); }, [activeOwners]);
+  useEffect(() => { activeOwnersRef.current = activeOwners || new Set<PauseOwner>(); }, [activeOwners]);
 
   // Stable refs for callback props
   const submitQuestionRef = useRef(submitQuestion);
@@ -238,7 +238,7 @@ export function useLiveVoiceCommands({
         setPlaybackRate: setPlaybackRateRef.current,
         announce: announceRef.current,
         logSessionEvent: logSessionEventRef.current,
-        activeOwners: activeOwnersRef.current,
+        activeOwners: activeOwnersRef.current as Set<PauseOwner>,
         playbackRate: playbackRateRef.current,
       })) return;
 

@@ -74,9 +74,13 @@ EXAMPLE VALID CUE CANDIDATE:
     "moderate": "Squat down keeping weight in your heels.",
     "detailed": "Squat down by pushing hips back, keeping weight in your heels and chest proud."
   },
-  "haptic_cue_ref": "per_rep_tick",
+  "haptic_cue_ref": "reps",
   "interruption_policy_hint": "safe_gap_only"
 }
+
+ALLOWED HAPTIC CUE REFS:
+Valid haptic_cue_ref values are: "start", "finish", "reps", "speed_up", "slow_down".
+Do NOT emit "countdown" or "form_warning_above" as haptic_cue_ref values.
 """
 
 

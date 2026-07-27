@@ -275,8 +275,27 @@ def validate_and_clamp_cue_plan(
                 ))
                 continue
                 
-            # Drop haptic cues without haptic_cue_ref if modality is ONLY haptic
-            haptic_cue_ref = c.get("haptic_cue_ref")
+            # Canonical haptic cue reference validation
+            raw_haptic_ref = c.get("haptic_cue_ref")
+            haptic_cue_ref = None
+            if raw_haptic_ref and isinstance(raw_haptic_ref, str):
+                ref_clean = raw_haptic_ref.strip().lower()
+                if ref_clean in ("start", "finish", "reps", "speed_up", "slow_down"):
+                    haptic_cue_ref = ref_clean
+                elif ref_clean == "per_rep_tick":
+                    haptic_cue_ref = "reps"
+                elif ref_clean == "cooldown":
+                    haptic_cue_ref = "finish"
+                else:
+                    # countdown, form_warning_above, or unknown -> sanitized to None
+                    msg = f"Sanitized invalid or deprecated haptic_cue_ref '{raw_haptic_ref}' to None for candidate '{candidate_id}'."
+                    logger.warning(msg)
+                    warnings.append(CuePlanValidationWarning(
+                        code="invalid_haptic_cue_ref_sanitized",
+                        message=msg,
+                        path=f"cue_candidates[{cand_idx}].haptic_cue_ref"
+                    ))
+
             has_haptic = CueModality.HAPTIC in allowed_modalities
             
             if has_haptic and not has_audio and not haptic_cue_ref:

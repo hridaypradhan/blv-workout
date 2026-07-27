@@ -44,28 +44,6 @@ interface UsePoseSessionEventsProps {
   activePoseRuntime: PoseRuntimeContract;
 }
 
-/** Maps a tracked anatomical joint to logical limb targets for dry-run triggering. */
-function getLimbsForJoint(joint?: string): string[] {
-  const j = joint?.toLowerCase() || "";
-  const limbs: string[] = [];
-
-  const isLeft = j.includes("left");
-  const isRight = j.includes("right");
-  const isArm = j.includes("arm") || j.includes("shoulder") || j.includes("elbow") || j.includes("wrist");
-  const isLeg = j.includes("leg") || j.includes("hip") || j.includes("knee") || j.includes("ankle");
-
-  if (isLeft && isArm) limbs.push("left_arm");
-  else if (isRight && isArm) limbs.push("right_arm");
-  else if (isLeft && isLeg) limbs.push("left_leg");
-  else if (isRight && isLeg) limbs.push("right_leg");
-  else {
-    if (isArm) limbs.push("left_arm", "right_arm");
-    else if (isLeg) limbs.push("left_leg", "right_leg");
-    else limbs.push("left_arm", "right_arm");
-  }
-  return limbs;
-}
-
 export function usePoseSessionEvents({
   sessionId,
   currentTimeMs,
@@ -152,11 +130,11 @@ export function usePoseSessionEvents({
         }
       );
 
-      const vibrationId = userProfile?.haptic_preferences?.per_rep_tick || "per_rep_tick_001";
+      const vibrationId = userProfile?.haptic_preferences?.reps || "reps_high_01_v-09-16-1-43";
       const limbs = ["left_arm", "right_arm"];
 
       triggerHapticEvent({
-        cueType: "per_rep_tick",
+        cueType: "reps",
         vibrationId,
         intensity: 0.6,
         limbs,
@@ -230,7 +208,7 @@ export function usePoseSessionEvents({
       }
     );
 
-    // 1. Fetch form correction cue from assistant API
+    // Fetch form correction cue from assistant API (Speech/Audio only - form warning haptics removed)
     const correctionPayload = {
       exercise_id: exerciseId,
       exercise_name: exerciseName,
@@ -258,22 +236,6 @@ export function usePoseSessionEvents({
       .catch((err) => {
         console.error("Failed to generate correction cue:", err);
       });
-
-    // 2. Trigger corrective haptic feedback on target limbs
-    const limbs = getLimbsForJoint(latestFormError.joint);
-    const vibrationId = userProfile?.haptic_preferences?.form_warning_above || "form_warning_above_001";
-
-    triggerHapticEvent({
-      cueType: "form_warning_above",
-      vibrationId,
-      intensity: 0.8,
-      limbs,
-      text: `Form warning: ${latestFormError.message}`,
-      cueId: `form-error-${currentTimeMs}-${latestFormError.joint}`,
-      currentTimeMs,
-    }).catch((err) => {
-      console.error("Failed to trigger corrective haptic cue:", err);
-    });
   }, [
     latestFormError,
     sessionId,

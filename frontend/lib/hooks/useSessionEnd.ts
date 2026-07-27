@@ -19,6 +19,7 @@ interface UseSessionEndProps {
     timestamp: string;
   }>;
   announce: (msg: string) => void;
+  onSuccess?: () => Promise<void> | void;
 }
 
 export function useSessionEnd({
@@ -28,6 +29,7 @@ export function useSessionEnd({
   repsBuffer,
   formErrorsBuffer,
   announce,
+  onSuccess,
 }: UseSessionEndProps) {
   const [isEnding, setIsEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
@@ -48,6 +50,14 @@ export function useSessionEnd({
 
       // Call single finalize endpoint with all buffered data
       await finalizeSession(sessionId, playbackEventsBuffer, repsBuffer, formErrorsBuffer);
+
+      if (onSuccess) {
+        try {
+          await onSuccess();
+        } catch (hapticErr) {
+          console.error("Post-finalization haptic finish trigger error:", hapticErr);
+        }
+      }
 
       window.dispatchEvent(new Event("navigation-start"));
       router.push("/history");

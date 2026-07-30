@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { saveCameraPreference, getCameraPreference } from "@/lib/camera/cameraPreference";
+import { sortCameraFallbackDevices } from "@/lib/camera/cameraDeviceSelection";
 
 export type CameraStreamStatus =
   | "idle"
@@ -117,12 +118,14 @@ export function useCameraStream({ autoEnumerate = true }: UseCameraStreamProps =
 
       if (videoDevices.length > 0) {
         setSelectedDeviceId((prev) => {
-          const exists = videoDevices.some((d) => d.deviceId === prev);
+          if (prev && videoDevices.some((d) => d.deviceId === prev)) {
+            return prev;
+          }
           const pref = getCameraPreference();
           if (pref && videoDevices.some((d) => d.deviceId === pref.deviceId)) {
             return pref.deviceId;
           }
-          return exists && prev ? prev : videoDevices[0].deviceId;
+          return videoDevices[0].deviceId;
         });
       }
     } catch (err: unknown) {
@@ -238,7 +241,11 @@ export function useCameraStream({ autoEnumerate = true }: UseCameraStreamProps =
         const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
         setDevices(videoDevices);
 
-        const fallbackOptions = videoDevices.filter((d) => d.deviceId !== targetDeviceId);
+        const fallbackOptions = sortCameraFallbackDevices(
+          videoDevices,
+          targetDeviceId || "",
+          preference
+        );
         if (fallbackOptions.length === 0) {
           throw new Error("No fallback camera available.");
         }

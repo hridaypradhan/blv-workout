@@ -154,7 +154,7 @@ The camera integration is implemented in progressive stages:
 1. **Stage 1 (Pose & Positioning Contracts)**: Introduced provider-agnostic pose runtime contracts in [poseRuntimeTypes.ts](frontend/lib/pose/poseRuntimeTypes.ts) and positioning state definitions in [positioningTypes.ts](frontend/lib/pose/positioningTypes.ts).
 2. **Stage 2 (Camera Permission & Setup Preview)**: Introduces frontend browser camera permission acquisition, device enumerate selection, and a client-only video preview component in the pre-session setup screen (leveraging a dedicated client hook and the native HTML5 `video` stream).
 3. **Stage 3 (Pre-Session Setup MediaPipe Alignment)**: Enforces hands-free stance alignment guide powered by client-side browser-local Google MediaPipe Pose Landmarker, tracking centering, orientation, and body posture to auto-start workouts.
-4. **Stage 4 (Per-Exercise Live Positioning Gate & Playback Pause Coordination)**: Automatically gates transitions to new exercises, pausing the player and requesting alignment before allowing workout continuation.
+4. **Stage 4 (Checkpoint-Based Live Positioning Gates & Playback Pause Coordination)**: Runs camera alignment before the workout and before supported exercise checkpoints, then monitors opportunistically during playback. Brief tracking loss does not interrupt the user; sustained loss can pause playback for mid-exercise realignment.
 5. **Stage 5 (Live MediaPipe Rep Counting & Form Analysis)**: Integrates real-time, browser-local Google MediaPipe Pose Landmarker tracking during live workouts for supported movements (squats and bicep curls) to count repetitions and analyze form errors. Unusable or unsupported tracking states automatically fall back to prototype-simulated tracking.
 
 #### Playback Pause Coordinator Model
@@ -468,17 +468,21 @@ To manually validate live Gemini-backed QnA:
 
 ## Stage 3: MediaPipe Pose Landmarker Setup
 
-FitA11y uses the Google MediaPipe Tasks Vision model browser-locally in a focused camera alignment mode before starting the workout.
-- **Focused Alignment Mode**: The pre-session setup screen features a dedicated alignment overlay ensuring the user's posture is centered, orientation is correct, and depth is calibrated.
-- **Hands-Free Auto-Start**: Once the positioning guide confirms readiness for the required duration, an auditory/visual countdown is triggered, automatically starting playback without the user needing to walk back to click the mouse.
-- **Client-Side Security**: All camera frames, image streams, and landmark metrics remain 100% browser-local; no data is ever transmitted to backend APIs.
-- **Camera Selection & Handoff Persistence**: When the user selects or switches webcams (including external USB webcams) in the pre-session setup screen, their preference is automatically persisted in session storage. Upon entering the live workout session, the player reads this preferred `deviceId` and auto-requests it first, preventing the browser from resetting back to the laptop's integrated webcam.
+FitA11y uses a **checkpoint-based camera alignment policy** designed to avoid constant gate interruptions during live workouts:
+- **Pre-workout & pre-exercise checkpoints**: Alignment confirmation runs before the workout begins and once before each supported exercise boundary when the camera is available.
+- **Opportunistic exercise monitoring**: During exercises, MediaPipe pose tracking is used opportunistically whenever landmarks are visible for rep counting and form feedback.
+- **Debounced tracking loss**: Brief pose-confidence dips do not interrupt playback. Low confidence / partial landmark loss for roughly 3-5 seconds displays a gentle status warning. Sustained loss for 5 seconds during a supported exercise prompts mid-exercise realignment, with a cooldown so the same exercise can re-arm later without flickering.
+- **User agency & camera controls**: Users can retry alignment, change camera devices, turn off the camera, or disable automatic camera gates for the session. Camera failures never trap the workout.
+- **Automatic soft fallback**: Fallback tracking is automatic when the camera is unavailable or the current exercise is unsupported.
+- **Client-Side Security**: All camera frames, media streams, and landmark metrics remain 100% browser-local; no raw images or landmarks leave the device.
+- **Camera Selection & Handoff Persistence**: When the user selects or switches webcams (including external USB webcams), preference is saved upon successful stream start and auto-requested in live sessions without resetting back to the laptop webcam.
 - **Prioritized Webcam Fallback Hierarchy**: If the preferred webcam is unplugged or fails to start, the camera lifecycle engine automatically falls back using this priority hierarchy:
-  1. Matches devices with a similar label or groupId.
-  2. Prioritizes other external (non-integrated) USB webcams.
-  3. Falls back to the built-in integrated laptop webcam.
-  4. Falls back to generic media stream queries.
-  5. Continues with the camera off and triggers simulated prototype fallback if no camera works.
+  1. Exact preferred device id.
+  2. Devices with the same group id as the preferred camera, when the browser exposes one.
+  3. Devices with labels most similar to the preferred camera.
+  4. Other external-looking webcams before integrated/internal camera labels.
+  5. Generic browser camera selection.
+  6. Camera-off mode with simulated prototype fallback if no camera works.
 - **Camera Feature Split & Fallback Integration**:
   - **Real Camera & Preview**: User-approved camera feeds, active device listings, and toggle controls are fully operational.
   - **Real Setup MediaPipe Alignment**: The pre-session setup screen performs live browser-local MediaPipe keypoint detection to calibrate posture, orientation, and depth positioning.

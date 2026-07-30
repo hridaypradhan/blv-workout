@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Exercise, RuntimeObservationContext } from "@/types";
+import { Exercise } from "@/types";
 import { getCameraPreference } from "@/lib/camera/cameraPreference";
-import { getExercisePoseProfile } from "@/lib/pose/exercisePoseProfiles";
+import {
+  buildRuntimeObservationContext,
+  describeCameraKind,
+} from "@/lib/camera/liveSessionCameraStatus";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 import { useCameraStream } from "@/lib/hooks/useCameraStream";
 import { useMediaPipePoseRuntime } from "@/lib/hooks/useMediaPipePoseRuntime";
@@ -93,22 +96,11 @@ export function useLiveSessionCameraTelemetry({
         lastStreamDeviceIdRef.current = activeDeviceId;
         lastStreamStatusRef.current = "ready";
 
-        const integratedLabels = [
-          "integrated",
-          "built-in",
-          "facetime",
-          "front",
-          "isight",
-          "internal",
-        ];
-        const isIntegrated = integratedLabels.some((token) =>
-          label.toLowerCase().includes(token)
-        );
         const preference = getCameraPreference();
-        const preferenceLabel = (preference?.label || "").toLowerCase();
-        const preferenceWasExternal =
-          Boolean(preference) &&
-          !integratedLabels.some((token) => preferenceLabel.includes(token));
+        const { isIntegrated, preferenceWasExternal } = describeCameraKind(
+          label,
+          preference?.label
+        );
 
         if (isIntegrated) {
           announce(
@@ -131,66 +123,15 @@ export function useLiveSessionCameraTelemetry({
     }
   }, [activeDeviceId, announce, devices, status, stream]);
 
-  const runtimeObservationContext = useMemo(() => {
-    const mediaPipeActive = mediaPipePoseRuntime.runtimeStatus === "active";
-    const poseAvailable = mediaPipePoseRuntime.poseAvailable;
-    const landmarksVisible = mediaPipePoseRuntime.requiredLandmarksVisible;
-    const exerciseSupported = getExercisePoseProfile(currentExercise).supported;
-
-    let observationCapability: RuntimeObservationContext["observation_capability"] =
-      "not_available";
-    let notes =
-      "Camera is offline or fallback simulation is active. The assistant cannot see you.";
-    let reliablePoseAvailable = false;
-
-    if (isMediaPipeUsable && poseAvailable && landmarksVisible) {
-      reliablePoseAvailable = true;
-      observationCapability = "available";
-      notes =
-        "Real-time camera observation using browser-local MediaPipe is active and reliable.";
-    } else if (mediaPipeActive && (!poseAvailable || !landmarksVisible)) {
-      observationCapability = "low_confidence";
-      notes =
-        "Camera is present and active, but posture detection confidence is low or required joints are obscured.";
-    } else if (!exerciseSupported && currentExercise) {
-      notes = `Pose tracking is not supported for exercise: ${currentExercise.name}. Falling back to prototype simulation.`;
-    } else if (mediaPipePoseRuntime.runtimeStatus === "initializing") {
-      notes = "Camera pose tracking is initializing (loading model).";
-    }
-
-    return {
-      pose_available: reliablePoseAvailable,
-      pose_confidence: mediaPipeActive
-        ? mediaPipePoseRuntime.landmarkConfidence
-        : null,
-      observation_capability: observationCapability,
-      latest_form_error:
-        reliablePoseAvailable && mediaPipePoseRuntime.latestFormError
-          ? {
-              ...mediaPipePoseRuntime.latestFormError,
-              provider: "camera_mediapipe",
-            }
-          : null,
-      latest_rep_event:
-        reliablePoseAvailable && mediaPipePoseRuntime.latestRepEvent
-          ? {
-              rep_count: mediaPipePoseRuntime.latestRepEvent.rep_count,
-              exercise_id: mediaPipePoseRuntime.latestRepEvent.exercise_id,
-              provider: "camera_mediapipe",
-            }
-          : null,
-      notes,
-    } satisfies RuntimeObservationContext;
-  }, [
-    currentExercise,
-    isMediaPipeUsable,
-    mediaPipePoseRuntime.landmarkConfidence,
-    mediaPipePoseRuntime.latestFormError,
-    mediaPipePoseRuntime.latestRepEvent,
-    mediaPipePoseRuntime.poseAvailable,
-    mediaPipePoseRuntime.requiredLandmarksVisible,
-    mediaPipePoseRuntime.runtimeStatus,
-  ]);
+  const runtimeObservationContext = useMemo(
+    () =>
+      buildRuntimeObservationContext({
+        mediaPipePoseRuntime,
+        currentExercise,
+        isMediaPipeUsable,
+      }),
+    [currentExercise, isMediaPipeUsable, mediaPipePoseRuntime]
+  );
 
   const handleSelectCameraDevice = useCallback(
     async (deviceId?: string, isExplicit = true) => {

@@ -74,6 +74,25 @@ vi.mock("@/lib/hooks/usePrototypePoseRuntime", () => ({
   usePrototypePoseRuntime: () => mockPrototypePoseRuntime,
 }));
 
+vi.mock("@/lib/hooks/useLivePositioningGate", () => ({
+  useLivePositioningGate: () => ({
+    isLiveGateOpen: false,
+    liveGateExerciseName: null,
+    isLiveCountdownActive: false,
+    liveCancelCountdownTrigger: 0,
+    setLiveCancelCountdownTrigger: vi.fn(),
+    liveGuidance: "Position yourself in front of the camera.",
+    setLiveGuidance: vi.fn(),
+    handleSkipLiveGate: vi.fn(),
+    handleCompleteLiveGate: vi.fn(),
+    cameraGatesDisabled: false,
+    handleDisableCameraGates: vi.fn(),
+    handleRetryAlignment: vi.fn(),
+    setIsLiveCountdownActive: vi.fn(),
+    gateType: null,
+  }),
+}));
+
 // Mock artifacts loading
 vi.mock("@/lib/hooks/useSessionArtifacts", () => ({
   useSessionArtifacts: () => ({

@@ -29,7 +29,6 @@ import { usePoseSessionEvents } from "@/lib/hooks/usePoseSessionEvents";
 import { usePrototypePoseRuntime } from "@/lib/hooks/usePrototypePoseRuntime";
 import { useCameraStream, useCameraLifecycleCleanup } from "@/lib/hooks/useCameraStream";
 import { useMediaPipePoseRuntime } from "@/lib/hooks/useMediaPipePoseRuntime";
-import { getExercisePoseProfile } from "@/lib/pose/exercisePoseProfiles";
 import { CameraPositioningGate } from "@/components/session/CameraPositioningGate";
 import { getPoseRequirementForAnchor } from "@/lib/pose/positioningGuide";
 import { usePlaybackPauseCoordinator } from "@/lib/hooks/usePlaybackPauseCoordinator";
@@ -39,6 +38,7 @@ import { useLiveSessionNavigation } from "@/lib/hooks/useLiveSessionNavigation";
 import { useLiveSessionCueGlue } from "@/lib/hooks/useLiveSessionCueGlue";
 import { useSessionLifecycleHaptics } from "@/lib/hooks/useSessionLifecycleHaptics";
 import { useLiveSessionCameraTelemetry } from "@/lib/hooks/useLiveSessionCameraTelemetry";
+import { useLivePoseRuntimeSelection } from "@/lib/hooks/useLivePoseRuntimeSelection";
 import { LiveSessionPlaybackColumn } from "@/components/session/LiveSessionPlaybackColumn";
 import SessionStatusGuards from "@/components/session/SessionStatusGuards";
 import { LiveSessionSidebar } from "@/components/session/LiveSessionSidebar";
@@ -239,6 +239,19 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     () => isEnding
   );
 
+  const prototypePoseRuntime = usePrototypePoseRuntime({
+    currentTimeMs,
+    activeAnchor: currentExercise,
+    isPlaying,
+  });
+
+  const mediaPipePoseRuntime = useMediaPipePoseRuntime({
+    stream: cameraStream.stream,
+    currentExercise,
+    currentTimeMs,
+    isPlaying,
+  });
+
   const {
     isLiveGateOpen,
     liveGateExerciseName,
@@ -253,6 +266,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     handleDisableCameraGates,
     handleRetryAlignment,
     setIsLiveCountdownActive,
+    gateType,
   } = useLivePositioningGate({
     isReady,
     manifest,
@@ -260,6 +274,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     currentTime,
     currentTimeMs,
     cameraStream,
+    mediaPipePoseRuntime,
     pauseCoordinator,
     logSessionEvent,
     announce,
@@ -302,37 +317,17 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     }
   }, [isPlaying, pauseCoordinator]);
 
-  // Instantiate prototype pose runtime fallback
-  const prototypePoseRuntime = usePrototypePoseRuntime({
-    currentTimeMs,
-    activeAnchor: currentExercise,
-    isPlaying,
-  });
-
-  // Instantiate real browser-local MediaPipe live pose runtime
-  const mediaPipePoseRuntime = useMediaPipePoseRuntime({
-    stream: cameraStream.stream,
+  const {
+    isMediaPipeUsable,
+    fallbackReason,
+    activePoseProvider,
+    activePoseRuntime,
+  } = useLivePoseRuntimeSelection({
+    prototypePoseRuntime,
+    mediaPipePoseRuntime,
     currentExercise,
-    currentTimeMs,
-    isPlaying,
+    cameraGatesDisabled,
   });
-
-  // Determine active runtime based on usability, readiness, and visibility
-  const isMediaPipeUsable = React.useMemo(() => {
-    if (cameraGatesDisabled) return false;
-    if (!mediaPipePoseRuntime.isReady) return false;
-    if (mediaPipePoseRuntime.runtimeStatus !== "active") return false;
-    if (!mediaPipePoseRuntime.poseAvailable) return false;
-    if (!mediaPipePoseRuntime.requiredLandmarksVisible) return false;
-
-    // Check if exercise is supported
-    const profile = getExercisePoseProfile(currentExercise);
-    if (!profile.supported) return false;
-
-    return true;
-  }, [mediaPipePoseRuntime.isReady, mediaPipePoseRuntime.runtimeStatus, mediaPipePoseRuntime.poseAvailable, mediaPipePoseRuntime.requiredLandmarksVisible, currentExercise, cameraGatesDisabled]);
-
-  const activePoseRuntime = isMediaPipeUsable ? mediaPipePoseRuntime : prototypePoseRuntime;
 
   // Automatically start the active pose runtime tracking when the session is loaded/running
   React.useEffect(() => {
@@ -360,21 +355,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     triggerHapticEvent,
     activePoseRuntime,
   });
-
-  // Keep screen-reader status text for tracking system and fallback reason
-  const fallbackReason = !isMediaPipeUsable
-    ? !mediaPipePoseRuntime.isReady
-      ? "MediaPipe model is loading"
-      : mediaPipePoseRuntime.runtimeStatus !== "active"
-      ? "Camera stream is inactive"
-      : !mediaPipePoseRuntime.poseAvailable
-      ? "User body not fully detected by camera"
-      : !mediaPipePoseRuntime.requiredLandmarksVisible
-      ? "Required joints not visible in camera view"
-      : "Exercise not supported for camera tracking"
-    : null;
-
-  const activePoseProvider = isMediaPipeUsable ? "camera_mediapipe" : "prototype_pose";
 
   const {
     runtimeObservationContext,
@@ -749,6 +729,18 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       {/* Positioning Gate Modal */}
       {isLiveGateOpen && liveGateExerciseName && (() => {
         const poseReq = getPoseRequirementForAnchor(liveGateExerciseName);
+        const gateTitle = gateType === "mid_exercise_realign"
+          ? "Mid-Exercise Camera Realignment"
+          : gateType === "pre_workout"
+          ? "Pre-Workout Camera Alignment"
+          : "Camera Positioning Gate";
+
+        const gateSubtitle = gateType === "mid_exercise_realign"
+          ? `Posture tracking was lost during ${liveGateExerciseName}. Re-center in camera view to resume.`
+          : gateType === "pre_workout"
+          ? "Confirm your camera framing before starting your workout."
+          : `Position yourself for ${liveGateExerciseName}. Live session playback will resume once aligned.`;
+
         return (
           <CameraPositioningGate
             isOpen={isLiveGateOpen}
@@ -759,8 +751,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
             onComplete={handleCompleteLiveGate}
             isActionPending={false}
             actionButtonLabel="Skip Camera Alignment"
-            title="Camera Positioning Gate"
-            subtitle={`Position yourself for ${liveGateExerciseName}. Live session playback will resume once you are aligned.`}
+            title={gateTitle}
+            subtitle={gateSubtitle}
             currentGuidance={liveGuidance}
             onGuidanceChange={setLiveGuidance}
             onCountdownActiveChange={setIsLiveCountdownActive}

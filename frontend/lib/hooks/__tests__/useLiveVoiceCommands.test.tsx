@@ -179,14 +179,14 @@ describe("useLiveVoiceCommands", () => {
     );
   });
 
-  test("slow down command calls setPlaybackRate with 0.75", () => {
+  test("slow down command decreases playback rate by 0.25", () => {
     const props = createProps();
     setMockResult("slow down");
 
     renderHook(() => useLiveVoiceCommands(props));
 
     expect(props.setPlaybackRate).toHaveBeenCalledWith(0.75);
-    expect(props.announce).toHaveBeenCalledWith("Slowed to 0.75x.");
+    expect(props.announce).toHaveBeenCalledWith("Speed set to 0.75x.");
   });
 
   test("normal speed command calls setPlaybackRate with 1.0", () => {
@@ -198,13 +198,13 @@ describe("useLiveVoiceCommands", () => {
     expect(props.setPlaybackRate).toHaveBeenCalledWith(1.0);
   });
 
-  test("speed up command calls setPlaybackRate with 1.5", () => {
+  test("speed up command increases playback rate by 0.25", () => {
     const props = createProps();
     setMockResult("speed up");
 
     renderHook(() => useLiveVoiceCommands(props));
 
-    expect(props.setPlaybackRate).toHaveBeenCalledWith(1.5);
+    expect(props.setPlaybackRate).toHaveBeenCalledWith(1.25);
   });
 
   test("next section command calls handleSkipSection", () => {

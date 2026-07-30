@@ -29,7 +29,7 @@ describe("usePrototypePoseRuntime", () => {
     expect(result.current.providerSource).toBe("prototype");
     expect(result.current.runtimeStatus).toBe("offline");
     expect(result.current.poseData).toBeNull();
-    expect(result.current.trackingStatusLabel).toBe("Prototype pose runtime offline");
+    expect(result.current.trackingStatusLabel).toBe("Prototype fallback active");
     expect(result.current.currentAngles).toEqual({});
     expect(result.current.latestRepEvent).toBeNull();
     expect(result.current.latestFormError).toBeNull();
@@ -53,7 +53,7 @@ describe("usePrototypePoseRuntime", () => {
     expect(result.current.providerSource).toBe("prototype");
     expect(result.current.runtimeStatus).toBe("active");
     expect(result.current.poseData).toEqual({ tracking: true, source: "prototype" });
-    expect(result.current.trackingStatusLabel).toBe("Prototype Pose Runtime Active");
+    expect(result.current.trackingStatusLabel).toBe("Prototype fallback active");
   });
 
   test("stops tracking and resets state when stopTracking is called", () => {
@@ -80,7 +80,7 @@ describe("usePrototypePoseRuntime", () => {
     expect(result.current.providerSource).toBe("prototype");
     expect(result.current.runtimeStatus).toBe("offline");
     expect(result.current.poseData).toBeNull();
-    expect(result.current.trackingStatusLabel).toBe("Prototype pose runtime offline");
+    expect(result.current.trackingStatusLabel).toBe("Prototype fallback active");
     expect(result.current.currentAngles).toEqual({});
     expect(result.current.latestRepEvent).toBeNull();
     expect(result.current.latestFormError).toBeNull();

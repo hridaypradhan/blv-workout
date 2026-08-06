@@ -78,7 +78,7 @@ class TestDynamoDBStorage(unittest.TestCase):
             id=user_id,
             email="new@fita11y.com",
             name="New User",
-            assistant_persona=AssistantPersona.DIRECT,
+            assistant_persona=AssistantPersona.SERGEANT,
             feedback_modalities=[FeedbackModality.AUDIO],
         )
         registered = storage.register_user(user)
@@ -111,12 +111,12 @@ class TestDynamoDBStorage(unittest.TestCase):
         self.mock_table.get_item.return_value = {"Item": user_data}
 
         update = UserSettingsUpdate(
-            assistant_persona=AssistantPersona.DIRECT,
+            assistant_persona=AssistantPersona.SERGEANT,
             feedback_modalities=[FeedbackModality.HAPTIC],
         )
         updated = storage.update_user_settings(user_id, update)
         self.assertIsNotNone(updated)
-        self.assertEqual(updated.assistant_persona, AssistantPersona.DIRECT)
+        self.assertEqual(updated.assistant_persona, AssistantPersona.SERGEANT)
         self.assertEqual(updated.feedback_modalities, [FeedbackModality.HAPTIC])
 
     def test_job_storage_crud(self) -> None:
@@ -290,7 +290,7 @@ class TestDynamoDBStorage(unittest.TestCase):
             email="decimal@fita11y.com",
             name="Decimal User",
             voice_settings={"tts_rate": 1.25, "voice_id": "system"},
-            assistant_persona=AssistantPersona.DIRECT,
+            assistant_persona=AssistantPersona.SERGEANT,
             feedback_modalities=[FeedbackModality.AUDIO],
         )
         storage.register_user(user)

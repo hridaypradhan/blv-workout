@@ -10,6 +10,9 @@ export const SESSION_EVENTS = {
   ASSISTANT_CUE_DELIVERED: "assistant_cue_delivered",
   ASSISTANT_CORRECTION_REQUESTED: "assistant_correction_requested",
   ASSISTANT_CORRECTION_DELIVERED: "assistant_correction_delivered",
+  ASSISTANT_CORRECTION_SUPPRESSED: "assistant_correction_suppressed",
+  PERSONA_CUE_ELIGIBLE: "persona_cue_eligible",
+  PERSONA_CUE_SUPPRESSED: "persona_cue_suppressed",
   HAPTIC_CUE_REQUESTED: "haptic_cue_requested",
   HAPTIC_CUE_TRIGGERED: "haptic_cue_triggered",
   HAPTIC_CUE_FAILED: "haptic_cue_failed",
@@ -47,4 +50,3 @@ export const SESSION_EVENTS = {
 } as const;
 
 export type SessionEventType = typeof SESSION_EVENTS[keyof typeof SESSION_EVENTS];
-

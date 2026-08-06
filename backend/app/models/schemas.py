@@ -39,10 +39,9 @@ class AssistantPersona(str, Enum):
     it never replaces or overrides the YouTube trainer's voice.
     """
 
-    SUPPORTIVE = "supportive"
-    DIRECT = "direct"
-    ENERGETIC = "energetic"
-    CALM = "calm"
+    CHEERLEADER = "cheerleader"
+    GUIDE = "guide"
+    SERGEANT = "sergeant"
 
 
 # Backward-compatibility alias — internal code may still reference this.
@@ -298,7 +297,7 @@ class User(BaseModel):
     id: UUID | None = None
     email: str
     name: str
-    assistant_persona: AssistantPersona = AssistantPersona.SUPPORTIVE
+    assistant_persona: AssistantPersona = AssistantPersona.GUIDE
     voice_settings: dict[str, Any] = Field(default_factory=dict)
     feedback_modalities: list[FeedbackModality] = Field(default_factory=list)
     audio_coexistence: AudioCoexistenceSettings = Field(default_factory=AudioCoexistenceSettings)
@@ -455,7 +454,7 @@ class CorrectionRequest(BaseModel):
     joint: str
     angle: float
     current_timestamp_ms: float | None = None
-    persona: AssistantPersona = AssistantPersona.SUPPORTIVE
+    persona: AssistantPersona = AssistantPersona.GUIDE
 
 
 
@@ -481,7 +480,7 @@ class QARequest(BaseModel):
     video_id: str | UUID | None = None
     session_id: str | UUID | None = None
     current_timestamp_ms: float | None = None
-    persona: AssistantPersona = AssistantPersona.SUPPORTIVE
+    persona: AssistantPersona = AssistantPersona.GUIDE
     session_context: dict[str, Any] | None = Field(default_factory=dict)
     runtime_observation_context: RuntimeObservationContext | None = None
 

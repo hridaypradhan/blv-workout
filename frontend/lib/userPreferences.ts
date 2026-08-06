@@ -12,7 +12,7 @@ export const HAPTIC_CATEGORY_DEFAULT_IDS: Record<CanonicalHapticCategory, string
 };
 
 export const DEFAULT_USER_PREFERENCES = {
-  assistant_persona: AssistantPersona.SUPPORTIVE,
+  assistant_persona: AssistantPersona.GUIDE,
   feedback_modalities: [FeedbackModality.AUDIO, FeedbackModality.HAPTIC],
   voice_settings: {
     vision_loss: "vl-blind",
@@ -124,6 +124,31 @@ export function normalizeHapticPreferences(
   };
 }
 
+/**
+ * Normalizes raw persona strings to canonical AssistantPersona values.
+ * Mapping:
+ * - energetic -> cheerleader
+ * - supportive -> guide
+ * - calm -> guide
+ * - direct -> sergeant
+ * - missing/unknown/invalid -> guide
+ */
+export function normalizeAssistantPersona(rawPersona?: string | null): AssistantPersona {
+  if (!rawPersona || typeof rawPersona !== "string") {
+    return AssistantPersona.GUIDE;
+  }
+  const p = rawPersona.trim().toLowerCase();
+  if (p === "cheerleader") return AssistantPersona.CHEERLEADER;
+  if (p === "guide") return AssistantPersona.GUIDE;
+  if (p === "sergeant") return AssistantPersona.SERGEANT;
+
+  if (p === "energetic") return AssistantPersona.CHEERLEADER;
+  if (p === "supportive" || p === "calm") return AssistantPersona.GUIDE;
+  if (p === "direct") return AssistantPersona.SERGEANT;
+
+  return AssistantPersona.GUIDE;
+}
+
 /** Helper to merge a partial/fetched user profile with default preferences. */
 export function mergeUserPreferences(user: Partial<User>): User {
   const email = user.email || `${(user.name || "user").toLowerCase().replace(/\s+/g, ".")}@fita11y.local`;
@@ -144,7 +169,7 @@ export function mergeUserPreferences(user: Partial<User>): User {
     id: user.id || null,
     name: user.name || "",
     email: email,
-    assistant_persona: user.assistant_persona || DEFAULT_USER_PREFERENCES.assistant_persona,
+    assistant_persona: normalizeAssistantPersona(user.assistant_persona),
     feedback_modalities: user.feedback_modalities || DEFAULT_USER_PREFERENCES.feedback_modalities,
     voice_settings: mergedVoiceSettings,
     audio_coexistence: mergedAudioCoexistence,

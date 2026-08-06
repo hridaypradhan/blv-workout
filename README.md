@@ -18,6 +18,8 @@ FitA11y is an **assistive playback companion** prototype designed specifically f
    Maintains structured, screen-reader-accessible session records, tracking reps, form logs, and duration trends separately from the trainer's workout benchmark.
 6. **Interactive API Lab Playground**
    An internal playground to inspect, build, and run API requests directly in the browser with full OpenAPI spec auto-syncing.
+7. **Canonical Assistant Personas (Cheerleader, Guide, Sergeant)**
+   Three canonical assistant personas (`cheerleader`, `guide`, `sergeant`) govern spoken correction caps per exercise today. Their motivation cadence and exercise-wrap rules are tracked as deterministic prototype policy and are only spoken when FitA11y can pause before speaking; they never alter or replace the original YouTube creator's voice.
 
 ---
 

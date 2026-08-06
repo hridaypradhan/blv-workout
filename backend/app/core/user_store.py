@@ -24,6 +24,9 @@ from app.models.schemas import (
 PROTOTYPE_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
+from app.services.personas.normalization import normalize_persona
+
+
 class UserStore(UserStorage):
     """Thread-safe in-memory store for user profiles and accessibility settings."""
 
@@ -40,6 +43,8 @@ class UserStore(UserStorage):
                 for k, v in data.items():
                     try:
                         user_id = UUID(k)
+                        if isinstance(v, dict) and "assistant_persona" in v:
+                            v["assistant_persona"] = normalize_persona(v.get("assistant_persona")).value
                         user = User.model_validate(v)
                         self._users[user_id] = user
                     except Exception:
@@ -68,7 +73,7 @@ class UserStore(UserStorage):
                 id=PROTOTYPE_USER_ID,
                 email="prototype.user@fita11y.local",
                 name="Prototype User",
-                assistant_persona=AssistantPersona.SUPPORTIVE,
+                assistant_persona=AssistantPersona.GUIDE,
                 voice_settings={"tts_rate": 1.0, "voice_id": "system"},
                 feedback_modalities=[FeedbackModality.AUDIO, FeedbackModality.HAPTIC],
                 audio_coexistence=AudioCoexistenceSettings(

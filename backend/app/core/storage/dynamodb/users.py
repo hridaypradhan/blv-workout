@@ -18,6 +18,8 @@ from app.models.schemas import (
 )
 from app.core.storage.dynamodb.utils import python_to_dynamodb, dynamodb_to_python
 
+from app.services.personas.normalization import normalize_persona
+
 PROTOTYPE_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
@@ -38,7 +40,7 @@ class DynamoDBUserStorage(UserStorage):
             id=PROTOTYPE_USER_ID,
             email="prototype.user@fita11y.local",
             name="Prototype User",
-            assistant_persona=AssistantPersona.SUPPORTIVE,
+            assistant_persona=AssistantPersona.GUIDE,
             voice_settings={"tts_rate": 1.0, "voice_id": "system"},
             feedback_modalities=[FeedbackModality.AUDIO, FeedbackModality.HAPTIC],
             audio_coexistence=AudioCoexistenceSettings(
@@ -79,6 +81,8 @@ class DynamoDBUserStorage(UserStorage):
         # Deserialize decimals and restore key
         item = dynamodb_to_python(item)
         item["id"] = item.pop("user_id")
+        if "assistant_persona" in item:
+            item["assistant_persona"] = normalize_persona(item.get("assistant_persona")).value
         return User.model_validate(item)
 
     def update_user_settings(self, user_id: UUID, settings: UserSettingsUpdate) -> Optional[User]:

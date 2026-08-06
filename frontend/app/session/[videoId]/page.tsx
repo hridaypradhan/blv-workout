@@ -12,6 +12,7 @@ import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
 import { useHapticEventDelivery } from "@/lib/hooks/useHapticEventDelivery";
 import {
   InterruptionLevel,
+  AssistantPersona,
   AssistantVerbosity,
   AudioCoexistenceSettings,
   RuntimeCueSelectionResponse,
@@ -26,6 +27,7 @@ import { initSpeechRegistryMonkeyPatch } from "@/lib/voice/speechRegistry";
 import { useSessionEnd } from "@/lib/hooks/useSessionEnd";
 import { useLiveCueDelivery } from "@/lib/hooks/useLiveCueDelivery";
 import { usePoseSessionEvents } from "@/lib/hooks/usePoseSessionEvents";
+import { usePersonaRuntimePolicy } from "@/lib/hooks/usePersonaRuntimePolicy";
 import { usePrototypePoseRuntime } from "@/lib/hooks/usePrototypePoseRuntime";
 import { useCameraStream, useCameraLifecycleCleanup } from "@/lib/hooks/useCameraStream";
 import { useMediaPipePoseRuntime } from "@/lib/hooks/useMediaPipePoseRuntime";
@@ -229,6 +231,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     ) || null;
 
   const currentTimeMs = currentTime * 1000;
+  const activePersona = userProfile?.assistant_persona || AssistantPersona.GUIDE;
 
   // Playback pause coordinator
   const pauseCoordinator = usePlaybackPauseCoordinator(
@@ -337,26 +340,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   }, [activePoseRuntime]);
 
   const {
-    startPoseTracking,
-    stopPoseTracking,
-    isPrototypeTracking,
-    currentAngles,
-    latestRepCount,
-    repsBufferRef,
-    formErrorsBufferRef,
-  } = usePoseSessionEvents({
-    sessionId,
-    currentTimeMs,
-    currentExercise,
-    userProfile,
-    announce,
-    updateLatestAutomaticCue,
-    logSessionEvent,
-    triggerHapticEvent,
-    activePoseRuntime,
-  });
-
-  const {
     runtimeObservationContext,
     handleSelectCameraDevice,
     cameraPoseStatusLabel,
@@ -399,6 +382,114 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     [assistantMuted, searchLevel, userProfile, searchPause]
   );
 
+  const {
+    resetExercise: resetPersonaExercise,
+    canVoiceCorrection,
+    noteFormError: notePersonaFormError,
+    onRepCompleted: onPersonaRepCompleted,
+    onProgress: onPersonaProgress,
+    onExerciseCompleted: onPersonaExerciseCompleted,
+  } = usePersonaRuntimePolicy(activePersona);
+
+  // Persona-generated speech is deliberately more conservative than ordinary
+  // cue-plan playback: it is only spoken when FitA11y is configured to pause
+  // before speaking, so it cannot compete with the trainer's audio.
+  const canSpeakPersonaCue =
+    isPlaying &&
+    !assistantMuted &&
+    !isLiveGateOpen &&
+    coexistenceSettings.pause_before_speaking &&
+    coexistenceSettings.interruption_level !== InterruptionLevel.SILENT &&
+    coexistenceSettings.interruption_level !== InterruptionLevel.HAPTIC_ONLY;
+
+  const handlePersonaTrigger = React.useCallback(
+    (decision: { trigger: string | null; reason: string | null; text?: string }, timestampMs: number) => {
+      if (!decision.trigger) return;
+
+      const metadata = {
+        persona: activePersona,
+        persona_trigger: decision.trigger,
+        persona_reason: decision.reason,
+      };
+      logSessionEvent(SESSION_EVENTS.PERSONA_CUE_ELIGIBLE, timestampMs, metadata);
+
+      if (!canSpeakPersonaCue || !decision.text) {
+        logSessionEvent(SESSION_EVENTS.PERSONA_CUE_SUPPRESSED, timestampMs, {
+          ...metadata,
+          reason: canSpeakPersonaCue ? "missing_persona_text" : "audio_coexistence_policy",
+        });
+        return;
+      }
+
+      updateLatestAutomaticCue(decision.text, `persona_${decision.trigger}`);
+      setCurrentSpokenCue({
+        cue_id: `persona-${decision.trigger}-${Math.round(timestampMs)}`,
+        should_deliver: true,
+        modality: "audio",
+        text: decision.text,
+        haptic_cue_ref: null,
+        interruption_policy_hint: "pause_then_speak",
+        recommended_playback_action: "pause_before_speaking",
+        reason: `Persona ${decision.trigger}`,
+        timestampMs,
+      });
+    },
+    [activePersona, canSpeakPersonaCue, logSessionEvent, updateLatestAutomaticCue]
+  );
+
+  const completedPersonaExercisesRef = useRef(0);
+  const previousPersonaExerciseIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const nextExerciseId = currentExercise?.id || null;
+    const previousExerciseId = previousPersonaExerciseIdRef.current;
+
+    if (previousExerciseId && nextExerciseId && previousExerciseId !== nextExerciseId) {
+      completedPersonaExercisesRef.current += 1;
+      handlePersonaTrigger(
+        onPersonaExerciseCompleted(completedPersonaExercisesRef.current),
+        currentTimeMs
+      );
+    }
+
+    if (nextExerciseId !== previousExerciseId) {
+      resetPersonaExercise(false, activePersona);
+      previousPersonaExerciseIdRef.current = nextExerciseId;
+    }
+  }, [activePersona, currentExercise?.id, currentTimeMs, handlePersonaTrigger, onPersonaExerciseCompleted, resetPersonaExercise]);
+
+  useEffect(() => {
+    if (!currentExercise || !isPlaying) return;
+    const exerciseDuration = currentExercise.end_time_seconds - currentExercise.start_time_seconds;
+    if (exerciseDuration <= 0) return;
+    const progress = Math.max(0, Math.min(1, (currentTime - currentExercise.start_time_seconds) / exerciseDuration));
+    handlePersonaTrigger(onPersonaProgress(progress, undefined, canSpeakPersonaCue), currentTimeMs);
+  }, [canSpeakPersonaCue, currentExercise, currentTime, currentTimeMs, handlePersonaTrigger, isPlaying, onPersonaProgress]);
+
+  const {
+    startPoseTracking,
+    stopPoseTracking,
+    isPrototypeTracking,
+    currentAngles,
+    latestRepCount,
+    repsBufferRef,
+    formErrorsBufferRef,
+  } = usePoseSessionEvents({
+    sessionId,
+    currentTimeMs,
+    currentExercise,
+    userProfile,
+    announce,
+    updateLatestAutomaticCue,
+    logSessionEvent,
+    triggerHapticEvent,
+    activePoseRuntime,
+    canVoiceCorrection,
+    notePersonaFormError,
+    onPersonaRepCompleted: (canSpeak) => onPersonaRepCompleted(true, null, canSpeak),
+    onPersonaTrigger: handlePersonaTrigger,
+    canSpeakPersonaCue,
+  });
+
   // Invalidate stale cues on seek or mute/video change
   const prevTimeRef = useRef<number>(0);
   useEffect(() => {
@@ -408,10 +499,11 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       if (currentTime < prevTimeRef.current - 1.5) {
         setRecentlyDeliveredCueIds([]);
         lastCheckedSecond.current = -1;
+        resetPersonaExercise(false, activePersona);
       }
     }
     prevTimeRef.current = currentTime;
-  }, [currentTime]);
+  }, [activePersona, currentTime, resetPersonaExercise]);
 
   useEffect(() => {
     setCurrentSpokenCue(null);
@@ -441,7 +533,8 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   const { activeCue } = useAssistantCueQueue(
     cuePlan ? null : manifest,
     currentTimeMs,
-    coexistenceSettings
+    coexistenceSettings,
+    activePersona
   );
 
   // Wire legacy activeCue to spoken/haptic/telemetry systems

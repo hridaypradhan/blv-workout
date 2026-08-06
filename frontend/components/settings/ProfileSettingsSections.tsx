@@ -157,24 +157,19 @@ export function AssistantPersonaSettingsSection({
 }: AssistantPersonaSettingsSectionProps) {
   const personas = [
     {
-      id: "supportive",
-      label: "Supportive",
-      desc: "Encouraging, reassuring, focuses on steady progress.",
+      id: "cheerleader",
+      label: "Cheerleader",
+      desc: "Frequent encouragement; only essential corrections.",
     },
     {
-      id: "direct",
-      label: "Direct",
-      desc: "Concise corrections, anatomical landmarks, clear verbal cues.",
+      id: "guide",
+      label: "Guide",
+      desc: "Balanced encouragement and practical correction.",
     },
     {
-      id: "energetic",
-      label: "Energetic",
-      desc: "High energy, enthusiastic, pushes pace targets.",
-    },
-    {
-      id: "calm",
-      label: "Calm",
-      desc: "Gentle tones, quiet cues, low-stimulation pacing.",
+      id: "sergeant",
+      label: "Sergeant",
+      desc: "Concise, direct technical feedback with less chatter.",
     },
   ];
 
@@ -187,8 +182,7 @@ export function AssistantPersonaSettingsSection({
         Assistant Persona
       </h2>
       <p className="text-xs text-slate-400 mb-6">
-        Choose the vocal style of FitA11y&apos;s assistant. This does not affect
-        the creator&apos;s YouTube trainer audio.
+        Choose the vocal style of FitA11y&apos;s assistant layer. This supplementary assistant provides pacing and form cues; it never alters or replaces the YouTube creator&apos;s voice.
       </p>
 
       <div

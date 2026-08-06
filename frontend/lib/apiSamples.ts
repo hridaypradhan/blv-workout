@@ -188,12 +188,12 @@ export const apiSamples: Record<string, ApiSample> = {
       exercise_name: "Squat",
       joint: "left_knee",
       angle: 105.0,
-      persona: "supportive"
+      persona: "guide"
     }, null, 2),
     description: "Generate corrective assistant cue feedback",
     response: JSON.stringify({
       text: "Gently guide your left knee slightly inward to align with your foot.",
-      persona: "supportive",
+      persona: "guide",
       modality: "audio",
       metadata: {
         joint: "left_knee",
@@ -205,12 +205,12 @@ export const apiSamples: Record<string, ApiSample> = {
     body: JSON.stringify({
       question: "How low should I go on squats?",
       session_context: {},
-      persona: "supportive"
+      persona: "guide"
     }, null, 2),
     description: "Interactive Q&A with the assistant persona",
     response: JSON.stringify({
       text: "For a standard bodyweight squat, try to lower your hips until your thighs are parallel to the floor, ensuring your knees track in line with your toes for stability.",
-      persona: "supportive",
+      persona: "guide",
       modality: "audio",
       metadata: {}
     }, null, 2)
@@ -219,7 +219,7 @@ export const apiSamples: Record<string, ApiSample> = {
     body: JSON.stringify({
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      assistant_persona: "supportive",
+      assistant_persona: "guide",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",
@@ -232,7 +232,7 @@ export const apiSamples: Record<string, ApiSample> = {
       id: "00000000-0000-0000-0000-000000000000",
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      assistant_persona: "supportive",
+      assistant_persona: "guide",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",
@@ -251,7 +251,7 @@ export const apiSamples: Record<string, ApiSample> = {
       id: "00000000-0000-0000-0000-000000000000",
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      assistant_persona: "supportive",
+      assistant_persona: "guide",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",
@@ -266,7 +266,7 @@ export const apiSamples: Record<string, ApiSample> = {
       user_id: "00000000-0000-0000-0000-000000000000"
     },
     body: JSON.stringify({
-      assistant_persona: "energetic",
+      assistant_persona: "cheerleader",
       feedback_modalities: ["audio", "haptic", "visual"]
     }, null, 2),
     description: "Update user preferences",
@@ -274,7 +274,7 @@ export const apiSamples: Record<string, ApiSample> = {
       id: "00000000-0000-0000-0000-000000000000",
       email: "jane.doe@example.com",
       name: "Jane Doe",
-      assistant_persona: "energetic",
+      assistant_persona: "cheerleader",
       voice_settings: {
         speed: 1.0,
         voiceId: "en-US-Wavenet-F",

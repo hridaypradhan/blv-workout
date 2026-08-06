@@ -13,7 +13,7 @@ export const PROTOTYPE_USER_DATA = {
   id: PROTOTYPE_USER_ID,
   email: "prototype.user@fita11y.local",
   name: "Prototype User",
-  assistant_persona: "supportive",
+  assistant_persona: "guide",
 };
 
 /** Get the currently active user ID from localStorage, defaulting to the prototype user. */

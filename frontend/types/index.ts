@@ -2,19 +2,13 @@ import type { HapticPreferences } from "./haptic";
 export * from "./haptic";
 
 export enum AssistantPersona {
-  SUPPORTIVE = "supportive",
-  DIRECT = "direct",
-  ENERGETIC = "energetic",
-  CALM = "calm",
+  CHEERLEADER = "cheerleader",
+  GUIDE = "guide",
+  SERGEANT = "sergeant",
 }
 
 // Backward compatibility alias
 export type CoachPersona = AssistantPersona;
-export const CoachPersona = {
-  HYPE: AssistantPersona.ENERGETIC,
-  TECHNICAL: AssistantPersona.DIRECT,
-  SUPPORTIVE: AssistantPersona.SUPPORTIVE,
-};
 
 export enum ProcessingStage {
   SUBMITTED = "submitted",

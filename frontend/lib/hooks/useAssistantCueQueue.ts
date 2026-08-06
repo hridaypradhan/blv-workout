@@ -13,7 +13,8 @@ import {
 export function useAssistantCueQueue(
   manifest: SidecarManifest | null,
   currentTimeMs: number,
-  settings: AudioCoexistenceSettings
+  settings: AudioCoexistenceSettings,
+  activePersona: AssistantPersona = AssistantPersona.GUIDE
 ) {
   const [cueQueue, setCueQueue] = useState<AssistantCue[]>([]);
   const [activeCue, setActiveCue] = useState<AssistantCue | null>(null);
@@ -58,7 +59,7 @@ export function useAssistantCueQueue(
 
             newCues.push({
               text: evt.text,
-              persona: AssistantPersona.SUPPORTIVE,
+              persona: activePersona,
               modality: "audio",
               priority: "normal",
               timestamp_ms: evt.timestamp_ms,
@@ -88,7 +89,7 @@ export function useAssistantCueQueue(
 
           newCues.push({
             text: `[Cue window: ${win.context || "supplementary guidance"}]`,
-            persona: AssistantPersona.SUPPORTIVE,
+            persona: activePersona,
             modality: modality,
             priority: "normal",
             timestamp_ms: win.start_ms,
@@ -101,7 +102,7 @@ export function useAssistantCueQueue(
       setCueQueue((prev) => [...prev, ...newCues]);
       setActiveCue(newCues[newCues.length - 1]);
     }
-  }, [manifest, currentTimeMs, settings]);
+  }, [manifest, currentTimeMs, settings, activePersona]);
 
   return {
     cueQueue,

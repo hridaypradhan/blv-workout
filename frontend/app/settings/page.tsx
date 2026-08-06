@@ -30,7 +30,7 @@ export default function Settings() {
   const [name, setName] = useState("");
   const [visionLoss, setVisionLoss] = useState("vl-blind");
   const [screenReader, setScreenReader] = useState("none");
-  const [assistantPersona, setAssistantPersona] = useState("supportive");
+  const [assistantPersona, setAssistantPersona] = useState("guide");
   const [ttsSpeed, setTtsSpeed] = useState(1.0);
   const [voiceSelect, setVoiceSelect] = useState("system");
   const [spatialAudio, setSpatialAudio] = useState(true);
@@ -137,7 +137,7 @@ export default function Settings() {
   const handleTestVoice = () => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
-      const text = `This is a test of the ${assistantPersona} assistant voice at rate ${ttsSpeed}.`;
+      const text = `This is a test of the assistant voice with the ${assistantPersona} persona at rate ${ttsSpeed}.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = ttsSpeed;
       window.speechSynthesis.speak(utterance);

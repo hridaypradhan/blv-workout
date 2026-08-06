@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 from app.models.schemas import QARequest, QAResponse, AssistantPersona, FeedbackModality
+from app.services.personas.policy import get_persona_policy
 from app.services.assistant_qna_providers.base import AssistantQnAProvider
 
 logger = logging.getLogger(__name__)
@@ -91,14 +92,12 @@ class PrototypeAssistantQnAProvider(AssistantQnAProvider):
             kind = "fallback"
             answer = "Continue following the trainer's voice. I will notify you if your form or pacing drifts."
 
-        # Add persona styling if supportive/calm/etc.
+        # Add persona styling
         text_body = answer
-        persona = request.persona or AssistantPersona.SUPPORTIVE
-        if persona == AssistantPersona.ENERGETIC:
+        persona = request.persona or AssistantPersona.GUIDE
+        if persona == AssistantPersona.CHEERLEADER:
             text = f"Hey! {text_body.capitalize()} Let's keep up the great effort!"
-        elif persona == AssistantPersona.CALM:
-            text = f"Be mindful of this: {text_body} Keep your breathing steady."
-        elif persona == AssistantPersona.DIRECT:
+        elif persona == AssistantPersona.SERGEANT:
             text = f"Assistant update: {text_body}"
         else:
             text = f"Here is a quick tip: {text_body}"

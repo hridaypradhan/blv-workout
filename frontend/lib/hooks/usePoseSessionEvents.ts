@@ -3,6 +3,7 @@ import { generateCorrection } from "@/lib/api";
 import { AssistantPersona, Exercise, User, FormError } from "@/types";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 import { PoseRuntimeContract } from "@/lib/pose/poseRuntimeTypes";
+import { PersonaTriggerDecision } from "@/lib/personaPolicy";
 
 interface RepsBufferItem {
   exercise_id: string;
@@ -42,6 +43,11 @@ interface UsePoseSessionEventsProps {
     currentTimeMs: number;
   }) => Promise<unknown>;
   activePoseRuntime: PoseRuntimeContract;
+  canVoiceCorrection?: () => boolean;
+  notePersonaFormError?: () => void;
+  onPersonaRepCompleted?: (canSpeak: boolean) => PersonaTriggerDecision;
+  onPersonaTrigger?: (decision: PersonaTriggerDecision, timestampMs: number) => void;
+  canSpeakPersonaCue?: boolean;
 }
 
 export function usePoseSessionEvents({
@@ -54,6 +60,11 @@ export function usePoseSessionEvents({
   logSessionEvent,
   triggerHapticEvent,
   activePoseRuntime,
+  canVoiceCorrection,
+  notePersonaFormError,
+  onPersonaRepCompleted,
+  onPersonaTrigger,
+  canSpeakPersonaCue = false,
 }: UsePoseSessionEventsProps) {
   const repsBufferRef = useRef<RepsBufferItem[]>([]);
   const formErrorsBufferRef = useRef<FormErrorsBufferItem[]>([]);
@@ -144,6 +155,11 @@ export function usePoseSessionEvents({
       }).catch((err) => {
         console.error("Failed to trigger rep haptic cue:", err);
       });
+
+      const decision = onPersonaRepCompleted?.(canSpeakPersonaCue);
+      if (decision?.trigger) {
+        onPersonaTrigger?.(decision, currentTimeMs);
+      }
     }
   }, [
     latestRepEvent,
@@ -156,6 +172,9 @@ export function usePoseSessionEvents({
     triggerHapticEvent,
     providerSource,
     latestRepCount,
+    onPersonaRepCompleted,
+    onPersonaTrigger,
+    canSpeakPersonaCue,
   ]);
 
   // Handle form error events from the active pose runtime
@@ -172,6 +191,10 @@ export function usePoseSessionEvents({
     const provider = providerSource === "camera_mediapipe" ? "camera_mediapipe" : "prototype_pose";
     const exerciseId = currentExercise ? currentExercise.id : "00000000-0000-0000-0000-000000000000";
     const exerciseName = currentExercise ? currentExercise.name : "Workout";
+
+    // Form evidence is recorded even when the persona's spoken correction cap
+    // has been reached; it remains valid input for an evidence-based wrap cue.
+    notePersonaFormError?.();
 
     announce(`Form warning: ${latestFormError.message}`);
 
@@ -208,14 +231,24 @@ export function usePoseSessionEvents({
       }
     );
 
-    // Fetch form correction cue from assistant API (Speech/Audio only - form warning haptics removed)
+    // Fetch a spoken correction only while this persona still has correction
+    // capacity for the active exercise. Form-warning haptics remain suppressed.
+    if (canVoiceCorrection && !canVoiceCorrection()) {
+      logSessionEvent(SESSION_EVENTS.ASSISTANT_CORRECTION_SUPPRESSED, currentTimeMs, {
+        reason: "persona_correction_cap_reached",
+        persona: userProfile?.assistant_persona || AssistantPersona.GUIDE,
+        exercise_name: exerciseName,
+      });
+      return;
+    }
+
     const correctionPayload = {
       exercise_id: exerciseId,
       exercise_name: exerciseName,
       joint: latestFormError.joint,
       angle: latestFormError.observed_angle,
       current_timestamp_ms: currentTimeMs,
-      persona: userProfile?.assistant_persona || AssistantPersona.SUPPORTIVE,
+      persona: userProfile?.assistant_persona || AssistantPersona.GUIDE,
     };
 
     generateCorrection(correctionPayload)
@@ -247,6 +280,8 @@ export function usePoseSessionEvents({
     logSessionEvent,
     triggerHapticEvent,
     providerSource,
+    canVoiceCorrection,
+    notePersonaFormError,
   ]);
 
   return {

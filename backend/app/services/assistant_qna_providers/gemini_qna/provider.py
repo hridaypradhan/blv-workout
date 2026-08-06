@@ -37,7 +37,7 @@ class GeminiAssistantQnAProvider(AssistantQnAProvider):
             pose_available = request.runtime_observation_context.pose_available
             obs_context = request.runtime_observation_context.model_dump()
 
-        persona_str = request.persona.value if request.persona else "supportive"
+        persona_str = request.persona.value if request.persona else "guide"
         prompt = build_qna_prompt(request.question, grounded_context, obs_context, persona_str)
 
         # Call Gemini SDK client using structured JSON
@@ -70,7 +70,7 @@ class GeminiAssistantQnAProvider(AssistantQnAProvider):
             diagnostics_ref=None,
             # Backward compatibility fields
             text=sanitized_text,
-            persona=request.persona or AssistantPersona.SUPPORTIVE,
+            persona=request.persona or AssistantPersona.GUIDE,
             modality=FeedbackModality.AUDIO,
             priority="normal",
             timestamp_ms=request.current_timestamp_ms,

@@ -199,6 +199,28 @@ class TestSidecarService(unittest.TestCase):
             [{"start_ms": 0.0, "end_ms": 1000.0, "text": "Hello"}]
         )
 
+    def test_prototype_manifest_populates_form_model_fields(self):
+        """Verify deterministic prototype manifest populates body_region, primary_joints, counting, user_direction, form_reminders, and form_model."""
+        from app.services.mock_manifest_service import build_deterministic_sidecar_manifest
+        job = JobRecord(
+            video_id=str(uuid.uuid4()),
+            youtube_url="https://youtube.com/watch?v=12345678901",
+            youtube_id="12345678901",
+            duration=300.0,
+        )
+        manifest = build_deterministic_sidecar_manifest(job)
+        self.assertIsNotNone(manifest)
+        self.assertGreaterEqual(len(manifest.exercise_timeline_anchors), 1)
+
+        squat_anchor = manifest.exercise_timeline_anchors[0]
+        self.assertEqual(squat_anchor.body_region, "lower_body")
+        self.assertIn("knee_left", squat_anchor.primary_joints)
+        self.assertEqual(squat_anchor.counting, "reps")
+        self.assertEqual(squat_anchor.user_direction, "front_facing")
+        self.assertGreater(len(squat_anchor.form_reminders), 0)
+        self.assertIsNotNone(squat_anchor.form_model)
+        self.assertIn("knee_left", squat_anchor.form_model)
+
 
 if __name__ == "__main__":
     unittest.main()

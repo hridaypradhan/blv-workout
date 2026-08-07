@@ -162,4 +162,58 @@ describe("usePoseSessionEvents hook", () => {
       expect.objectContaining({ provider: "camera_mediapipe" })
     );
   });
+
+  test("buffers richer form error metadata (correction_kind, offender_joint) and passes to correction payload", () => {
+    const mockFormError: FormError = {
+      joint: "left_knee",
+      observed_angle: 50,
+      expected_range: [75, 180],
+      severity: "high",
+      message: "Pay attention to your left knee position",
+      metadata: {
+        correction_kind: "position",
+        offender_angle: "knee_left",
+        offender_joint: "left knee",
+        provider: "camera_mediapipe",
+      },
+    };
+
+    const activePoseRuntime: PoseRuntimeContract = {
+      poseData: {},
+      isReady: true,
+      providerSource: "camera_mediapipe",
+      runtimeStatus: "active",
+      isTracking: true,
+      startTracking: vi.fn(),
+      stopTracking: vi.fn(),
+      currentAngles: { knee_left: 50 },
+      latestRepEvent: null,
+      latestFormError: mockFormError,
+      trackingStatusLabel: "Active",
+    };
+
+    const { result } = renderHook(() =>
+      usePoseSessionEvents({
+        ...defaultProps,
+        activePoseRuntime,
+      })
+    );
+
+    expect(result.current.formErrorsBufferRef.current).toHaveLength(1);
+    const buffered = result.current.formErrorsBufferRef.current[0];
+    expect(buffered.form_error.metadata?.correction_kind).toBe("position");
+    expect(buffered.form_error.metadata?.offender_angle).toBe("knee_left");
+    expect(buffered.form_error.metadata?.offender_joint).toBe("left knee");
+
+    expect(defaultProps.logSessionEvent).toHaveBeenCalledWith(
+      SESSION_EVENTS.POSE_FORM_ERROR_DETECTED,
+      5000,
+      expect.objectContaining({
+        provider: "camera_mediapipe",
+        correction_kind: "position",
+        offender_angle: "knee_left",
+        offender_joint: "left knee",
+      })
+    );
+  });
 });

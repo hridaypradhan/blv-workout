@@ -206,6 +206,15 @@ def validate_and_clamp_sidecar_manifest_with_warnings(
                     except ValueError:
                         anchor_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"fita11y:{str(video_uuid)}:anchor:{anchor_idx}")
                         
+                body_region = a.get('body_region') if a.get('body_region') in ("upper_body", "lower_body", "core", "full_body") else None
+                primary_joints = list(a.get('primary_joints')) if isinstance(a.get('primary_joints'), (list, tuple)) else []
+                raw_counting = a.get('counting')
+                counting = str(raw_counting).strip() if (raw_counting and isinstance(raw_counting, str) and raw_counting.strip()) else None
+                user_direction = a.get('user_direction') if a.get('user_direction') in ("front_facing", "side_facing") else None
+                form_reminders = list(a.get('form_reminders')) if isinstance(a.get('form_reminders'), (list, tuple)) else []
+                form_model = a.get('form_model') if isinstance(a.get('form_model'), dict) else None
+                angle_curves = a.get('angle_curves') if isinstance(a.get('angle_curves'), (dict, list)) else None
+
                 exercise_timeline_anchors.append(
                     ExerciseTimelineAnchor(
                         id=anchor_id,
@@ -220,6 +229,13 @@ def validate_and_clamp_sidecar_manifest_with_warnings(
                         counting_joint=a.get('counting_joint'),
                         angle_range=valid_angle_range,
                         acceptable_ranges=acceptable_ranges,
+                        body_region=body_region,
+                        primary_joints=primary_joints,
+                        counting=counting,
+                        user_direction=user_direction,
+                        form_reminders=form_reminders,
+                        form_model=form_model,
+                        angle_curves=angle_curves,
                     )
                 )
             except (ValueError, TypeError) as exc:

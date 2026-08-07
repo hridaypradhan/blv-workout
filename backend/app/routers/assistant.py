@@ -33,6 +33,9 @@ async def generate_correction(payload: CorrectionRequest) -> AssistantCue:
         angle=payload.angle,
         current_timestamp_ms=payload.current_timestamp_ms,
         persona=payload.persona,
+        correction_kind=payload.correction_kind,
+        offender_angle=payload.offender_angle,
+        offender_joint=payload.offender_joint,
     )
 
 

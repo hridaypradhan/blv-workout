@@ -58,22 +58,32 @@ def build_deterministic_sidecar_manifest(
         ex1_end = duration
         ex2_start = None
 
-        exercise_timeline_anchors.append(
-            ExerciseTimelineAnchor(
-                id=ex1_uuid,
-                video_id=video_uuid,
-                name="Bodyweight Squats",
-                start_time_seconds=ex1_start,
-                end_time_seconds=ex1_end,
-                primary_body_part="Quadriceps",
-                secondary_body_parts=["Glutes", "Hamstrings"],
-                description_internal="Squats movement with alignment checking.",
-                description_accessible="Stand with feet shoulder-width apart. We will track your squats and the haptic sleeve will guide your depth.",
-                counting_joint="hip",
-                angle_range=(75.0, 105.0),
-                acceptable_ranges={"hip": (80.0, 100.0)},
-            )
+        squat_anchor = ExerciseTimelineAnchor(
+            id=ex1_uuid,
+            video_id=video_uuid,
+            name="Bodyweight Squats",
+            start_time_seconds=ex1_start,
+            end_time_seconds=ex1_end,
+            primary_body_part="Quadriceps",
+            secondary_body_parts=["Glutes", "Hamstrings"],
+            description_internal="Squats movement with alignment checking.",
+            description_accessible="Stand with feet shoulder-width apart. We will track your squats and the haptic sleeve will guide your depth.",
+            counting_joint="hip",
+            angle_range=(75.0, 105.0),
+            acceptable_ranges={"hip": (80.0, 100.0)},
+            body_region="lower_body",
+            primary_joints=["knee_left", "knee_right", "hip_left", "hip_right"],
+            counting="reps",
+            user_direction="front_facing",
+            form_reminders=["Keep chest proud", "Weight in your heels", "Push knees outward"],
+            form_model={
+                "knee_left": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0},
+                "knee_right": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0},
+                "hip_left": {"importance": "important", "weight": 0.6, "tolerance_deg": 15.0},
+                "hip_right": {"importance": "important", "weight": 0.6, "tolerance_deg": 15.0},
+            },
         )
+        exercise_timeline_anchors.append(squat_anchor)
         expected_movement_windows["squats"] = (ex1_start, ex1_end)
     else:
         # Normal duration: emit both Squats and Reverse Lunges
@@ -97,6 +107,17 @@ def build_deterministic_sidecar_manifest(
                 counting_joint="hip",
                 angle_range=(75.0, 105.0),
                 acceptable_ranges={"hip": (80.0, 100.0)},
+                body_region="lower_body",
+                primary_joints=["knee_left", "knee_right", "hip_left", "hip_right"],
+                counting="reps",
+                user_direction="front_facing",
+                form_reminders=["Keep chest proud", "Weight in your heels", "Push knees outward"],
+                form_model={
+                    "knee_left": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0},
+                    "knee_right": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0},
+                    "hip_left": {"importance": "important", "weight": 0.6, "tolerance_deg": 15.0},
+                    "hip_right": {"importance": "important", "weight": 0.6, "tolerance_deg": 15.0},
+                },
             )
         )
         exercise_timeline_anchors.append(
@@ -113,6 +134,17 @@ def build_deterministic_sidecar_manifest(
                 counting_joint="knee",
                 angle_range=(85.0, 95.0),
                 acceptable_ranges={"knee": (80.0, 100.0)},
+                body_region="lower_body",
+                primary_joints=["knee_left", "knee_right", "hip_left", "hip_right"],
+                counting="reps",
+                user_direction="side_facing",
+                form_reminders=["Keep front knee over ankle", "Lower back knee toward floor", "Keep torso upright"],
+                form_model={
+                    "knee_left": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0},
+                    "knee_right": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0},
+                    "hip_left": {"importance": "important", "weight": 0.6, "tolerance_deg": 15.0},
+                    "hip_right": {"importance": "important", "weight": 0.6, "tolerance_deg": 15.0},
+                },
             )
         )
         expected_movement_windows["squats"] = (ex1_start, ex1_end)

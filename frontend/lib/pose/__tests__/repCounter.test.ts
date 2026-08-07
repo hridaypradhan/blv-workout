@@ -1,6 +1,111 @@
 import { describe, test, expect } from "vitest";
-import { updateRepCounter, RepCounterState } from "../repCounter";
+import { updateRepCounter, RepCounterState, RepMatcher } from "../repCounter";
 import { SQUAT_PROFILE, BICEP_CURL_PROFILE } from "../exercisePoseProfiles";
+
+describe("RepMatcher adaptive algorithm", () => {
+  test("counts reps based on adaptive user ROM envelope", () => {
+    const matcher = new RepMatcher({
+      keyAngles: ["knee_left", "knee_right"],
+      minRepIntervalS: 0.5,
+      smoothTauS: 0, // Disable smoothing for deterministic test steps
+      minRangeDeg: 15,
+    });
+
+    // Initial standing (170 deg)
+    expect(matcher.update({ knee_left: 170, knee_right: 170 }, 1.0)).toBe(false);
+    expect(matcher.calibratedRange("knee_left")).toBeNull(); // not yet calibrated
+
+    // Squat down to 80 deg (envelope spans 90 deg -> calibrated!)
+    expect(matcher.update({ knee_left: 80, knee_right: 80 }, 2.0)).toBe(false);
+    expect(matcher.calibratedRange("knee_left")).toEqual([80, 161]);
+
+    // Return to standing (170 deg) -> triggers full cycle!
+    expect(matcher.update({ knee_left: 170, knee_right: 170 }, 3.0)).toBe(true);
+    expect(matcher.repCount).toBe(1);
+
+    // Second rep
+    expect(matcher.update({ knee_left: 80, knee_right: 80 }, 4.0)).toBe(false);
+    expect(matcher.update({ knee_left: 170, knee_right: 170 }, 5.0)).toBe(true);
+    expect(matcher.repCount).toBe(2);
+  });
+
+  test("does not count reps when ROM is narrower than minRangeDeg", () => {
+    const matcher = new RepMatcher({
+      keyAngles: ["elbow_left"],
+      minRangeDeg: 20.0,
+      smoothTauS: 0,
+    });
+
+    // Small jitter/movement between 100 and 110 (span = 10 < 20)
+    matcher.update({ elbow_left: 100 }, 1.0);
+    matcher.update({ elbow_left: 110 }, 2.0);
+    matcher.update({ elbow_left: 100 }, 3.0);
+    matcher.update({ elbow_left: 110 }, 4.0);
+
+    expect(matcher.isCalibrated("elbow_left")).toBe(false);
+    expect(matcher.calibratedRange("elbow_left")).toBeNull();
+    expect(matcher.repCount).toBe(0);
+  });
+
+  test("ignores stale/occluded joints after staleAfterS timeout", () => {
+    const matcher = new RepMatcher({
+      keyAngles: ["elbow_left", "elbow_right"],
+      staleAfterS: 2.0,
+      smoothTauS: 0,
+    });
+
+    // Calibrate both elbows
+    matcher.update({ elbow_left: 180, elbow_right: 180 }, 1.0);
+    matcher.update({ elbow_left: 45, elbow_right: 45 }, 2.0);
+
+    // At t=5.0s, elbow_right hasn't been seen for 3.0s (> 2.0s stale threshold)
+    // Only elbow_left is active
+    matcher.update({ elbow_left: 45 }, 5.0);
+    const fired = matcher.update({ elbow_left: 180 }, 6.0);
+
+    expect(fired).toBe(true);
+    expect(matcher.repCount).toBe(1);
+  });
+
+  test("resolves mirrored side angles fallback seamlessly", () => {
+    const matcher = new RepMatcher({
+      keyAngles: ["left_elbow"], // looking for left_elbow
+      smoothTauS: 0,
+    });
+
+    // Feed right_elbow angles (user facing opposite side to camera)
+    matcher.update({ right_elbow: 170 }, 1.0);
+    matcher.update({ right_elbow: 45 }, 2.0);
+    const fired = matcher.update({ right_elbow: 170 }, 3.0);
+
+    expect(fired).toBe(true);
+    expect(matcher.repCount).toBe(1);
+  });
+
+  test("enforces minRepIntervalS debounce between rapid reps", () => {
+    const matcher = new RepMatcher({
+      keyAngles: ["knee_left"],
+      minRepIntervalS: 1.0, // 1 second debounce
+      smoothTauS: 0,
+    });
+
+    // First rep completed at t=1.0s
+    matcher.update({ knee_left: 170 }, 0.1);
+    matcher.update({ knee_left: 80 }, 0.5);
+    expect(matcher.update({ knee_left: 170 }, 1.0)).toBe(true);
+    expect(matcher.repCount).toBe(1);
+
+    // Attempt rapid second rep completed at t=1.3s (within 1.0s interval)
+    matcher.update({ knee_left: 80 }, 1.2);
+    expect(matcher.update({ knee_left: 170 }, 1.3)).toBe(false);
+    expect(matcher.repCount).toBe(1); // suppressed by debounce
+
+    // Third rep completed at t=2.5s (outside debounce window)
+    matcher.update({ knee_left: 80 }, 2.0);
+    expect(matcher.update({ knee_left: 170 }, 2.5)).toBe(true);
+    expect(matcher.repCount).toBe(2);
+  });
+});
 
 describe("repCounter state machine transitions", () => {
   test("counts a full squat repetition correctly through phases", () => {

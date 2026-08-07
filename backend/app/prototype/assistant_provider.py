@@ -18,29 +18,61 @@ def generate_correction(
     angle: float,
     current_timestamp_ms: float | None,
     persona: AssistantPersona,
+    correction_kind: str | None = None,
+    offender_angle: str | None = None,
+    offender_joint: str | None = None,
 ) -> AssistantCue:
     """Generate a brief, BLV-friendly supplementary form correction cue (prototype).
 
     Does not imply replacement of the primary trainer instructions.
     """
     policy = get_persona_policy(persona)
-    joint_name = joint.replace("_", " ").lower()
-    
-    # Simple deterministic logic based on joint/angle
-    if "knee" in joint_name:
+    joint_display = offender_joint or joint.replace("_", " ").lower()
+
+    if correction_kind == "depth":
+        cues = {
+            AssistantPersona.GUIDE: f"Go a bit deeper on your {exercise_name}; sink your hips further.",
+            AssistantPersona.SERGEANT: f"Depth warning for {exercise_name}. Increase range of motion.",
+            AssistantPersona.CHEERLEADER: f"You're doing awesome! Let's get a tiny bit lower on those {exercise_name} reps!",
+        }
+    elif correction_kind == "pacing_fast":
+        cues = {
+            AssistantPersona.GUIDE: "You're moving faster than the video; slow down and control each rep.",
+            AssistantPersona.SERGEANT: "Pacing too fast. Slow down movement velocity to match video rhythm.",
+            AssistantPersona.CHEERLEADER: "Whoa, fast moves! Take a breath, slow down, and control every rep!",
+        }
+    elif correction_kind == "pacing_slow":
+        cues = {
+            AssistantPersona.GUIDE: "Pick up the pace a little to stay with the workout.",
+            AssistantPersona.SERGEANT: "Pacing behind. Increase cadence to maintain video pace.",
+            AssistantPersona.CHEERLEADER: "Pick up the pace a bit! You've got this, let's keep moving!",
+        }
+    elif correction_kind == "position":
+        cues = {
+            AssistantPersona.GUIDE: f"Pay attention to your {joint_display} position; keep your body stable.",
+            AssistantPersona.SERGEANT: f"Position error on {joint_display}. Re-align body posture as instructed.",
+            AssistantPersona.CHEERLEADER: f"Steady your {joint_display} position; lock in your form and keep pushing!",
+        }
+    elif correction_kind == "symmetry":
+        cues = {
+            AssistantPersona.GUIDE: f"Even out your left and right {joint_display}; keep both sides matched.",
+            AssistantPersona.SERGEANT: f"Bilateral asymmetry detected on {joint_display}. Equalize left and right extension.",
+            AssistantPersona.CHEERLEADER: f"Keep both sides balanced! Match your left and right {joint_display}!",
+        }
+    elif "knee" in joint_display:
         if angle < 80.0:
             cues = {
-                AssistantPersona.GUIDE: f"Nice depth on the {exercise_name}, but remember to keep your chest up and follow the trainer's cue.",
-                AssistantPersona.SERGEANT: f"Deep squat: {angle:.0f}° knee flexion. Maintain upright trunk as shown in video.",
-                AssistantPersona.CHEERLEADER: f"Super low squat! Keep those knees tracking out and listen for the trainer's next rep count!",
+                AssistantPersona.GUIDE: f"Nice depth on the {exercise_name}, but remember to keep your chest up.",
+                AssistantPersona.SERGEANT: f"Deep squat: {angle:.0f} degree knee flexion. Maintain upright trunk.",
+                AssistantPersona.CHEERLEADER: "Super low squat! Keep those knees tracking out and keep pushing!",
             }
         else:
             cues = {
-                AssistantPersona.GUIDE: f"You're doing great! Try sinking just a tiny bit lower in your squat if comfortable.",
-                AssistantPersona.SERGEANT: f"Squat: {angle:.0f}° knee flexion. Focus on hip hinge to descend.",
-                AssistantPersona.CHEERLEADER: f"Slightly shallow, let's see if we can get a bit deeper next time! You got this!",
+                AssistantPersona.GUIDE: "You're doing great! Try sinking just a tiny bit lower in your squat if comfortable.",
+                AssistantPersona.SERGEANT: f"Squat: {angle:.0f} degree knee flexion. Focus on hip hinge to descend.",
+                AssistantPersona.CHEERLEADER: "Slightly shallow, let's see if we can get a bit deeper next time! You got this!",
             }
-    elif "elbow" in joint_name:
+    elif "elbow" in joint_display:
         if angle < 60.0:
             cues = {
                 AssistantPersona.GUIDE: "Good flexion, focus on releasing the weight slowly down.",
@@ -54,11 +86,10 @@ def generate_correction(
                 AssistantPersona.CHEERLEADER: "Let's lift! Curl up strong!",
             }
     else:
-        # Fallback cue
         cues = {
-            AssistantPersona.GUIDE: f"Focus on matching the trainer's posture and pace for the active exercise.",
-            AssistantPersona.SERGEANT: f"{joint.capitalize()} angle is {angle:.0f}°. Follow the video demonstration.",
-            AssistantPersona.CHEERLEADER: f"Keep that energy high! Focus on alignment and push!",
+            AssistantPersona.GUIDE: f"Focus on matching the posture and pace for {exercise_name}.",
+            AssistantPersona.SERGEANT: f"{joint.capitalize()} angle is {angle:.0f} degrees. Maintain proper alignment.",
+            AssistantPersona.CHEERLEADER: "Keep that energy high! Focus on alignment and push!",
         }
 
     text = cues.get(persona, cues[AssistantPersona.GUIDE])
@@ -66,6 +97,7 @@ def generate_correction(
     metadata = {
         "source": "prototype",
         "provider": "prototype_assistant",
+        "fallback_reason": "Deterministic prototype assistant fallback active.",
         "replace_with": "ai_assistant_provider",
         "exercise_id": str(exercise_id),
         "exercise_name": exercise_name,
@@ -74,6 +106,12 @@ def generate_correction(
         "persona_policy": policy.name,
         "max_corrections_cap": policy.max_corrections_per_exercise,
     }
+    if correction_kind is not None:
+        metadata["correction_kind"] = correction_kind
+    if offender_angle is not None:
+        metadata["offender_angle"] = offender_angle
+    if offender_joint is not None:
+        metadata["offender_joint"] = offender_joint
     if current_timestamp_ms is not None:
         metadata["current_timestamp_ms"] = current_timestamp_ms
 

@@ -88,6 +88,46 @@ export interface UserPreferencesFormState {
   sleeveMap: SleeveStatus;
 }
 
+export type JointAngleName =
+  | "neck_left"
+  | "neck_right"
+  | "shoulder_left"
+  | "shoulder_right"
+  | "elbow_left"
+  | "elbow_right"
+  | "wrist_left"
+  | "wrist_right"
+  | "body_line_left"
+  | "body_line_right"
+  | "hip_left"
+  | "hip_right"
+  | "knee_left"
+  | "knee_right"
+  | "ankle_left"
+  | "ankle_right";
+
+export type AlignmentAngleName =
+  | "torso_shin_left"
+  | "torso_shin_right"
+  | "torso_forearm_left"
+  | "torso_forearm_right";
+
+export type FormAngleName = JointAngleName | AlignmentAngleName;
+
+export type BodyRegion = "upper_body" | "lower_body" | "core" | "full_body";
+
+export type CountingType = "reps" | "time";
+
+export type UserDirection = "front_facing" | "side_facing";
+
+export type FormImportance = "critical" | "important" | "minor" | "ignore";
+
+export interface FormAngleRating {
+  importance: FormImportance;
+  weight: number;
+  tolerance_deg: number;
+}
+
 export interface ExerciseTimelineAnchor {
   id: string;
   video_id?: string;
@@ -101,6 +141,15 @@ export interface ExerciseTimelineAnchor {
   counting_joint?: string | null;
   angle_range?: [number, number] | null;
   acceptable_ranges?: Record<string, [number, number]>;
+
+  // Optional Maryam-style form-model & reference fields
+  body_region?: BodyRegion | null;
+  primary_joints?: string[] | null;
+  counting?: CountingType | null;
+  user_direction?: UserDirection | null;
+  form_reminders?: string[] | null;
+  form_model?: Record<string, FormAngleRating> | null;
+  angle_curves?: Array<Record<string, number[]>> | Record<string, number[]> | null;
 }
 
 // Backward compatibility alias
@@ -313,6 +362,9 @@ export interface CorrectionRequest {
   angle: number;
   current_timestamp_ms?: number | null;
   persona?: AssistantPersona;
+  correction_kind?: string | null;
+  offender_angle?: string | null;
+  offender_joint?: string | null;
 }
 
 export type CueSourceType =

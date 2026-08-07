@@ -530,3 +530,40 @@ class TestAssistantQnA(unittest.TestCase):
         self.assertIsNotNone(finalized)
         self.assertEqual(len(finalized.form_errors), 1)
         self.assertEqual(finalized.form_errors[0].metadata.get("provider"), "camera_mediapipe")
+
+    def test_generate_correction_endpoint_with_correction_kind(self):
+        """Test assistant correction route returns category-specific wording and metadata."""
+        payload = {
+            "exercise_id": str(uuid.uuid4()),
+            "exercise_name": "Bodyweight Squat",
+            "joint": "left_knee",
+            "angle": 45.0,
+            "persona": "guide",
+            "correction_kind": "depth",
+            "offender_angle": "knee_left",
+            "offender_joint": "left knee",
+        }
+        res = client.post("/api/assistant/correction", json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("Go a bit deeper", data["text"])
+        self.assertEqual(data["metadata"]["correction_kind"], "depth")
+        self.assertEqual(data["metadata"]["offender_angle"], "knee_left")
+        self.assertEqual(data["metadata"]["offender_joint"], "left knee")
+        self.assertEqual(data["metadata"]["provider"], "prototype_assistant")
+
+    def test_generate_correction_endpoint_pacing_fast(self):
+        """Test assistant correction route returns pacing_fast guidance."""
+        payload = {
+            "exercise_id": str(uuid.uuid4()),
+            "exercise_name": "Bicep Curls",
+            "joint": "left_elbow",
+            "angle": 90.0,
+            "persona": "sergeant",
+            "correction_kind": "pacing_fast",
+        }
+        res = client.post("/api/assistant/correction", json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("Pacing too fast", data["text"])
+        self.assertEqual(data["metadata"]["correction_kind"], "pacing_fast")

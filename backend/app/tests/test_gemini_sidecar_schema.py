@@ -41,5 +41,16 @@ class TestGeminiSidecarSchema(unittest.TestCase):
                 self.assert_no_key_recursively(item, forbidden_keys)
 
 
+    def test_gemini_schema_includes_form_model_fields(self):
+        """Verify ExerciseTimelineAnchorGemini schema includes body_region, primary_joints, counting, user_direction, form_reminders, and form_model."""
+        fields = ExerciseTimelineAnchorGemini.model_fields
+        self.assertIn("body_region", fields)
+        self.assertIn("primary_joints", fields)
+        self.assertIn("counting", fields)
+        self.assertIn("user_direction", fields)
+        self.assertIn("form_reminders", fields)
+        self.assertIn("form_model", fields)
+
+
 if __name__ == "__main__":
     unittest.main()

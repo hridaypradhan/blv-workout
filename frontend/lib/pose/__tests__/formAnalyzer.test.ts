@@ -189,4 +189,107 @@ describe("formAnalyzer logic", () => {
     expect(errOutside).not.toBeNull();
     expect(errOutside?.observed_angle).toBe(50);
   });
+
+  test("emits position warning with form_model and rich metadata", () => {
+    const mockExerciseWithModel: Exercise = {
+      ...mockExerciseSquat,
+      form_model: {
+        knee_left: { importance: "critical", weight: 1.0, tolerance_deg: 10 },
+      },
+      acceptable_ranges: {
+        knee_left: [75, 180],
+      },
+    };
+
+    // Knee at 40 degrees (out of range [75, 180], dev = 35, tol = 10, penalty = 3.5 >= 1.0)
+    const err = analyzeForm(
+      { knee_left: 40 },
+      mockExerciseWithModel,
+      SQUAT_PROFILE,
+      true,
+      true,
+      true,
+      1000,
+      "left"
+    );
+
+    expect(err).not.toBeNull();
+    expect(err?.metadata?.correction_kind).toBe("position");
+    expect(err?.metadata?.offender_angle).toBe("knee_left");
+    expect(err?.metadata?.provider).toBe("camera_mediapipe");
+    expect(err?.message).toContain("out of position");
+  });
+
+  test("emits symmetry warning when left and right limbs diverge in bilateral exercise", () => {
+    const mockExerciseWithBilateral: Exercise = {
+      ...mockExerciseCurl,
+      form_model: {
+        elbow_left: { importance: "important", weight: 0.6, tolerance_deg: 15 },
+        elbow_right: { importance: "important", weight: 0.6, tolerance_deg: 15 },
+      },
+    };
+
+    // Left elbow at 90, Right elbow at 150 (diff = 60 >= 30 deg symTol)
+    const err = analyzeForm(
+      { elbow_left: 90, elbow_right: 150 },
+      mockExerciseWithBilateral,
+      BICEP_CURL_PROFILE,
+      true,
+      true,
+      true,
+      1000,
+      "left"
+    );
+
+    expect(err).not.toBeNull();
+    expect(err?.metadata?.correction_kind).toBe("symmetry");
+    expect(err?.metadata?.offender_angle).toBe("elbow_left");
+    expect(err?.message).toContain("Even out your left and right left elbow");
+  });
+
+  test("emits pacing_fast warning when user rep duration is too fast", () => {
+    const err = analyzeForm(
+      { left_elbow: 100 },
+      mockExerciseCurl,
+      BICEP_CURL_PROFILE,
+      true,
+      true,
+      true,
+      5000,
+      "left",
+      {},
+      {
+        repTimingHistory: [0, 1.0, 2.0], // 1 second per rep vs reference 3 seconds
+        refRepDurationS: 3.0,
+        repsBehind: 0,
+      }
+    );
+
+    expect(err).not.toBeNull();
+    expect(err?.metadata?.correction_kind).toBe("pacing_fast");
+    expect(err?.message).toContain("moving faster than the video");
+  });
+
+  test("emits pacing_slow warning when user falls behind", () => {
+    const err = analyzeForm(
+      { left_elbow: 100 },
+      mockExerciseCurl,
+      BICEP_CURL_PROFILE,
+      true,
+      true,
+      true,
+      20000,
+      "left",
+      {},
+      {
+        repTimingHistory: [0, 5.0, 10.0], // 5 seconds per rep vs reference 2 seconds (ratio = 2.5 > 1.4)
+        refRepDurationS: 2.0,
+        repsBehind: 3,
+      }
+    );
+
+    expect(err).not.toBeNull();
+    expect(err?.metadata?.correction_kind).toBe("pacing_slow");
+    expect(err?.message).toContain("3 reps behind");
+  });
 });

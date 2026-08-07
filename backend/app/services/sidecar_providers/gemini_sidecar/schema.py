@@ -36,6 +36,13 @@ class AngleRangeGemini(BaseModel):
     max_degrees: float
 
 
+class FormAngleRatingGemini(BaseModel):
+    joint: str
+    importance: str = "minor"
+    weight: float = 0.3
+    tolerance_deg: float = 25.0
+
+
 class ExerciseTimelineAnchorGemini(BaseModel):
     name: str
     start_time_seconds: float
@@ -47,6 +54,12 @@ class ExerciseTimelineAnchorGemini(BaseModel):
     counting_joint: Optional[str] = None
     angle_range: Optional[AngleRangeGemini] = None
     acceptable_ranges: list[JointAcceptableRangeGemini] = Field(default_factory=list)
+    body_region: Optional[str] = None
+    primary_joints: list[str] = Field(default_factory=list)
+    counting: Optional[str] = None
+    user_direction: Optional[str] = None
+    form_reminders: list[str] = Field(default_factory=list)
+    form_model: list[FormAngleRatingGemini] = Field(default_factory=list)
 
 
 class TrainerInstructionEventGemini(BaseModel):

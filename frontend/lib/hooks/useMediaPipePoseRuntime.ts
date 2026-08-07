@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { Exercise, RepEvent, FormError } from "@/types";
 import { PoseRuntimeContract, PoseRuntimeStatus, JointAngles } from "@/lib/pose/poseRuntimeTypes";
 import { useMediaPipePoseLandmarker, NormalizedLandmark } from "./useMediaPipePoseLandmarker";
-import { extractJointAngles, smoothAngle, selectActiveSide } from "@/lib/pose/jointAngles";
+import { extractJointAngles, selectActiveSide } from "@/lib/pose/jointAngles";
 import { getExercisePoseProfile } from "@/lib/pose/exercisePoseProfiles";
-import { updateRepCounter, RepCounterState } from "@/lib/pose/repCounter";
+import { RepMatcher } from "@/lib/pose/repCounter";
 import { analyzeForm } from "@/lib/pose/formAnalyzer";
 import { determineSpecificPoseStatus, PoseStatusDetails } from "@/lib/pose/poseStatus";
 
@@ -35,18 +35,20 @@ export function useMediaPipePoseRuntime({
   isPlaying,
   minVisibility = 0.5,
   minConfidence = 0.5,
-  smoothingAlpha,
 }: UseMediaPipePoseRuntimeProps): CameraPoseRuntimeContract {
   const [isTracking, setIsTracking] = useState<boolean>(false);
   const [latestRepEvent, setLatestRepEvent] = useState<RepEvent | null>(null);
   const [latestFormError, setLatestFormError] = useState<FormError | null>(null);
 
-  const repCounterStateRef = useRef<RepCounterState>({
-    state: "extended",
-    repCount: 0,
-    lastRepTimeMs: 0,
-  });
-  const previousAngleRef = useRef<number | undefined>(undefined);
+  // Resolve the active exercise pose profile
+  const profile = useMemo(() => getExercisePoseProfile(currentExercise), [currentExercise]);
+
+  const repMatcherRef = useRef<RepMatcher>(
+    new RepMatcher({
+      keyAngles: profile.primaryJoints.length > 0 ? profile.primaryJoints : ["left_elbow", "right_elbow"],
+      minRepIntervalS: (profile.cooldownMs ?? 1500) / 1000,
+    })
+  );
   const lastErrorTimeRef = useRef<Record<string, number>>({});
 
   // Monitor stream active status to set tracking state or clean up
@@ -128,9 +130,6 @@ export function useMediaPipePoseRuntime({
     return rawPoseLandmarks.filter((lm) => (lm.visibility ?? 0) >= minVisibility).length;
   }, [rawPoseLandmarks, minVisibility]);
 
-  // Resolve the active exercise pose profile
-  const profile = useMemo(() => getExercisePoseProfile(currentExercise), [currentExercise]);
-
   // Check if required landmarks for this exercise are visible
   const requiredLandmarksVisible = useMemo<boolean>(() => {
     if (!rawPoseLandmarks) return false;
@@ -141,25 +140,24 @@ export function useMediaPipePoseRuntime({
     });
   }, [rawPoseLandmarks, profile, minVisibility]);
 
-  // Track active exercise changes to reset the state machine and form errors
+  // Track active exercise changes to reset the matcher and form errors
   const lastExerciseIdRef = useRef<string | null>(null);
   useEffect(() => {
     const currentId = currentExercise ? currentExercise.id : null;
     if (currentId !== lastExerciseIdRef.current) {
       lastExerciseIdRef.current = currentId;
-      repCounterStateRef.current = {
-        state: "extended",
-        repCount: 0,
-        lastRepTimeMs: 0,
-      };
-      previousAngleRef.current = undefined;
+      const keys = profile.primaryJoints.length > 0 ? profile.primaryJoints : ["left_elbow", "right_elbow"];
+      repMatcherRef.current = new RepMatcher({
+        keyAngles: keys,
+        minRepIntervalS: (profile.cooldownMs ?? 1500) / 1000,
+      });
       lastErrorTimeRef.current = {};
       setLatestRepEvent(null);
       setLatestFormError(null);
     }
-  }, [currentExercise]);
+  }, [currentExercise, profile]);
 
-  // Run rep counter & form analyzer logic on frame / time updates
+  // Run rep matcher & form analyzer logic on frame / time updates
   useEffect(() => {
     if (!isPlaying || !poseAvailable || !requiredLandmarksVisible || !rawPoseLandmarks) {
       return;
@@ -170,78 +168,61 @@ export function useMediaPipePoseRuntime({
       return;
     }
 
-    const leftJoint = profile.primaryJoints[0];
-    const rightJoint = profile.primaryJoints[1];
-    if (!leftJoint) return;
+    const angles = extractJointAngles(rawPoseLandmarks);
+    const nowS = currentTimeMs / 1000.0;
 
-    // Get indices for vertex joint visibility comparison
+    // 1. Update RepMatcher
+    const repFired = repMatcherRef.current.update(angles, nowS);
+
+    if (repFired) {
+      setLatestRepEvent({
+        rep_count: repMatcherRef.current.repCount,
+        timestamp: new Date().toISOString(),
+        session_id: "", // filled by caller
+        exercise_id: currentExercise ? currentExercise.id : "",
+        metadata: {
+          source: "camera_mediapipe",
+          provider: "camera_mediapipe",
+        },
+      });
+    }
+
+    // 2. Perform form error analysis
+    const leftJoint = profile.primaryJoints[0];
     let leftIdx = -1;
     let rightIdx = -1;
-    if (leftJoint.includes("elbow")) {
+    if (leftJoint?.includes("elbow")) {
       leftIdx = 13;
       rightIdx = 14;
-    } else if (leftJoint.includes("knee")) {
+    } else if (leftJoint?.includes("knee")) {
       leftIdx = 25;
       rightIdx = 26;
     }
 
     const leftVis = leftIdx !== -1 ? (rawPoseLandmarks[leftIdx]?.visibility ?? 0) : 0;
     const rightVis = rightIdx !== -1 ? (rawPoseLandmarks[rightIdx]?.visibility ?? 0) : 0;
-
     const side = selectActiveSide(leftVis, rightVis);
-    const activeJoint = side === "left" ? leftJoint : (rightJoint || leftJoint);
 
-    // Extract raw active angle
-    const angles = extractJointAngles(rawPoseLandmarks);
-    const rawAngle = angles[activeJoint];
-
-    if (rawAngle !== undefined) {
-      // Smooth angle
-      const smoothed = smoothAngle(rawAngle, previousAngleRef.current, smoothingAlpha ?? 0.3);
-      previousAngleRef.current = smoothed;
-
-      // 1. Update rep counter state machine
-      const nextState = updateRepCounter(
-        repCounterStateRef.current,
-        smoothed,
-        profile,
-        currentTimeMs
-      );
-
-      if (nextState.repCount > repCounterStateRef.current.repCount) {
-        setLatestRepEvent({
-          rep_count: nextState.repCount,
-          timestamp: new Date().toISOString(),
-          session_id: "", // filled by caller
-          exercise_id: currentExercise ? currentExercise.id : "",
-          metadata: {
-            source: "camera_mediapipe",
-            provider: "camera_mediapipe",
-          },
-        });
+    const formErr = analyzeForm(
+      angles,
+      currentExercise,
+      profile,
+      poseAvailable,
+      requiredLandmarksVisible,
+      isPlaying,
+      currentTimeMs,
+      side,
+      lastErrorTimeRef.current,
+      {
+        providerSource: "camera_mediapipe",
       }
+    );
 
-      repCounterStateRef.current = nextState;
-
-      // 2. Perform form error analysis
-      const formErr = analyzeForm(
-        angles,
-        currentExercise,
-        profile,
-        poseAvailable,
-        requiredLandmarksVisible,
-        isPlaying,
-        currentTimeMs,
-        side,
-        lastErrorTimeRef.current
-      );
-
-      if (formErr) {
-        lastErrorTimeRef.current[formErr.joint] = currentTimeMs;
-        setLatestFormError(formErr);
-      }
+    if (formErr) {
+      lastErrorTimeRef.current[formErr.joint] = currentTimeMs;
+      setLatestFormError(formErr);
     }
-  }, [rawPoseLandmarks, currentTimeMs, isPlaying, profile, currentExercise, poseAvailable, requiredLandmarksVisible, smoothingAlpha]);
+  }, [rawPoseLandmarks, currentTimeMs, isPlaying, profile, currentExercise, poseAvailable, requiredLandmarksVisible]);
 
   // Compute current joint angles
   const currentAngles = useMemo<JointAngles>(() => {
@@ -308,4 +289,3 @@ export function useMediaPipePoseRuntime({
     poseStatusDetails,
   };
 }
-

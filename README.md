@@ -141,9 +141,9 @@ To avoid browser camera indicators remaining green after workout completion or p
 
 ### Intended Future System State:
 - **Future AI / Gemini Work**:
-  - Gemini sidecar generation exists now as an optional provider.
+  - Gemini sidecar generation exists now as an optional provider. Both prototype and Gemini sidecars generate exercise-specific reference form models (`body_region`, `primary_joints`, `counting`, `user_direction`, `form_reminders`, and `form_model` joint importance/tolerance ratings) to empower deterministic browser-local pose checking. Live camera video frames remain 100% browser-local and are never uploaded to the cloud.
   - Gemini-backed Assistant Q&A is fully implemented as an optional provider. It enforces strict capability boundaries that prevent the model from claiming it can see the user when no real-time camera pose tracking is active.
-  - Future AI work includes live camera-based pose validation, richer biomechanics feedback, and audio/video analysis beyond transcripts.
+  - Future AI work includes cloud vision coaching and multi-modal audio/video pose curve extraction beyond text captions.
 - **Richer Biomechanics**: Future enhancements include support for additional exercise types and more complex pose profiles.
 - **Physical Sleeve Playback** *(hardware path available now)*: Physical bHaptics TactSleeve playback via the bHaptics Player and bHaptics Python SDK is already integrated. Connecting real sleeves requires a Python 3.8–3.12 environment, the `bhaptics-python` package, and bHaptics Player running on the same machine. See **Section 3** of this README for setup steps.
 - **Real TTS & Audio Coexistence**: Integrate a production Text-to-Speech API and OS-level audio ducking APIs to smoothly overlay speech over YouTube trainer audio.

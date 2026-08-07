@@ -4,6 +4,12 @@ import {
   calculateTripletAngle3D,
   extractJointAngles,
   LANDMARK_INDICES,
+  ANGLE_TRIPLETS,
+  ALIGNMENT_PAIRS,
+  BODY_REGION_ANGLES,
+  mirrorSideName,
+  jointLabel,
+  resolveSide,
 } from "../jointAngles";
 import { NormalizedLandmark } from "@/lib/hooks/useMediaPipePoseLandmarker";
 
@@ -69,5 +75,42 @@ describe("jointAngles math & extractors", () => {
     expect(angles.left_knee).toBeCloseTo(180, 1);
     // Right elbow should not be present since landmarks are all at (0,0) resulting in 0 length vector
     expect(angles.right_elbow).toBe(0);
+  });
+
+  test("mirrorSideName swaps _left and _right suffixes", () => {
+    expect(mirrorSideName("shoulder_left")).toBe("shoulder_right");
+    expect(mirrorSideName("shoulder_right")).toBe("shoulder_left");
+    expect(mirrorSideName("torso_shin_left")).toBe("torso_shin_right");
+    expect(mirrorSideName("body_line_right")).toBe("body_line_left");
+    expect(mirrorSideName("custom_angle")).toBe("custom_angle");
+  });
+
+  test("jointLabel returns human readable labels", () => {
+    expect(jointLabel("knee_left")).toBe("left knee");
+    expect(jointLabel("torso_shin_left")).toBe("left back-and-shin line");
+    expect(jointLabel("unknown_joint_left")).toBe("unknown joint");
+  });
+
+  test("BODY_REGION_ANGLES contains required angle groups", () => {
+    expect(BODY_REGION_ANGLES.upper_body).toContain("elbow_left");
+    expect(BODY_REGION_ANGLES.lower_body).toContain("knee_left");
+    expect(BODY_REGION_ANGLES.core).toContain("body_line_left");
+    expect(BODY_REGION_ANGLES.full_body.length).toBe(20); // 16 joint angles + 4 alignment angles
+  });
+
+  test("ANGLE_TRIPLETS and ALIGNMENT_PAIRS maps expected pose keys", () => {
+    expect(Object.keys(ANGLE_TRIPLETS)).toHaveLength(16);
+    expect(Object.keys(ALIGNMENT_PAIRS)).toHaveLength(4);
+    expect(ANGLE_TRIPLETS.elbow_left).toEqual(["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"]);
+    expect(ALIGNMENT_PAIRS.torso_shin_left).toEqual(["torso_left", "shin_left"]);
+  });
+
+  test("resolveSide resolves direct, normalized, and mirrored side keys", () => {
+    const angles = { left_elbow: 90, right_knee: 120 };
+    expect(resolveSide(angles, "left_elbow")).toBe(90);
+    expect(resolveSide(angles, "elbow_left")).toBe(90);
+    expect(resolveSide(angles, "elbow_right")).toBe(90); // mirrored fallback to left_elbow
+    expect(resolveSide(angles, "knee_left")).toBe(120);   // mirrored fallback to right_knee
+    expect(resolveSide(angles, "ankle_left")).toBeUndefined();
   });
 });

@@ -212,6 +212,7 @@ export function usePoseSessionEvents({
           fallback_reason: providerSource === "prototype"
             ? "MediaPipe tracking is offline, unavailable, unsupported, or has insufficient visibility."
             : undefined,
+          ...latestFormError.metadata,
         },
       },
       timestamp: new Date().toISOString(),
@@ -228,6 +229,9 @@ export function usePoseSessionEvents({
         severity: latestFormError.severity,
         message: latestFormError.message,
         provider,
+        correction_kind: latestFormError.metadata?.correction_kind,
+        offender_angle: latestFormError.metadata?.offender_angle,
+        offender_joint: latestFormError.metadata?.offender_joint,
       }
     );
 
@@ -249,6 +253,9 @@ export function usePoseSessionEvents({
       angle: latestFormError.observed_angle,
       current_timestamp_ms: currentTimeMs,
       persona: userProfile?.assistant_persona || AssistantPersona.GUIDE,
+      correction_kind: latestFormError.metadata?.correction_kind as string | undefined,
+      offender_angle: latestFormError.metadata?.offender_angle as string | undefined,
+      offender_joint: latestFormError.metadata?.offender_joint as string | undefined,
     };
 
     generateCorrection(correctionPayload)
@@ -264,6 +271,7 @@ export function usePoseSessionEvents({
           persona: response.persona,
           source: response.metadata?.source,
           provider: response.metadata?.provider,
+          correction_kind: response.metadata?.correction_kind || latestFormError.metadata?.correction_kind,
         });
       })
       .catch((err) => {

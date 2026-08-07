@@ -99,6 +99,12 @@ def build_cue_plan_prompt(input_data: CuePlanGenerationInput) -> str:
                 "start_time_seconds": a.get("start_time_seconds"),
                 "end_time_seconds": a.get("end_time_seconds"),
                 "description_accessible": a.get("description_accessible"),
+                "body_region": a.get("body_region"),
+                "primary_joints": a.get("primary_joints"),
+                "counting": a.get("counting"),
+                "user_direction": a.get("user_direction"),
+                "form_reminders": a.get("form_reminders"),
+                "form_model": a.get("form_model"),
             }
             for a in manifest_dict.get("exercise_timeline_anchors", [])
         ],

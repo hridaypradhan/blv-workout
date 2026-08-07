@@ -44,6 +44,21 @@ def convert_gemini_to_canonical(response_dict: dict[str, Any]) -> dict[str, Any]
                         if joint is not None and min_deg is not None and max_deg is not None:
                             ranges_dict[str(joint)] = [float(min_deg), float(max_deg)]
             anchor["acceptable_ranges"] = ranges_dict
+
+            # form_model
+            fm_raw = anchor.get("form_model")
+            if isinstance(fm_raw, list):
+                fm_dict = {}
+                for entry in fm_raw:
+                    if isinstance(entry, dict):
+                        joint = entry.get("joint")
+                        if joint:
+                            fm_dict[str(joint)] = {
+                                "importance": str(entry.get("importance", "minor")),
+                                "weight": float(entry.get("weight", 0.3)),
+                                "tolerance_deg": float(entry.get("tolerance_deg", 25.0)),
+                            }
+                anchor["form_model"] = fm_dict
             
         # 2. haptic_spatial_cue_profiles: patterns
         raw_profiles = result.get("haptic_spatial_cue_profiles", [])

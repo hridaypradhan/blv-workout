@@ -142,6 +142,14 @@ class Video(BaseModel):
 # Assistance Sidecar Manifest Models
 # ---------------------------------------------------------------------------
 
+class FormAngleRating(BaseModel):
+    """Rating/weight/tolerance spec for a joint or alignment angle in a form model."""
+
+    importance: Literal["critical", "important", "minor", "ignore"] = "minor"
+    weight: float = 0.3
+    tolerance_deg: float = 25.0
+
+
 class ExerciseTimelineAnchor(BaseModel):
     """An exercise segment anchored to the original YouTube video timeline.
 
@@ -162,6 +170,15 @@ class ExerciseTimelineAnchor(BaseModel):
     counting_joint: str | None = None
     angle_range: tuple[float, float] | None = None
     acceptable_ranges: dict[str, tuple[float, float]] = Field(default_factory=dict)
+
+    # Optional Maryam-style form-model & reference fields
+    body_region: Literal["upper_body", "lower_body", "core", "full_body"] | None = None
+    primary_joints: list[str] = Field(default_factory=list)
+    counting: str | None = None
+    user_direction: Literal["front_facing", "side_facing"] | None = None
+    form_reminders: list[str] = Field(default_factory=list)
+    form_model: dict[str, FormAngleRating | dict[str, Any]] | None = None
+    angle_curves: list[dict[str, list[float]]] | dict[str, list[float]] | None = None
 
 
 class TrainerInstructionEvent(BaseModel):
@@ -455,6 +472,9 @@ class CorrectionRequest(BaseModel):
     angle: float
     current_timestamp_ms: float | None = None
     persona: AssistantPersona = AssistantPersona.GUIDE
+    correction_kind: str | None = None
+    offender_angle: str | None = None
+    offender_joint: str | None = None
 
 
 

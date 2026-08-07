@@ -20,6 +20,14 @@ class TestGeminiSidecarAdapter(unittest.TestCase):
                     "angle_range": {"min_degrees": 10.0, "max_degrees": 110.0},
                     "acceptable_ranges": [
                         {"joint": "knee", "min_degrees": 0.0, "max_degrees": 90.0}
+                    ],
+                    "body_region": "lower_body",
+                    "primary_joints": ["knee_left", "knee_right"],
+                    "counting": "reps",
+                    "user_direction": "front_facing",
+                    "form_reminders": ["Keep chest upright"],
+                    "form_model": [
+                        {"joint": "knee_left", "importance": "critical", "weight": 1.0, "tolerance_deg": 10.0}
                     ]
                 }
             ],
@@ -43,6 +51,14 @@ class TestGeminiSidecarAdapter(unittest.TestCase):
         anchor = manifest_dict["exercise_timeline_anchors"][0]
         self.assertEqual(anchor["angle_range"], [10.0, 110.0])
         self.assertEqual(anchor["acceptable_ranges"], {"knee": [0.0, 90.0]})
+        self.assertEqual(anchor["body_region"], "lower_body")
+        self.assertEqual(anchor["primary_joints"], ["knee_left", "knee_right"])
+        self.assertEqual(anchor["counting"], "reps")
+        self.assertEqual(anchor["user_direction"], "front_facing")
+        self.assertEqual(anchor["form_reminders"], ["Keep chest upright"])
+        self.assertEqual(anchor["form_model"], {
+            "knee_left": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0}
+        })
         
         self.assertEqual(manifest_dict["expected_movement_windows"], {"Squats": [10.0, 50.0]})
         

@@ -98,6 +98,69 @@ class TestSidecarValidator(unittest.TestCase):
         self.assertEqual(event.start_ms, 0.0)
         self.assertEqual(event.end_ms, 120000.0)
 
+    def test_optional_maryam_form_model_fields(self):
+        """Verify that optional Maryam form-model and reference fields validate and load properly when present and omitted."""
+        raw_manifest = {
+            "exercise_timeline_anchors": [
+                {
+                    "name": "Bicep Curls",
+                    "start_time_seconds": 10.0,
+                    "end_time_seconds": 40.0,
+                    "body_region": "upper_body",
+                    "primary_joints": ["elbow_left", "elbow_right"],
+                    "counting": "reps",
+                    "user_direction": "front_facing",
+                    "form_reminders": ["Keep elbows pinned to your sides."],
+                    "form_model": {
+                        "elbow_left": {"importance": "critical", "weight": 1.0, "tolerance_deg": 10.0},
+                        "shoulder_left": {"importance": "minor", "weight": 0.3, "tolerance_deg": 25.0},
+                    },
+                    "angle_curves": [{"elbow_left": [180.0, 90.0, 45.0]}],
+                },
+                {
+                    "name": "Plank Hold",
+                    "start_time_seconds": 45.0,
+                    "end_time_seconds": 75.0,
+                    # Omitted all optional form fields to test legacy backward compatibility
+                }
+            ]
+        }
+
+        video_uuid = uuid.uuid4()
+        validated = validate_and_clamp_sidecar_manifest(
+            manifest_dict=raw_manifest,
+            video_duration=100.0,
+            youtube_id="12345678901",
+            video_uuid=video_uuid,
+        )
+
+        self.assertIsNotNone(validated)
+        anchors = validated.exercise_timeline_anchors
+        self.assertEqual(len(anchors), 2)
+
+        # 1. Maryam fields present
+        a1 = anchors[0]
+        self.assertEqual(a1.body_region, "upper_body")
+        self.assertEqual(a1.primary_joints, ["elbow_left", "elbow_right"])
+        self.assertEqual(a1.counting, "reps")
+        self.assertEqual(a1.user_direction, "front_facing")
+        self.assertEqual(a1.form_reminders, ["Keep elbows pinned to your sides."])
+        self.assertIsNotNone(a1.form_model)
+        elbow_spec = a1.form_model["elbow_left"]
+        imp = elbow_spec.importance if hasattr(elbow_spec, "importance") else elbow_spec["importance"]
+        self.assertEqual(imp, "critical")
+        self.assertEqual(a1.angle_curves, [{"elbow_left": [180.0, 90.0, 45.0]}])
+
+        # 2. Maryam fields omitted (legacy anchor)
+        a2 = anchors[1]
+        self.assertIsNone(a2.body_region)
+        self.assertEqual(a2.primary_joints, [])
+        self.assertIsNone(a2.counting)
+        self.assertIsNone(a2.user_direction)
+        self.assertEqual(a2.form_reminders, [])
+        self.assertIsNone(a2.form_model)
+        self.assertIsNone(a2.angle_curves)
+
 
 if __name__ == "__main__":
     unittest.main()

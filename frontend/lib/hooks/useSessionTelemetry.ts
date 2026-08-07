@@ -62,8 +62,18 @@ export function useSessionTelemetry({
       const cueId = (metadata?.cue_id || metadata?.cue_type || "") as string;
       const joint = (metadata?.joint || "") as string;
       const section = (metadata?.section || "") as string;
+      const resultId = (metadata?.resultId || "") as string;
+      const command = (metadata?.command || "") as string;
+      const transcript = (metadata?.transcript || "") as string;
+      const reason = (metadata?.reason || "") as string;
+      const owner = (metadata?.owner || "") as string;
+      const activeOwners = Array.isArray(metadata?.activeOwners)
+        ? metadata.activeOwners.join(",")
+        : ((metadata?.activeOwners || "") as string);
+      const willResume = metadata?.willResume !== undefined ? String(metadata.willResume) : "";
+
       const timestampBucket = Math.floor(timestampMs / bucketSize);
-      const dedupeKey = `${eventType}-${cueId}-${joint}-${section}-${timestampBucket}`;
+      const dedupeKey = `${eventType}-${cueId}-${joint}-${section}-${resultId}-${command}-${transcript}-${reason}-${owner}-${activeOwners}-${willResume}-${timestampBucket}`;
 
       if (lastLoggedEvents.current.has(dedupeKey)) {
         return;

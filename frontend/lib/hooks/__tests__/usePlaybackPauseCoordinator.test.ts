@@ -205,4 +205,48 @@ describe("usePlaybackPauseCoordinator", () => {
     expect(playMock).toHaveBeenCalledTimes(1);
     expect(result.current.activeOwners.size).toBe(0);
   });
+
+  test("resume method sets playbackIntent to playing and invokes playVideo when no blocking owner remains", () => {
+    const playMock = vi.fn();
+    const pauseMock = vi.fn();
+    const logSpy = vi.fn();
+
+    const { result } = renderHook(() =>
+      usePlaybackPauseCoordinator(playMock, pauseMock, logSpy, 1000, () => false)
+    );
+
+    act(() => {
+      result.current.requestPause("user_manual", "Manual pause");
+    });
+    expect(result.current.playbackIntent).toBe("paused");
+
+    act(() => {
+      result.current.resume("Manual play");
+    });
+
+    expect(result.current.activeOwners.has("user_manual")).toBe(false);
+    expect(result.current.playbackIntent).toBe("playing");
+    expect(playMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("resume method does NOT call playVideo if positioning_gate or assistant_speech remains active", () => {
+    const playMock = vi.fn();
+    const pauseMock = vi.fn();
+    const logSpy = vi.fn();
+
+    const { result } = renderHook(() =>
+      usePlaybackPauseCoordinator(playMock, pauseMock, logSpy, 1000, () => false)
+    );
+
+    act(() => {
+      result.current.requestPause("positioning_gate", "Gate active");
+    });
+
+    act(() => {
+      result.current.resume("Resume attempt during gate");
+    });
+
+    expect(playMock).not.toHaveBeenCalled();
+    expect(result.current.activeOwners.has("positioning_gate")).toBe(true);
+  });
 });

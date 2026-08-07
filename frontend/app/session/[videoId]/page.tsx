@@ -297,7 +297,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   });
 
   const handleManualPlay = React.useCallback(() => {
-    pauseCoordinator.releasePause("user_manual", "Manual user play trigger");
+    pauseCoordinator.resume("Manual user play trigger");
   }, [pauseCoordinator]);
 
   const handleManualPause = React.useCallback(() => {
@@ -307,13 +307,34 @@ function LiveSessionContent({ params }: LiveSessionProps) {
   // Sync IFrame direct play/pause to the pause coordinator user_manual owner
   useEffect(() => {
     if (!isPlaying) {
+      // If the coordinator requested play/resume, the iframe is transitioning to PLAYING state.
+      // Do not misclassify this transient state as a direct manual iframe pause.
+      if (pauseCoordinator.playbackIntent === "playing") {
+        return;
+      }
+      if (pauseCoordinator.playbackIntent === "paused") {
+        pauseCoordinator.clearPlaybackIntent();
+      }
+
       const hasProgrammaticOwner =
         pauseCoordinator.activeOwners.has("positioning_gate") ||
         pauseCoordinator.activeOwners.has("assistant_speech");
+
       if (!hasProgrammaticOwner && !pauseCoordinator.activeOwners.has("user_manual")) {
         pauseCoordinator.requestPause("user_manual", "IFrame manual pause detected");
       }
     } else {
+      // isPlaying is true.
+      // If the coordinator requested pause, the iframe is transitioning to PAUSED state.
+      // Do not misclassify this transient state as a direct manual iframe play.
+      if (pauseCoordinator.playbackIntent === "paused") {
+        return;
+      }
+
+      if (pauseCoordinator.playbackIntent === "playing") {
+        pauseCoordinator.clearPlaybackIntent();
+      }
+
       if (pauseCoordinator.activeOwners.has("user_manual")) {
         pauseCoordinator.releasePause("user_manual", "IFrame manual play detected");
       }

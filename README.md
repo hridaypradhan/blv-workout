@@ -188,15 +188,21 @@ Cues whose delivery window overlaps an active positioning gate are permanently s
 
 #### Setup & Running the Application
 
+These instructions are for a new Windows or macOS development device. `npm install` installs only the frontend packages; it does not install Python packages such as `yt-dlp`, `boto3`, or `google-genai`.
+
 ### 1. Prerequisites
-- **Python**: Version 3.10 or higher.
+- **Python**: Version 3.10 or higher. Python 3.12 is recommended for the broadest optional hardware compatibility.
 - **Node.js**: Version 18 or higher, along with `npm`.
+- **Git**: Required to clone the repository.
+- **AWS CLI**: Required only when `STORAGE_PROVIDER=dynamodb`.
+- **Google Gemini API key**: Required only when `AI_PROVIDER=gemini`.
+- **Network access**: The backend must be able to reach YouTube and Gemini. A browser being able to open YouTube does not guarantee that Python/`yt-dlp` can access it.
 
 ---
 
 ### 2. Backend Setup & Run
 
-Perform the following steps from the repository root:
+Perform the following steps from the repository root. Use the Windows commands in the first block or the macOS commands in the second block.
 
 ```powershell
 # Go to the repository root directory
@@ -215,13 +221,31 @@ python -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r backend\requirements.txt
 
+# Verify that backend-only dependencies are installed.
+python -c "import yt_dlp, boto3, google.genai; print('Backend dependencies OK')"
+
 # Run the FastAPI server from the backend directory.
 # (Running from backend/ is required so that "backend/.env" is loaded correctly)
 cd backend
 python -m uvicorn app.main:app --reload --log-level debug
 ```
 
+On macOS:
+
+```bash
+cd "/path/to/blv-workout"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r backend/requirements.txt
+python -c "import yt_dlp, boto3, google.genai; print('Backend dependencies OK')"
+cd backend
+python -m uvicorn app.main:app --reload --log-level debug
+```
+
 The backend API will run on [http://localhost:8000](http://localhost:8000). You can access the auto-generated Swagger documentation at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+Keep this terminal running. Open a second terminal for the frontend. If the server is started from the repository root instead of `backend/`, the relative `.env` lookup may not load `backend/.env`.
 
 #### Environment Variables Configuration
 The `backend/.env` file is untracked by Git to protect secrets. You must create it manually in the `backend/` directory or copy it from `backend/.env.example`. 
@@ -247,6 +271,55 @@ DYNAMODB_JOBS_TABLE=FitA11y-dev-Jobs
 DYNAMODB_SESSIONS_TABLE=FitA11y-dev-Sessions
 DYNAMODB_SESSION_EVENTS_TABLE=FitA11y-dev-SessionEvents
 ARTIFACTS_BUCKET=fita11y-dev-artifacts-905418181041
+```
+
+Do not copy API keys or AWS secret keys into Git, chat, screenshots, or the README. Each developer should create their own local `backend/.env` file. If a key is exposed, revoke it and create a replacement.
+
+#### AWS setup for DynamoDB/S3 mode
+
+The `.env` file names an AWS profile; it does not create the profile or provide AWS credentials. Every new device using `STORAGE_PROVIDER=dynamodb` must be configured separately.
+
+Install the AWS CLI on the new device, then configure the profile using the credentials or SSO process provided by the AWS administrator. AWS CLI installation instructions are available in the [AWS CLI documentation](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
+
+```powershell
+aws configure --profile fita11y-dev
+```
+
+The same command works in macOS Terminal. If the organization uses AWS SSO instead of access keys, use the organization's SSO setup command and then log in with `aws sso login --profile fita11y-dev`.
+
+The profile must have access in `us-east-2` to the four configured DynamoDB tables and the configured S3 bucket. Verify identity before starting the application:
+
+```powershell
+aws sts get-caller-identity --profile fita11y-dev
+aws configure list --profile fita11y-dev
+```
+
+Run the same commands in macOS Terminal. The identity returned must belong to the AWS account that owns the configured tables and bucket.
+
+If either command fails, preprocessing will not work in DynamoDB/S3 mode. Common causes are a missing profile, expired SSO/session credentials, the wrong AWS account, the wrong region, or missing IAM permissions. The values in `.env` must match the AWS resources that actually exist.
+
+For a local-only run that does not require AWS credentials, use:
+
+```env
+STORAGE_PROVIDER=local_json
+```
+
+Local mode stores prototype data under `backend/.prototype_data` and is useful for isolating AWS problems.
+
+#### Gemini and YouTube verification
+
+When using `AI_PROVIDER=gemini`, preprocessing uses `yt-dlp` to retrieve YouTube metadata and captions before sending caption text to Gemini. Verify the backend can access YouTube from the active virtual environment:
+
+```powershell
+python -m yt_dlp --dump-single-json "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+On macOS, use `python3 -m yt_dlp ...` if `python` is not available.
+
+Verify that the backend loaded the intended configuration without printing the secret:
+
+```powershell
+python -c "from app.core.config import settings; print({'AI_PROVIDER': settings.AI_PROVIDER, 'STORAGE_PROVIDER': settings.STORAGE_PROVIDER, 'AWS_PROFILE': settings.AWS_PROFILE, 'AWS_REGION': settings.AWS_REGION, 'GEMINI_MODEL': settings.GEMINI_MODEL, 'GEMINI_API_KEY_PRESENT': bool(settings.GEMINI_API_KEY)})"
 ```
 
 > [!WARNING]
@@ -312,7 +385,7 @@ The application features a curated haptic vibration asset library and bHaptics e
 
 ### 4. Frontend Setup & Run
 
-Go to the `frontend` directory:
+Open a second terminal. Leave the backend terminal running, then go to the `frontend` directory:
 ```bash
 cd ../frontend
 ```
@@ -323,12 +396,23 @@ Install the Node.js packages:
 npm install
 ```
 
+This installs only the Next.js/TypeScript frontend dependencies. It does not install the Python backend requirements; those must be installed separately in Step 2.
+
 #### Step B: Run the Frontend Dev Server
 Start the development server:
 ```bash
 npm run dev
 ```
 The UI will run on [http://localhost:3000](http://localhost:3000). Open this address in your browser to view the application.
+
+#### End-to-end smoke test
+
+1. Confirm `http://localhost:8000/health` and `http://localhost:8000/docs` open.
+2. Confirm the frontend opens at `http://localhost:3000`.
+3. Submit a YouTube URL with English captions.
+4. Watch the backend terminal while preprocessing runs.
+5. In DynamoDB/S3 mode, confirm the AWS identity and permissions were verified first.
+6. If preprocessing fails, copy the backend traceback and the failed job's status response. Do not share API keys or AWS credentials.
 
 ---
 

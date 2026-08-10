@@ -17,7 +17,6 @@ export function executeScrollCommand(type: "scroll_down" | "scroll_up" | "page_d
 }
 
 export const SETUP_SECTION_IDS = [
-  "difficulty-section",
   "audio-coexistence-section",
   "sleeve-status-section",
   "ask-assistant-section",
@@ -68,7 +67,6 @@ export function navigateSetupSection(direction: "next" | "prev") {
 export function readActiveSetupSection(speak: (text: string) => void) {
   if (typeof window === "undefined") return;
   const sections = [
-    { id: "difficulty-section", name: "Difficulty settings. You can choose fresh, normal, or tired." },
     { id: "audio-coexistence-section", name: "Audio coexistence overrides. Choose silent, haptic only, brief speech, or full speech." },
     { id: "sleeve-status-section", name: "Haptic sleeve status. View and test connected physical sleeves." },
     { id: "ask-assistant-section", name: "Ask assistant. Submit text questions about the exercises." },

@@ -10,6 +10,7 @@ from app.services.haptics.utils import (
     get_normalized_devices,
     is_any_target_connected,
     make_trigger_response,
+    sanitize_target_limbs,
 )
 
 class BHapticsProvider(BaseHapticsProvider):
@@ -211,20 +212,19 @@ class BHapticsProvider(BaseHapticsProvider):
             targeted_left = True
             targeted_right = True
 
-        target_limbs = limbs
+        sanitized_limbs = sanitize_target_limbs(limbs)
+        target_limbs = sanitized_limbs if len(sanitized_limbs) > 0 else None
+
         if not target_limbs:
             target_limbs = []
             if sleeve_sides:
                 for side in sleeve_sides:
                     if side == SleeveSide.LEFT:
-                        target_limbs.extend([HapticLimb.LEFT_ARM, HapticLimb.LEFT_LEG])
+                        target_limbs.append(HapticLimb.LEFT_ARM)
                     elif side == SleeveSide.RIGHT:
-                        target_limbs.extend([HapticLimb.RIGHT_ARM, HapticLimb.RIGHT_LEG])
+                        target_limbs.append(HapticLimb.RIGHT_ARM)
                     elif side == SleeveSide.BOTH:
-                        target_limbs.extend([
-                            HapticLimb.LEFT_ARM, HapticLimb.RIGHT_ARM,
-                            HapticLimb.LEFT_LEG, HapticLimb.RIGHT_LEG
-                        ])
+                        target_limbs.extend([HapticLimb.LEFT_ARM, HapticLimb.RIGHT_ARM])
         resolved_sleeve_sides = sleeve_sides or []
 
         # Hardware fires when at least one requested target is connected

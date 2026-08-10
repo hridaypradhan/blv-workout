@@ -18,7 +18,6 @@ from app.models.cue_plan_schemas import (
 from app.models.schemas import (
     AssistantVerbosity,
     AudioCoexistenceSettings,
-    InterruptionLevel,
 )
 from app.services.cue_plan_runtime_service import cue_plan_runtime_service
 from app.services.cue_plan_store import (
@@ -134,17 +133,9 @@ class TestCuePlanRuntime(unittest.TestCase):
         save_cue_plan_to_disk(video_uuid, cue_plan)
         self.addCleanup(delete_cue_plan_from_disk, video_uuid)
 
-        silent = AudioCoexistenceSettings(
-            interruption_level=InterruptionLevel.SILENT
-        )
-        result = cue_plan_runtime_service.select_cue(
-            video_uuid, 2500.0, silent, False
-        )
-        self.assertFalse(result.should_deliver)
-        self.assertEqual(result.reason, "silent_mode_suppresses_all_cues")
-
         speech = AudioCoexistenceSettings(
-            interruption_level=InterruptionLevel.BRIEF_SPEECH
+            assistant_verbosity=AssistantVerbosity.MODERATE,
+            pause_before_speaking=False,
         )
         result = cue_plan_runtime_service.select_cue(
             video_uuid, 2500.0, speech, True
@@ -160,7 +151,7 @@ class TestCuePlanRuntime(unittest.TestCase):
         self.assertTrue(result.should_deliver)
 
         pause = AudioCoexistenceSettings(
-            interruption_level=InterruptionLevel.BRIEF_SPEECH,
+            assistant_verbosity=AssistantVerbosity.MODERATE,
             pause_before_speaking=True,
         )
         result = cue_plan_runtime_service.select_cue(
@@ -178,19 +169,17 @@ class TestCuePlanRuntime(unittest.TestCase):
             False,
             ["high-priority-later", "pause-hint-cue"],
         )
-        self.assertEqual(result.cue_id, "haptic-only-cue")
+        self.assertEqual(result.cue_id, "duckspeak-cue")
 
         result = cue_plan_runtime_service.select_cue(
-            video_uuid, 2500.0, speech, False, ["pause-hint-cue"]
+            video_uuid, 2500.0, speech, False, ["pause-hint-cue", "duckspeak-cue"]
         )
         self.assertEqual(result.cue_id, "high-priority-later")
-        self.assertEqual(result.text, "High brief")
+        self.assertEqual(result.text, "High moderate")
 
         detailed = AudioCoexistenceSettings(
-            interruption_level=InterruptionLevel.FULL_SPEECH,
             assistant_verbosity=AssistantVerbosity.DETAILED,
             pause_before_speaking=False,
-            correction_frequency="medium",
         )
         result = cue_plan_runtime_service.select_cue(
             video_uuid,

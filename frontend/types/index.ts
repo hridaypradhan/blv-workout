@@ -46,8 +46,6 @@ export type ImportJob = AssistanceJob;
 export interface SleeveStatus {
   leftArm: boolean;
   rightArm: boolean;
-  leftLeg: boolean;
-  rightLeg: boolean;
 }
 
 export enum FeedbackModality {
@@ -77,13 +75,10 @@ export interface UserSettingsUpdate {
 }
 
 export interface UserPreferencesFormState {
-  visionLevel: string;
-  screenReaderType: string;
   personaPreference: AssistantPersona;
   voiceSettings: {
     speed: number;
     voiceId: string;
-    spatialAudio: boolean;
   };
   sleeveMap: SleeveStatus;
 }
@@ -220,13 +215,6 @@ export enum SpeakingOpportunityMode {
   PAUSE_SPEAK = "pause_speak",
 }
 
-export enum InterruptionLevel {
-  SILENT = "silent",
-  HAPTIC_ONLY = "haptic_only",
-  BRIEF_SPEECH = "brief_speech",
-  FULL_SPEECH = "full_speech",
-}
-
 export enum AssistantVerbosity {
   MINIMAL = "minimal",
   MODERATE = "moderate",
@@ -234,10 +222,8 @@ export enum AssistantVerbosity {
 }
 
 export interface AudioCoexistenceSettings {
-  interruption_level: InterruptionLevel;
   assistant_verbosity: AssistantVerbosity;
   pause_before_speaking: boolean;
-  correction_frequency: string;
 }
 
 export interface AssistantCue {

@@ -10,10 +10,10 @@ FitA11y is an **assistive playback companion** prototype designed specifically f
    The user watches the original video via an embedded YouTube IFrame player. FitA11y never downloads, hosts, or distributes the video for playback, preserving creator monetization and ownership.
 2. **Assistance Sidecar Manifest**
    A JSON sidecar generated during preprocessing that maps exercise anchors, speaking opportunities, expected movement windows, and haptic cues to the original video's timeline.
-3. **Audio Coexistence & Interruption Levels**
-   Intelligent speech ducking and interruption rules (Silent, Haptic Only, Brief Speech, Full Speech, Pause Before Speaking) ensuring the assistant never talks over the trainer unless preferred.
+3. **Spoken Coaching Controls**
+   FitA11y uses full spoken guidance by default. Users can choose cue detail and whether playback pauses before a spoken correction.
 4. **bHaptics & Fallback Cues**
-   Generates tactile vibration sequence instructions (for pacing adjustments, joint extension limits, or movement corrections) mapped to neutral bHaptics event names, delivered directly to wearable sleeves using the bHaptics SDK/Player, or gracefully falling back to visual/spoken indicators.
+   Generates tactile vibration sequence instructions for paired arm sleeves, with visual and spoken fallback indicators when hardware is unavailable. Pose-based leg corrections remain available through normal spoken guidance.
 5. **Tracked User Performance**
    Maintains structured, screen-reader-accessible session records, tracking reps, form logs, and duration trends separately from the trainer's workout benchmark.
 6. **Interactive API Lab Playground**
@@ -108,7 +108,6 @@ In addition to live-session controls, the pre-session setup screen features dedi
 | **Instruction Guides**| `repeat guidance`, `repeat instruction` | Repeats current MediaPipe stance alignment guide aloud. |
 | **Countdown Timer** | `cancel countdown` | Stops auto-start timer and returns to alignment monitoring. |
 | **Workout Controls** | `start workout`, `start assisted playback` | Triggers playback session initialization. |
-| **Difficulty Settings**| `choose fresh` / `choose normal` / `choose tired` | Toggles workout assistance intensity offsets. |
 | **Pre-session Q&A** | `ask assistant [query]`, `question [query]` | Submits query to assistant grounded in session context. |
 | **Navigation & Scroll**| `scroll down`, `scroll up` | Scrolls the layout container by 150px. |
 | | `page down`, `page up` | Scrolls the layout container by 450px. |

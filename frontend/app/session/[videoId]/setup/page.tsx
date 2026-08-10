@@ -4,12 +4,12 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
-import { startSession, triggerHapticTest, askAssistant } from "@/lib/api";
-import { getActiveUserId, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
+import { startSession, triggerHapticTest, askAssistant, updateUserSettings } from "@/lib/api";
+import { getActiveUserId, notifyActiveUserUpdated, PROTOTYPE_USER_ID } from "@/lib/prototypeUser";
 import { mergeUserPreferences } from "@/lib/userPreferences";
 import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
 import ScreenReaderStatus from "@/components/accessibility/ScreenReaderStatus";
-import { SleeveSide, AssistantPersona, QARequest, InterruptionLevel, AudioCoexistenceSettings, AssistantVerbosity } from "@/types";
+import { SleeveSide, AssistantPersona, QARequest, AudioCoexistenceSettings, AssistantVerbosity } from "@/types";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
 import { useSessionArtifacts } from "@/lib/hooks/useSessionArtifacts";
 import { buildFrontendQnAContext } from "@/lib/qnaContextBuilder";
@@ -19,12 +19,13 @@ import { getPoseRequirementForAnchor } from "@/lib/pose/positioningGuide";
 import { SetupAlignmentMode } from "@/components/session/SetupAlignmentMode";
 import { useSetupVoiceCommands } from "@/lib/hooks/useSetupVoiceCommands";
 import { initSpeechRegistryMonkeyPatch } from "@/lib/voice/speechRegistry";
-import { SetupDifficultySection } from "@/components/session/SetupDifficultySection";
 import { SetupAudioCoexistenceSection } from "@/components/session/SetupAudioCoexistenceSection";
 import { SetupSleeveStatusSection } from "@/components/session/SetupSleeveStatusSection";
 import { SetupAskAssistantSection } from "@/components/session/SetupAskAssistantSection";
 import { SetupVoiceSection } from "@/components/session/SetupVoiceSection";
 import { CameraAlignmentSection } from "@/components/session/CameraAlignmentSection";
+import HapticSettingsPanel from "@/components/settings/HapticSettingsPanel";
+import { useHapticPreferenceSettings } from "@/lib/hooks/useHapticPreferenceSettings";
 
 interface SetupPageProps {
   params: {
@@ -36,7 +37,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
-  const { user } = useUserProfile();
+  const { user, refreshProfile } = useUserProfile();
 
   const {
     job,
@@ -50,9 +51,10 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeUserId, setActiveUserId] = useState(PROTOTYPE_USER_ID);
-  const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
   const [pauseBeforeSpeaking, setPauseBeforeSpeaking] = useState(true);
-  const [difficulty, setDifficulty] = useState("diff-norm");
+  const [assistantVerbosity, setAssistantVerbosity] = useState("moderate");
+  const [ttsSpeed, setTtsSpeed] = useState(1.0);
+  const [voiceSelect, setVoiceSelect] = useState("system");
 
   // Initialize speech registry monkey-patch to prevent app speech feedback interference
   useEffect(() => {
@@ -82,6 +84,13 @@ export default function SessionSetup({ params }: SetupPageProps) {
   const [sleeveAnnouncement, setSleeveAnnouncement] = useState("");
 
   const {
+    hapticPreferences,
+    vibrations,
+    isVibrationsLoading,
+    handleHapticPrefChange,
+  } = useHapticPreferenceSettings(user?.haptic_preferences);
+
+  const {
     status: hapticStatus,
     statusText: hapticStatusText,
     deviceStatuses,
@@ -93,20 +102,50 @@ export default function SessionSetup({ params }: SetupPageProps) {
   useEffect(() => {
     if (user) {
       setActiveUserId(user.id || getActiveUserId());
-      if (user.assistant_persona) {
-        setPersona(user.assistant_persona);
-      }
       const prefs = mergeUserPreferences(user);
+      setPersona(prefs.assistant_persona);
+      const voiceSettings = prefs.voice_settings as Record<string, unknown>;
+      if (typeof voiceSettings.tts_rate === "number") {
+        setTtsSpeed(voiceSettings.tts_rate);
+      }
+      if (typeof voiceSettings.voice_id === "string") {
+        setVoiceSelect(voiceSettings.voice_id);
+      }
       if (prefs.audio_coexistence) {
-        if (prefs.audio_coexistence.interruption_level) {
-          setInterruptionLevel(prefs.audio_coexistence.interruption_level);
-        }
         if (prefs.audio_coexistence.pause_before_speaking !== undefined) {
           setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking);
+        }
+        if (prefs.audio_coexistence.assistant_verbosity) {
+          setAssistantVerbosity(prefs.audio_coexistence.assistant_verbosity);
         }
       }
     }
   }, [user]);
+
+  const previewWav = (wavUrl: string) => {
+    const audio = new Audio(wavUrl);
+    audio.play().catch((previewError) => console.warn("Audio preview failed:", previewError));
+  };
+
+  const saveSetupPreferences = async () => {
+    const savedUser = await updateUserSettings(activeUserId, {
+      assistant_persona: persona || AssistantPersona.GUIDE,
+      voice_settings: {
+        tts_rate: ttsSpeed,
+        voice_id: voiceSelect,
+      },
+      audio_coexistence: {
+        assistant_verbosity: assistantVerbosity as AssistantVerbosity,
+        pause_before_speaking: pauseBeforeSpeaking,
+      },
+      haptic_preferences: hapticPreferences,
+    });
+
+    localStorage.setItem("fita11y_haptic_preferences", JSON.stringify(hapticPreferences));
+    notifyActiveUserUpdated();
+    await refreshProfile();
+    return savedUser;
+  };
 
   const executeAskQuestion = async (query: string) => {
     if (!query || isPending) return;
@@ -118,10 +157,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
 
     try {
       const coexistenceSettings: AudioCoexistenceSettings = {
-        interruption_level: interruptionLevel as InterruptionLevel,
-        assistant_verbosity: user?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
+        assistant_verbosity: assistantVerbosity as AssistantVerbosity,
         pause_before_speaking: pauseBeforeSpeaking,
-        correction_frequency: user?.audio_coexistence?.correction_frequency || "medium",
       };
 
       let groundedSessionContext: Record<string, unknown>;
@@ -152,9 +189,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
         currentTimeSeconds: 0,
         currentTimeMs: 0,
         setup_options: {
-          interruption_level: interruptionLevel,
+          assistant_verbosity: assistantVerbosity,
           pause_before_speaking: pauseBeforeSpeaking,
-          difficulty
         },
         note: "No live playback has started yet",
       };
@@ -224,6 +260,8 @@ export default function SessionSetup({ params }: SetupPageProps) {
     setIsStarting(true);
     setError(null);
     try {
+      await saveSetupPreferences();
+      setAskAnnouncement("Settings saved as your defaults.");
       const session = await startSession(params.videoId, activeUserId);
       if (!session.id) {
         throw new Error("Backend response did not contain a valid session ID.");
@@ -235,13 +273,9 @@ export default function SessionSetup({ params }: SetupPageProps) {
         saveCameraPreference(cameraStream.selectedDeviceId, dev?.label || "");
       }
 
-      // Do NOT patch user settings from pre-session setup. Pass overrides via query params instead.
       const isVoiceListening = setupVoiceStatusRef.current === "listening" || setupVoiceStatusRef.current === "retrying";
       const queryParams = new URLSearchParams();
       queryParams.set("sessionId", session.id);
-      queryParams.set("overrideLevel", interruptionLevel);
-      queryParams.set("overridePause", String(pauseBeforeSpeaking));
-      queryParams.set("overrideDifficulty", difficulty);
       if (isVoiceListening) {
         queryParams.set("voiceIntent", "true");
         if (typeof window !== "undefined") {
@@ -280,7 +314,6 @@ export default function SessionSetup({ params }: SetupPageProps) {
       setCancelCountdownTrigger((prev) => prev + 1);
     },
     onStartWorkout: () => handleStartWorkout(),
-    onChooseDifficulty: (diff) => setDifficulty(diff),
     onAskAssistant: (query) => executeAskQuestion(query),
     isAlignmentOpen,
     isCountdownActive: isSetupCountdownActive,
@@ -326,9 +359,7 @@ export default function SessionSetup({ params }: SetupPageProps) {
 
   const sleeveStatus = (deviceStatuses.length > 0 ? deviceStatuses : [
     { key: "left_arm", name: "Left Arm", status_text: "Disconnected", connected: false },
-    { key: "right_arm", name: "Right Arm", status_text: "Disconnected", connected: false },
-    { key: "left_leg", name: "Left Leg", status_text: "Disconnected", connected: false },
-    { key: "right_leg", name: "Right Leg", status_text: "Disconnected", connected: false }
+    { key: "right_arm", name: "Right Arm", status_text: "Disconnected", connected: false }
   ]).map(dev => ({
     key: dev.key,
     name: dev.name,
@@ -355,17 +386,50 @@ export default function SessionSetup({ params }: SetupPageProps) {
         </div>
 
         <div className="space-y-8">
-          <SetupDifficultySection
-            difficulty={difficulty}
-            setDifficulty={setDifficulty}
-          />
-
           <SetupAudioCoexistenceSection
-            interruptionLevel={interruptionLevel}
-            setInterruptionLevel={setInterruptionLevel}
             pauseBeforeSpeaking={pauseBeforeSpeaking}
             setPauseBeforeSpeaking={setPauseBeforeSpeaking}
+            assistantVerbosity={assistantVerbosity}
+            setAssistantVerbosity={setAssistantVerbosity}
           />
+
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="setup-preferences-heading">
+            <h2 id="setup-preferences-heading" className="text-lg font-bold text-white mb-2">Assistant & Voice Defaults</h2>
+            <p className="text-sm text-slate-300 mb-4">These changes are saved as your defaults when you start the workout.</p>
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" role="radiogroup" aria-label="Assistant persona">
+                {[
+                  { value: "cheerleader", label: "Cheerleader" },
+                  { value: "guide", label: "Guide" },
+                  { value: "sergeant", label: "Sergeant" },
+                ].map(({ value, label }) => (
+                  <label key={value} className={`p-3 rounded-xl border cursor-pointer ${persona === value ? "border-yellow-400 bg-slate-950" : "border-slate-800"}`}>
+                    <input className="mr-2" type="radio" name="setup-persona" value={value} checked={persona === value} onChange={() => setPersona(value as AssistantPersona)} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="setup-tts-speed" className="text-sm font-semibold text-slate-200">Text-To-Speech Speed: {ttsSpeed.toFixed(1)}x</label>
+                <input id="setup-tts-speed" className="w-full accent-yellow-400" type="range" min="0.5" max="2.5" step="0.1" value={ttsSpeed} onChange={(event) => setTtsSpeed(Number(event.target.value))} />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="setup-voice-select" className="text-sm font-semibold text-slate-200">Speech Synthesizer Voice</label>
+                <select id="setup-voice-select" value={voiceSelect} onChange={(event) => setVoiceSelect(event.target.value)} className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200">
+                  <option value="system">Default System Voice</option>
+                  <option value="google-us">Google US English (Male)</option>
+                  <option value="google-uk">Google UK English (Female)</option>
+                  <option value="natural-premium">Premium AI Natural Voice</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="setup-haptic-preferences-heading">
+            <h2 id="setup-haptic-preferences-heading" className="text-lg font-bold text-white mb-2">Haptic Defaults</h2>
+            <p className="text-sm text-slate-300 mb-4">Choose the arm-sleeve cues to save as your defaults.</p>
+            {isVibrationsLoading ? <p className="text-sm text-slate-400">Loading haptic choices...</p> : <HapticSettingsPanel hapticPreferences={hapticPreferences} onHapticPrefChange={handleHapticPrefChange} vibrations={vibrations} previewWav={previewWav} />}
+          </section>
 
           <SetupSleeveStatusSection
             refreshHaptic={refreshHaptic}

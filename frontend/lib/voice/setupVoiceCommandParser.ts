@@ -6,9 +6,6 @@ export type SetupCommandType =
   | "repeat_guidance"
   | "cancel_countdown"
   | "start_workout"
-  | "choose_fresh"
-  | "choose_normal"
-  | "choose_tired"
   | "ask_assistant"
   | "scroll_down"
   | "scroll_up"
@@ -26,17 +23,6 @@ export interface ParsedSetupCommand {
 
 export function parseSetupVoiceCommand(text: string): ParsedSetupCommand | null {
   const clean = text.toLowerCase().trim();
-
-  // Difficulty Settings
-  if (clean.includes("choose fresh") || clean === "fresh") {
-    return { type: "choose_fresh", rawText: text };
-  }
-  if (clean.includes("choose normal") || clean === "normal") {
-    return { type: "choose_normal", rawText: text };
-  }
-  if (clean.includes("choose tired") || clean === "tired") {
-    return { type: "choose_tired", rawText: text };
-  }
 
   // Camera Settings
   if (clean.includes("enable camera") || clean.includes("start camera") || clean === "enable camera" || clean === "start camera") {

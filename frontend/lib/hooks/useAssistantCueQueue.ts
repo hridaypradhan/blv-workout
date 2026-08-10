@@ -5,7 +5,6 @@ import {
   SidecarManifest,
   AssistantCue,
   AudioCoexistenceSettings,
-  InterruptionLevel,
   AssistantPersona,
   SpeakingOpportunityMode,
 } from "../../types";
@@ -33,13 +32,6 @@ export function useAssistantCueQueue(
   useEffect(() => {
     if (!manifest) return;
 
-    const currentLevel = settings.interruption_level;
-
-    // If silent, do not deliver any cues
-    if (currentLevel === InterruptionLevel.SILENT) {
-      return;
-    }
-
     const newCues: AssistantCue[] = [];
 
     // 1. Scan trainer instruction events
@@ -52,10 +44,6 @@ export function useAssistantCueQueue(
         if (evt.timestamp_ms !== undefined && evt.timestamp_ms !== null) {
           if (currentTimeMs >= evt.timestamp_ms && currentTimeMs <= evt.timestamp_ms + 1500) {
             triggeredKeys.current.add(eventKey);
-
-            // Filter by interruption level
-            // Trainer instructions are voice cues. If HAPTIC_ONLY, skip voice.
-            if (currentLevel === InterruptionLevel.HAPTIC_ONLY) return;
 
             newCues.push({
               text: evt.text,
@@ -81,11 +69,6 @@ export function useAssistantCueQueue(
 
           const isHaptic = win.mode === SpeakingOpportunityMode.HAPTIC_ONLY;
           const modality = isHaptic ? "haptic" : "audio";
-
-          // If HAPTIC_ONLY setting, filter out audio modalities
-          if (currentLevel === InterruptionLevel.HAPTIC_ONLY && modality === "audio") {
-            return;
-          }
 
           newCues.push({
             text: `[Cue window: ${win.context || "supplementary guidance"}]`,

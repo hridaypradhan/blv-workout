@@ -11,7 +11,6 @@ import { useSpokenCuePlayback } from "@/lib/hooks/useSpokenCuePlayback";
 import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
 import { useHapticEventDelivery } from "@/lib/hooks/useHapticEventDelivery";
 import {
-  InterruptionLevel,
   AssistantPersona,
   AssistantVerbosity,
   AudioCoexistenceSettings,
@@ -382,27 +381,15 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     logSessionEvent,
   });
 
-  const searchLevel = searchParams.get("overrideLevel");
-  const searchPause = searchParams.get("overridePause");
-
   const coexistenceSettings = React.useMemo<AudioCoexistenceSettings>(
     () => ({
-      interruption_level: assistantMuted
-        ? InterruptionLevel.HAPTIC_ONLY
-        : ((searchLevel as InterruptionLevel) ||
-            userProfile?.audio_coexistence?.interruption_level ||
-            InterruptionLevel.BRIEF_SPEECH),
       assistant_verbosity:
         userProfile?.audio_coexistence?.assistant_verbosity || AssistantVerbosity.MODERATE,
-      pause_before_speaking:
-        searchPause !== null
-          ? searchPause === "true"
-          : userProfile?.audio_coexistence?.pause_before_speaking !== undefined
+      pause_before_speaking: userProfile?.audio_coexistence?.pause_before_speaking !== undefined
           ? userProfile.audio_coexistence.pause_before_speaking
           : true,
-      correction_frequency: userProfile?.audio_coexistence?.correction_frequency || "medium",
     }),
-    [assistantMuted, searchLevel, userProfile, searchPause]
+    [userProfile]
   );
 
   const {
@@ -421,9 +408,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     isPlaying &&
     !assistantMuted &&
     !isLiveGateOpen &&
-    coexistenceSettings.pause_before_speaking &&
-    coexistenceSettings.interruption_level !== InterruptionLevel.SILENT &&
-    coexistenceSettings.interruption_level !== InterruptionLevel.HAPTIC_ONLY;
+    coexistenceSettings.pause_before_speaking;
 
   const handlePersonaTrigger = React.useCallback(
     (decision: { trigger: string | null; reason: string | null; text?: string }, timestampMs: number) => {
@@ -532,13 +517,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
         return;
       }
 
-      const isSilentOrHapticOnly =
-        coexistenceSettings.interruption_level === InterruptionLevel.SILENT ||
-        coexistenceSettings.interruption_level === InterruptionLevel.HAPTIC_ONLY;
 
-      if (isSilentOrHapticOnly) {
-        return;
-      }
 
       if (
         userProfile?.feedback_modalities &&
@@ -566,7 +545,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     [
       isLiveGateOpen,
       assistantMuted,
-      coexistenceSettings.interruption_level,
       coexistenceSettings.pause_before_speaking,
       userProfile?.feedback_modalities,
       logSessionEvent,
@@ -673,7 +651,6 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     text: currentSpokenCue?.text,
     recommendedPlaybackAction: currentSpokenCue?.recommended_playback_action,
     assistantMuted,
-    audioCoexistenceSettings: coexistenceSettings,
     voiceSettings: userProfile?.voice_settings,
     feedbackModalities: userProfile?.feedback_modalities,
     videoId: params.videoId,

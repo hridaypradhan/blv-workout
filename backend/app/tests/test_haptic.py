@@ -8,6 +8,7 @@ from app.main import app
 from app.services.haptics import event_contract, provider_factory
 from app.services.haptics.dry_run_provider import DryRunHapticsProvider
 from app.services.haptics.bhaptics_provider import BHapticsProvider
+from app.services.haptics.utils import sanitize_target_limbs
 from app.models.schemas import SleeveSide, HapticLimb
 from app.core.config import settings
 
@@ -152,8 +153,8 @@ class TestHapticServicesAndRouter(unittest.TestCase):
         devices = data["devices"]
         self.assertIn("left_arm", devices)
         self.assertIn("right_arm", devices)
-        self.assertIn("left_leg", devices)
-        self.assertIn("right_leg", devices)
+        self.assertNotIn("left_leg", devices)
+        self.assertNotIn("right_leg", devices)
         
         left = devices["left_arm"]
         self.assertEqual(left["key"], "left_arm")
@@ -163,6 +164,10 @@ class TestHapticServicesAndRouter(unittest.TestCase):
         self.assertIn("battery", left)
         self.assertIn("status_text", left)
         self.assertIn("source", left)
+
+    def test_legacy_leg_targets_are_dropped(self):
+        targets = sanitize_target_limbs(["left_arm", "left_leg", "right_leg", "right_arm"])
+        self.assertEqual(targets, [HapticLimb.LEFT_ARM, HapticLimb.RIGHT_ARM])
 
     def test_api_vibrations_endpoint(self):
         response = self.client.get("/api/haptic/vibrations")

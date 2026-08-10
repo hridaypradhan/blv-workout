@@ -7,15 +7,22 @@ def check_python_supported() -> bool:
     py_version = sys.version_info
     return (3, 8) <= (py_version.major, py_version.minor) <= (3, 12)
 
+def sanitize_target_limbs(limbs: list[HapticLimb | str] | None) -> list[HapticLimb]:
+    """Sanitizes incoming target limbs to drop legacy leg sleeve targets safely."""
+    if not limbs:
+        return []
+    result: list[HapticLimb] = []
+    for item in limbs:
+        val = item.value if isinstance(item, HapticLimb) else str(item)
+        if val == "left_arm":
+            result.append(HapticLimb.LEFT_ARM)
+        elif val == "right_arm":
+            result.append(HapticLimb.RIGHT_ARM)
+    return result
+
 def get_normalized_devices(left_connected: bool, right_connected: bool, devices_data: dict[str, Any]) -> dict[str, Any]:
-    # Exact real hardware mapping is uncertain until limbs are available.
-    # We document mapping uncertainties briefly here:
-    # Under standard bHaptics configurations, positions 1 & 2 correspond to left/right arms (sleeves),
-    # while positions 3 & 4 correspond to left/right legs.
     left_arm_info = {}
     right_arm_info = {}
-    left_leg_info = {}
-    right_leg_info = {}
 
     if isinstance(devices_data, dict):
         for d in devices_data.get("devices", []):
@@ -24,20 +31,12 @@ def get_normalized_devices(left_connected: bool, right_connected: bool, devices_
                 left_arm_info = d
             elif pos == 2:
                 right_arm_info = d
-            elif pos == 3:
-                left_leg_info = d
-            elif pos == 4:
-                right_leg_info = d
 
     left_arm_connected = left_connected
     right_arm_connected = right_connected
-    left_leg_connected = left_leg_info.get("connected", False)
-    right_leg_connected = right_leg_info.get("connected", False)
 
     left_arm_battery = left_arm_info.get("battery") if left_arm_connected else None
     right_arm_battery = right_arm_info.get("battery") if right_arm_connected else None
-    left_leg_battery = left_leg_info.get("battery") if left_leg_connected else None
-    right_leg_battery = right_leg_info.get("battery") if right_leg_connected else None
 
     return {
         "left_arm": {
@@ -58,26 +57,6 @@ def get_normalized_devices(left_connected: bool, right_connected: bool, devices_
             "paired": right_arm_connected,
             "battery": right_arm_battery,
             "status_text": "Connected" if right_arm_connected else "Disconnected",
-            "source": "bhaptics"
-        },
-        "left_leg": {
-            "key": "left_leg",
-            "name": left_leg_info.get("name", "Left Leg"),
-            "position": 3,
-            "connected": left_leg_connected,
-            "paired": left_leg_connected,
-            "battery": left_leg_battery,
-            "status_text": "Connected" if left_leg_connected else "Disconnected",
-            "source": "bhaptics"
-        },
-        "right_leg": {
-            "key": "right_leg",
-            "name": right_leg_info.get("name", "Right Leg"),
-            "position": 4,
-            "connected": right_leg_connected,
-            "paired": right_leg_connected,
-            "battery": right_leg_battery,
-            "status_text": "Connected" if right_leg_connected else "Disconnected",
             "source": "bhaptics"
         }
     }

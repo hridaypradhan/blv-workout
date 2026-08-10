@@ -193,6 +193,27 @@ describe("VideoLibraryPage - Jobs Polling Behavior", () => {
     expect(getJobs).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
+
+  test("sample videos are never rendered and empty state offers link to prepare video", async () => {
+    vi.mocked(getJobs).mockResolvedValue([]);
+
+    const { getByText, queryByText } = render(
+      <UserProfileProvider>
+        <LayoutProvider>
+          <VideoLibraryPage />
+        </LayoutProvider>
+      </UserProfileProvider>
+    );
+
+    await waitFor(() => {
+      expect(getByText("No Assistance-Ready Videos Found")).toBeDefined();
+    });
+
+    // Sample video titles or section headers must NOT exist
+    expect(queryByText("Sample Videos")).toBeNull();
+    expect(queryByText("Sample Playback Companions")).toBeNull();
+    expect(getByText("Prepare a YouTube Video")).toBeDefined();
+  });
 });
 
 

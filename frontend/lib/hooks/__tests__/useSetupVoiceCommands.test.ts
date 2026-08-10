@@ -31,7 +31,6 @@ describe("useSetupVoiceCommands Hook", () => {
     onRepeatGuidance: vi.fn(),
     onCancelCountdown: vi.fn(),
     onStartWorkout: vi.fn(),
-    onChooseDifficulty: vi.fn(),
     onAskAssistant: vi.fn(),
     isAlignmentOpen: false,
     isCountdownActive: false,

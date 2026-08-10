@@ -79,14 +79,6 @@ class SpeakingOpportunityMode(str, Enum):
     PAUSE_SPEAK = "pause_speak"
 
 
-class InterruptionLevel(str, Enum):
-    """How aggressively the assistant may interrupt the trainer's audio."""
-
-    SILENT = "silent"
-    HAPTIC_ONLY = "haptic_only"
-    BRIEF_SPEECH = "brief_speech"
-    FULL_SPEECH = "full_speech"
-
 
 class AssistantVerbosity(str, Enum):
     """How much detail the assistant provides when it does speak."""
@@ -275,14 +267,12 @@ class AssistanceSidecarManifest(BaseModel):
 class AudioCoexistenceSettings(BaseModel):
     """User preferences for how FitA11y coexists with the trainer's audio.
 
-    These settings ensure the assistant never talks over the trainer
-    unless explicitly permitted by the user.
+    Full speech is the only supported audio behavior. The assistant always
+    delivers complete form guidance alongside the trainer's audio.
     """
 
-    interruption_level: InterruptionLevel = InterruptionLevel.HAPTIC_ONLY
     assistant_verbosity: AssistantVerbosity = AssistantVerbosity.MODERATE
     pause_before_speaking: bool = True
-    correction_frequency: str = "medium"
 
 
 # Haptic schemas — canonical definitions in app.models.haptic_schemas

@@ -31,10 +31,8 @@ const mockUser = {
   voice_settings: {},
   feedback_modalities: ["audio"],
   audio_coexistence: {
-    interruption_level: "brief_speech",
     assistant_verbosity: "moderate",
     pause_before_speaking: true,
-    correction_frequency: "medium",
   },
 };
 vi.mock("@/components/layout/UserProfileContext", () => ({

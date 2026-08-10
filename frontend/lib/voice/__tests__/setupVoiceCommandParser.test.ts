@@ -2,15 +2,6 @@ import { describe, test, expect } from "vitest";
 import { parseSetupVoiceCommand } from "../setupVoiceCommandParser";
 
 describe("setupVoiceCommandParser", () => {
-  test("parses difficulty choices correctly", () => {
-    expect(parseSetupVoiceCommand("choose fresh")?.type).toBe("choose_fresh");
-    expect(parseSetupVoiceCommand("fresh")?.type).toBe("choose_fresh");
-    expect(parseSetupVoiceCommand("choose normal")?.type).toBe("choose_normal");
-    expect(parseSetupVoiceCommand("normal")?.type).toBe("choose_normal");
-    expect(parseSetupVoiceCommand("choose tired")?.type).toBe("choose_tired");
-    expect(parseSetupVoiceCommand("tired")?.type).toBe("choose_tired");
-  });
-
   test("parses camera commands correctly", () => {
     expect(parseSetupVoiceCommand("enable camera")?.type).toBe("enable_camera");
     expect(parseSetupVoiceCommand("start camera")?.type).toBe("enable_camera");

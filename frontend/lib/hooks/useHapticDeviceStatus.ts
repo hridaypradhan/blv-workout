@@ -93,27 +93,23 @@ function deriveHapticStatusValues(
 
   const leftArmConnected = devices.left_arm?.connected || false;
   const rightArmConnected = devices.right_arm?.connected || false;
-  const leftLegConnected = devices.left_leg?.connected || false;
-  const rightLegConnected = devices.right_leg?.connected || false;
 
   let statusText = "Haptic hardware integration disabled. Events will use indicator mode.";
   let announcement = "Haptic integration disabled.";
 
   if (status === "connected") {
-    statusText = "bHaptics sleeves connected.";
-    announcement = "Both bHaptics sleeves are connected.";
+    statusText = "bHaptics arm sleeves connected.";
+    announcement = "Both bHaptics arm sleeves are connected.";
   } else if (status === "partially_connected") {
     const connectedLimbs: string[] = [];
     if (leftArmConnected) connectedLimbs.push("Left Arm");
     if (rightArmConnected) connectedLimbs.push("Right Arm");
-    if (leftLegConnected) connectedLimbs.push("Left Leg");
-    if (rightLegConnected) connectedLimbs.push("Right Leg");
 
     if (connectedLimbs.length === 1) {
       statusText = `${connectedLimbs[0]} connected.`;
       announcement = `${connectedLimbs[0]} connected.`;
     } else if (connectedLimbs.length > 1) {
-      statusText = "Multiple limbs connected.";
+      statusText = "Both arm sleeves connected.";
       announcement = `${connectedLimbs.join(", ")} connected.`;
     } else {
       statusText = "One sleeve connected.";
@@ -142,7 +138,7 @@ function deriveHapticStatusValues(
     announcement = "Haptic provider error.";
   }
 
-  const deviceStatuses = Object.values(devices);
+  const deviceStatuses = Object.values(devices).filter((d) => d.key === "left_arm" || d.key === "right_arm");
 
   return {
     status,

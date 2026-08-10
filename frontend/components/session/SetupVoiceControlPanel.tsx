@@ -140,11 +140,6 @@ export function SetupVoiceControlPanel({
         <p>
           Workout: <code className="text-slate-400">&quot;Start workout&quot;</code>
         </p>
-        <p>
-          Settings: <code className="text-slate-400">&quot;Choose fresh&quot;</code>,{" "}
-          <code className="text-slate-400">&quot;Choose normal&quot;</code>,{" "}
-          <code className="text-slate-400">&quot;Choose tired&quot;</code>
-        </p>
       </div>
     </section>
   );

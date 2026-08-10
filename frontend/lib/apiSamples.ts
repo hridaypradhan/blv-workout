@@ -221,9 +221,8 @@ export const apiSamples: Record<string, ApiSample> = {
       name: "Jane Doe",
       assistant_persona: "guide",
       voice_settings: {
-        speed: 1.0,
-        voiceId: "en-US-Wavenet-F",
-        spatialAudio: true
+        tts_rate: 1.0,
+        voice_id: "en-US-Wavenet-F"
       },
       feedback_modalities: ["audio", "haptic"]
     }, null, 2),
@@ -234,9 +233,8 @@ export const apiSamples: Record<string, ApiSample> = {
       name: "Jane Doe",
       assistant_persona: "guide",
       voice_settings: {
-        speed: 1.0,
-        voiceId: "en-US-Wavenet-F",
-        spatialAudio: true
+        tts_rate: 1.0,
+        voice_id: "en-US-Wavenet-F"
       },
       feedback_modalities: ["audio", "haptic"],
       created_at: "2026-05-27T01:00:00Z"
@@ -253,9 +251,8 @@ export const apiSamples: Record<string, ApiSample> = {
       name: "Jane Doe",
       assistant_persona: "guide",
       voice_settings: {
-        speed: 1.0,
-        voiceId: "en-US-Wavenet-F",
-        spatialAudio: true
+        tts_rate: 1.0,
+        voice_id: "en-US-Wavenet-F"
       },
       feedback_modalities: ["audio", "haptic"],
       created_at: "2026-05-27T01:00:00Z"
@@ -276,9 +273,8 @@ export const apiSamples: Record<string, ApiSample> = {
       name: "Jane Doe",
       assistant_persona: "cheerleader",
       voice_settings: {
-        speed: 1.0,
-        voiceId: "en-US-Wavenet-F",
-        spatialAudio: true
+        tts_rate: 1.0,
+        voice_id: "en-US-Wavenet-F"
       },
       feedback_modalities: ["audio", "haptic", "visual"],
       created_at: "2026-05-27T01:00:00Z"

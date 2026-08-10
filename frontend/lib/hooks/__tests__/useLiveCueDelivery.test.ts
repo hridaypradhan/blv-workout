@@ -30,10 +30,8 @@ describe("useLiveCueDelivery", () => {
     currentTime: 5.5, // 5500ms, inside the cue window
     isPlaying: true,
     coexistenceSettings: {
-      interruption_level: "brief_speech" as const,
       assistant_verbosity: "moderate" as const,
       pause_before_speaking: false,
-      correction_frequency: "medium" as const,
     },
     assistantMuted: false,
     recentlyDeliveredCueIds: [] as string[],

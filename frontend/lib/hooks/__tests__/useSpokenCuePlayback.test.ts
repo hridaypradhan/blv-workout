@@ -2,7 +2,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useSpokenCuePlayback, UseSpokenCuePlaybackProps } from "../useSpokenCuePlayback";
 import { PauseOwner } from "../usePlaybackPauseCoordinator";
-import { InterruptionLevel, FeedbackModality, AssistantVerbosity } from "../../../types";
+import { FeedbackModality } from "../../../types";
 
 // --- Mock speech synthesis classes ---
 class MockSpeechSynthesisUtterance {
@@ -85,12 +85,6 @@ describe("useSpokenCuePlayback Hook", () => {
       text: "Keep your chest up",
       recommendedPlaybackAction: "none",
       assistantMuted: false,
-      audioCoexistenceSettings: {
-        interruption_level: InterruptionLevel.BRIEF_SPEECH,
-        assistant_verbosity: AssistantVerbosity.MODERATE,
-        pause_before_speaking: true,
-        correction_frequency: "medium",
-      },
       voiceSettings: {
         tts_rate: 1.2,
         voice_id: "google-us",
@@ -149,29 +143,13 @@ describe("useSpokenCuePlayback Hook", () => {
     expect(speakSpy).not.toHaveBeenCalled();
   });
 
-  test("does not speak when interruption level is silent or haptic-only", () => {
-    const propsSilent = createProps({
-      audioCoexistenceSettings: {
-        interruption_level: InterruptionLevel.SILENT,
-        assistant_verbosity: AssistantVerbosity.MODERATE,
-        pause_before_speaking: true,
-        correction_frequency: "medium",
-      },
+  test("does not speak when audio feedback is disabled", () => {
+    const props = createProps({
+      feedbackModalities: [FeedbackModality.HAPTIC],
     });
     const speakSpy = vi.spyOn(mockSpeechSynth, "speak");
 
-    renderHook((p) => useSpokenCuePlayback(p), { initialProps: propsSilent });
-    expect(speakSpy).not.toHaveBeenCalled();
-
-    const propsHapticOnly = createProps({
-      audioCoexistenceSettings: {
-        interruption_level: InterruptionLevel.HAPTIC_ONLY,
-        assistant_verbosity: AssistantVerbosity.MODERATE,
-        pause_before_speaking: true,
-        correction_frequency: "medium",
-      },
-    });
-    renderHook((p) => useSpokenCuePlayback(p), { initialProps: propsHapticOnly });
+    renderHook((p) => useSpokenCuePlayback(p), { initialProps: props });
     expect(speakSpy).not.toHaveBeenCalled();
   });
 

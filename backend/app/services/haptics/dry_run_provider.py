@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 from app.models.schemas import HapticTriggerResponse, HapticTestResponse, SleeveSide, HapticLimb
 from app.services.haptics.base import BaseHapticsProvider
+from app.services.haptics.utils import sanitize_target_limbs
 
 class DryRunHapticsProvider(BaseHapticsProvider):
     """Dry-run simulation haptic provider."""
@@ -35,26 +36,6 @@ class DryRunHapticsProvider(BaseHapticsProvider):
                     "battery": None,
                     "status_text": "Disconnected",
                     "source": "bhaptics"
-                },
-                "left_leg": {
-                    "key": "left_leg",
-                    "name": "Left Leg",
-                    "position": 3,
-                    "connected": False,
-                    "paired": False,
-                    "battery": None,
-                    "status_text": "Disconnected",
-                    "source": "bhaptics"
-                },
-                "right_leg": {
-                    "key": "right_leg",
-                    "name": "Right Leg",
-                    "position": 4,
-                    "connected": False,
-                    "paired": False,
-                    "battery": None,
-                    "status_text": "Disconnected",
-                    "source": "bhaptics"
                 }
             }
         }
@@ -68,30 +49,28 @@ class DryRunHapticsProvider(BaseHapticsProvider):
         vibration_id: str | None = None,
         limbs: list[HapticLimb] | None = None,
     ) -> HapticTriggerResponse:
-        # Map sleeve_sides to target_limbs if target_limbs not provided
-        target_limbs = limbs
+        sanitized_limbs = sanitize_target_limbs(limbs)
+        target_limbs = sanitized_limbs if len(sanitized_limbs) > 0 else None
+
         if not target_limbs:
             target_limbs = []
             if sleeve_sides:
                 for side in sleeve_sides:
                     if side == SleeveSide.LEFT:
-                        target_limbs.extend([HapticLimb.LEFT_ARM, HapticLimb.LEFT_LEG])
+                        target_limbs.append(HapticLimb.LEFT_ARM)
                     elif side == SleeveSide.RIGHT:
-                        target_limbs.extend([HapticLimb.RIGHT_ARM, HapticLimb.RIGHT_LEG])
+                        target_limbs.append(HapticLimb.RIGHT_ARM)
                     elif side == SleeveSide.BOTH:
-                        target_limbs.extend([
-                            HapticLimb.LEFT_ARM, HapticLimb.RIGHT_ARM,
-                            HapticLimb.LEFT_LEG, HapticLimb.RIGHT_LEG
-                        ])
-        # Map limbs back to sleeve_sides for compatibility
+                        target_limbs.extend([HapticLimb.LEFT_ARM, HapticLimb.RIGHT_ARM])
+
         resolved_sleeve_sides = sleeve_sides
         if not resolved_sleeve_sides:
-            if limbs:
+            if target_limbs:
                 sides = set()
-                for limb in limbs:
-                    if limb.value.startswith("left"):
+                for limb in target_limbs:
+                    if limb == HapticLimb.LEFT_ARM:
                         sides.add(SleeveSide.LEFT)
-                    elif limb.value.startswith("right"):
+                    elif limb == HapticLimb.RIGHT_ARM:
                         sides.add(SleeveSide.RIGHT)
                 resolved_sleeve_sides = list(sides)
                 if len(resolved_sleeve_sides) == 2:

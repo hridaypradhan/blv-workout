@@ -4,7 +4,6 @@ import {
   CueModality,
   RuntimeCueSelectionResponse,
   AudioCoexistenceSettings,
-  InterruptionLevel,
   AssistantVerbosity
 } from "@/types";
 
@@ -70,24 +69,8 @@ export function selectCuePlanCandidateLocal(
     };
   }
 
-  // 3. Check modality and policy compatibility for each candidate
-  if (settings.interruption_level === InterruptionLevel.SILENT) {
-    return {
-      cue_id: null,
-      should_deliver: false,
-      modality: null,
-      text: null,
-      haptic_cue_ref: null,
-      interruption_policy_hint: null,
-      recommended_playback_action: "none",
-      reason: "silent_mode_suppresses_all_cues"
-    };
-  }
-
-  const audioAllowedBySettings =
-    !assistantMuted &&
-    (settings.interruption_level === InterruptionLevel.BRIEF_SPEECH ||
-      settings.interruption_level === InterruptionLevel.FULL_SPEECH);
+  // 3. Full speech is always enabled. Audio is allowed unless muted.
+  const audioAllowedBySettings = !assistantMuted;
 
   const finalCandidates: Array<{
     candidate: CueCandidate;
@@ -99,46 +82,31 @@ export function selectCuePlanCandidateLocal(
     let chosenModality: CueModality | null = null;
     let textToDeliver: string | null = null;
 
-    // Try to deliver as audio first
-    let canDeliverAudio = false;
+    // Try to deliver as audio first (full speech — all policy hints accepted)
     if (audioAllowedBySettings && c.allowed_modalities.includes("audio")) {
-      if (settings.interruption_level === InterruptionLevel.BRIEF_SPEECH) {
-        if (
-          c.interruption_policy_hint === "safe_gap_only" ||
-          c.interruption_policy_hint === "pause_then_speak"
-        ) {
-          canDeliverAudio = true;
-        }
-      } else if (settings.interruption_level === InterruptionLevel.FULL_SPEECH) {
-        if (
-          c.interruption_policy_hint === "safe_gap_only" ||
-          c.interruption_policy_hint === "pause_then_speak" ||
-          c.interruption_policy_hint === "duck_speak"
-        ) {
-          canDeliverAudio = true;
+      if (
+        c.interruption_policy_hint === "safe_gap_only" ||
+        c.interruption_policy_hint === "pause_then_speak" ||
+        c.interruption_policy_hint === "duck_speak"
+      ) {
+        chosenModality = "audio";
+        const variants = c.text_variants;
+        if (variants) {
+          if (settings.assistant_verbosity === AssistantVerbosity.MINIMAL) {
+            textToDeliver = variants.brief || variants.moderate;
+          } else if (settings.assistant_verbosity === AssistantVerbosity.DETAILED) {
+            textToDeliver = variants.detailed || variants.moderate;
+          } else {
+            textToDeliver = variants.moderate;
+          }
+        } else {
+          textToDeliver = "Please perform the movement.";
         }
       }
     }
 
-    if (canDeliverAudio) {
-      chosenModality = "audio";
-      const variants = c.text_variants;
-      if (variants) {
-        if (
-          settings.interruption_level === InterruptionLevel.BRIEF_SPEECH ||
-          settings.assistant_verbosity === AssistantVerbosity.MINIMAL
-        ) {
-          textToDeliver = variants.brief || variants.moderate;
-        } else if (settings.assistant_verbosity === AssistantVerbosity.DETAILED) {
-          textToDeliver = variants.detailed || variants.moderate;
-        } else {
-          textToDeliver = variants.moderate;
-        }
-      } else {
-        textToDeliver = "Please perform the movement.";
-      }
-    } else if (c.allowed_modalities.includes("haptic")) {
-      // Haptic fallback
+    // Fallback to haptic
+    if (!chosenModality && c.allowed_modalities.includes("haptic")) {
       chosenModality = "haptic";
       if (audioAllowedBySettings) {
         const variants = c.text_variants;

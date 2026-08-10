@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from uuid import UUID
 
 from app.models.cue_plan_schemas import CuePlan, CueCandidate, CueModality, CuePriority, InterruptionPolicyHint
-from app.models.schemas import AudioCoexistenceSettings, InterruptionLevel, AssistantVerbosity
+from app.models.schemas import AudioCoexistenceSettings, AssistantVerbosity
 from app.core.storage import get_artifact_storage
 
 # Wrapper to preserve compatibility with test patching
@@ -71,61 +71,36 @@ class CuePlanRuntimeService:
                 reason="all_active_candidates_recently_delivered"
             )
 
-        # 3. Check modality and policy compatibility for each candidate
-        # If settings require silent, nothing can be delivered
-        if settings.interruption_level == InterruptionLevel.SILENT:
-            return RuntimeCueSelectionResponse(
-                should_deliver=False,
-                reason="silent_mode_suppresses_all_cues"
-            )
-
-        # Helper to check if audio is allowed by user settings & mute status
-        audio_allowed_by_settings = (
-            not assistant_muted
-            and settings.interruption_level in (InterruptionLevel.BRIEF_SPEECH, InterruptionLevel.FULL_SPEECH)
-        )
+        # 3. Full speech is always enabled. Audio is allowed unless assistant is muted.
+        audio_allowed_by_settings = not assistant_muted
 
         final_candidates = []
-        # We'll store a tuple of (candidate, delivery_modality, text_to_deliver)
         for c in eligible_candidates:
             chosen_modality = None
             text_to_deliver = None
 
-            # Try to deliver as audio first
-            can_deliver_audio = False
+            # Try to deliver as audio first (full speech — all policy hints are allowed)
             if audio_allowed_by_settings and CueModality.AUDIO in c.allowed_modalities:
-                # Check policy hint compatibility
-                if settings.interruption_level == InterruptionLevel.BRIEF_SPEECH:
-                    # brief_speech allows only safe_gap_only or pause_then_speak
-                    if c.interruption_policy_hint in (InterruptionPolicyHint.SAFE_GAP_ONLY, InterruptionPolicyHint.PAUSE_THEN_SPEAK):
-                        can_deliver_audio = True
-                elif settings.interruption_level == InterruptionLevel.FULL_SPEECH:
-                    # full_speech allows duck_speak, safe_gap_only, pause_then_speak
-                    if c.interruption_policy_hint in (
-                        InterruptionPolicyHint.SAFE_GAP_ONLY,
-                        InterruptionPolicyHint.PAUSE_THEN_SPEAK,
-                        InterruptionPolicyHint.DUCKSPEAK
-                    ):
-                        can_deliver_audio = True
-
-            if can_deliver_audio:
-                chosen_modality = CueModality.AUDIO
-                # Select text variant based on verbosity/settings
-                variants = c.text_variants
-                if variants:
-                    if settings.interruption_level == InterruptionLevel.BRIEF_SPEECH or settings.assistant_verbosity == AssistantVerbosity.MINIMAL:
-                        text_to_deliver = variants.brief or variants.moderate
-                    elif settings.assistant_verbosity == AssistantVerbosity.DETAILED:
-                        text_to_deliver = variants.detailed or variants.moderate
+                if c.interruption_policy_hint in (
+                    InterruptionPolicyHint.SAFE_GAP_ONLY,
+                    InterruptionPolicyHint.PAUSE_THEN_SPEAK,
+                    InterruptionPolicyHint.DUCKSPEAK,
+                ):
+                    chosen_modality = CueModality.AUDIO
+                    variants = c.text_variants
+                    if variants:
+                        if settings.assistant_verbosity == AssistantVerbosity.MINIMAL:
+                            text_to_deliver = variants.brief or variants.moderate
+                        elif settings.assistant_verbosity == AssistantVerbosity.DETAILED:
+                            text_to_deliver = variants.detailed or variants.moderate
+                        else:
+                            text_to_deliver = variants.moderate
                     else:
-                        text_to_deliver = variants.moderate
-                else:
-                    text_to_deliver = "Please perform the movement."
-            # Fallback to haptic if audio is not allowed/possible, and haptic is allowed by candidate & settings
-            elif CueModality.HAPTIC in c.allowed_modalities:
-                # Haptic is allowed as long as interruption level is not SILENT
+                        text_to_deliver = "Please perform the movement."
+
+            # Fallback to haptic if audio is not allowed/possible
+            if not chosen_modality and CueModality.HAPTIC in c.allowed_modalities:
                 chosen_modality = CueModality.HAPTIC
-                # Keep haptic-only cues textless unless audio modality is allowed
                 if audio_allowed_by_settings:
                     variants = c.text_variants
                     if variants:

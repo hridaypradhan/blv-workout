@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import PageWrapper from "@/components/layout/PageWrapper";
 import { registerUser } from "@/lib/api";
 import { getActiveUserId, setActiveUserId } from "@/lib/prototypeUser";
-import { mergeUserPreferences, DEFAULT_USER_PREFERENCES } from "@/lib/userPreferences";
+import { DEFAULT_USER_PREFERENCES } from "@/lib/userPreferences";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
 import { useHapticDeviceStatus } from "@/lib/hooks/useHapticDeviceStatus";
 import { HapticDeviceStatus } from "@/types";
@@ -24,8 +24,6 @@ export default function Onboarding() {
   } = useHapticDeviceStatus();
 
   const [name, setName] = useState("");
-  const [visionLoss, setVisionLoss] = useState("vl-blind");
-  const [screenReader, setScreenReader] = useState("none");
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -33,19 +31,6 @@ export default function Onboarding() {
   useEffect(() => {
     if (user) {
       setName(user.name || "");
-      const prefs = mergeUserPreferences(user);
-      if (prefs.voice_settings) {
-        const vs = prefs.voice_settings as Record<string, string | number | boolean>;
-        if (typeof vs.vision_loss === "string") {
-          setVisionLoss(vs.vision_loss);
-        }
-        if (typeof vs.screen_reader === "string") {
-          setScreenReader(vs.screen_reader);
-        }
-      }
-    } else {
-      setVisionLoss(DEFAULT_USER_PREFERENCES.voice_settings.vision_loss);
-      setScreenReader(DEFAULT_USER_PREFERENCES.voice_settings.screen_reader);
     }
   }, [user]);
 
@@ -65,11 +50,7 @@ export default function Onboarding() {
         email: email,
         assistant_persona: DEFAULT_USER_PREFERENCES.assistant_persona,
         feedback_modalities: DEFAULT_USER_PREFERENCES.feedback_modalities,
-        voice_settings: {
-          ...DEFAULT_USER_PREFERENCES.voice_settings,
-          vision_loss: visionLoss,
-          screen_reader: screenReader,
-        },
+        voice_settings: DEFAULT_USER_PREFERENCES.voice_settings,
         audio_coexistence: {
           ...DEFAULT_USER_PREFERENCES.audio_coexistence,
         },
@@ -118,11 +99,7 @@ export default function Onboarding() {
         email: email,
         assistant_persona: DEFAULT_USER_PREFERENCES.assistant_persona,
         feedback_modalities: DEFAULT_USER_PREFERENCES.feedback_modalities,
-        voice_settings: {
-          ...DEFAULT_USER_PREFERENCES.voice_settings,
-          vision_loss: visionLoss,
-          screen_reader: screenReader,
-        },
+        voice_settings: DEFAULT_USER_PREFERENCES.voice_settings,
         audio_coexistence: {
           ...DEFAULT_USER_PREFERENCES.audio_coexistence,
         },
@@ -185,64 +162,6 @@ export default function Onboarding() {
                 />
               </div>
 
-              {/* Degree of Vision Loss */}
-              <div className="space-y-3">
-                <span className="block text-sm font-semibold text-slate-200" id="vision-loss-label">
-                  Degree of Vision Loss
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-labelledby="vision-loss-label">
-                  {[
-                    { id: "vl-blind", label: "Totally Blind", desc: "Primarily relies on Speech & Haptic responses" },
-                    { id: "vl-legal", label: "Legally Blind", desc: "High-contrast guides & Audio descriptions" },
-                    { id: "vl-low", label: "Moderate Low Vision", desc: "Large fonts, scaling, & outline guidance" },
-                    { id: "vl-mild", label: "Mild Low Vision", desc: "Slight text adjustments & voice cues" },
-                  ].map((level) => (
-                    <label
-                      key={level.id}
-                      htmlFor={level.id}
-                      className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all duration-200 focus-within:ring-2 focus-within:ring-yellow-400 ${
-                        visionLoss === level.id
-                          ? "bg-slate-950 border-2 border-yellow-400"
-                          : "bg-slate-950 border border-slate-800 hover:border-slate-700"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          id={level.id}
-                          name="vision-loss"
-                          value={level.id}
-                          checked={visionLoss === level.id}
-                          onChange={(e) => setVisionLoss(e.target.value)}
-                          className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400 focus:ring-offset-slate-950"
-                        />
-                        <span className="text-sm font-bold text-white">{level.label}</span>
-                      </div>
-                      <span className="text-xs text-slate-400 mt-1 pl-7">{level.desc}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Screen Reader Dropdown */}
-              <div className="space-y-2">
-                <label htmlFor="screen-reader-select" className="block text-sm font-semibold text-slate-200">
-                  Primary Screen Reader Helper
-                </label>
-                <select
-                  id="screen-reader-select"
-                  value={screenReader}
-                  onChange={(e) => setScreenReader(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-yellow-400 rounded-xl text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 transition-all cursor-pointer"
-                >
-                  <option value="none">None / Standard Audio Synthesis Only</option>
-                  <option value="voiceover">Apple VoiceOver</option>
-                  <option value="nvda">NVDA (NonVisual Desktop Access)</option>
-                  <option value="jaws">JAWS (Job Access With Speech)</option>
-                  <option value="talkback">Android TalkBack</option>
-                  <option value="other">Other Screen Reader</option>
-                </select>
-              </div>
             </div>
           </section>
 
@@ -306,9 +225,7 @@ export default function Onboarding() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {(deviceStatuses.length > 0 ? (deviceStatuses as HapticDeviceStatus[]) : [
                 { key: "left_arm", name: "Left Arm", position: 1, connected: false, paired: false, battery: null, status_text: "Disconnected", source: "bhaptics" },
-                { key: "right_arm", name: "Right Arm", position: 2, connected: false, paired: false, battery: null, status_text: "Disconnected", source: "bhaptics" },
-                { key: "left_leg", name: "Left Leg", position: 3, connected: false, paired: false, battery: null, status_text: "Disconnected", source: "bhaptics" },
-                { key: "right_leg", name: "Right Leg", position: 4, connected: false, paired: false, battery: null, status_text: "Disconnected", source: "bhaptics" }
+                { key: "right_arm", name: "Right Arm", position: 2, connected: false, paired: false, battery: null, status_text: "Disconnected", source: "bhaptics" }
               ]).map((device) => {
                 const isConn = device.connected;
                 return (

@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import {
-  AudioCoexistenceSettings,
-  InterruptionLevel,
-  FeedbackModality,
-} from "../../types";
+import { FeedbackModality } from "../../types";
 import { PauseOwner } from "./usePlaybackPauseCoordinator";
 
 export interface UseSpokenCuePlaybackProps {
@@ -15,7 +11,6 @@ export interface UseSpokenCuePlaybackProps {
   text: string | null | undefined;
   recommendedPlaybackAction: "none" | "pause_before_speaking" | "duck_audio" | null | undefined;
   assistantMuted: boolean;
-  audioCoexistenceSettings: AudioCoexistenceSettings | null | undefined;
   voiceSettings: Record<string, unknown> | null | undefined;
   feedbackModalities: FeedbackModality[] | null | undefined;
   videoId: string | null | undefined;
@@ -81,7 +76,6 @@ export function useSpokenCuePlayback({
   text,
   recommendedPlaybackAction,
   assistantMuted,
-  audioCoexistenceSettings,
   voiceSettings,
   feedbackModalities,
   videoId,
@@ -182,16 +176,12 @@ export function useSpokenCuePlayback({
     };
   }, [videoId, sessionId, cancelSpeech]);
 
-  // 2. Cancel speech on mute or if interruption level changes to silent/haptic-only
+  // 2. Cancel speech on mute
   useEffect(() => {
-    const isSilentOrHapticOnly =
-      audioCoexistenceSettings?.interruption_level === InterruptionLevel.SILENT ||
-      audioCoexistenceSettings?.interruption_level === InterruptionLevel.HAPTIC_ONLY;
-
-    if (assistantMuted || isSilentOrHapticOnly) {
+    if (assistantMuted) {
       cancelSpeech(true); // Allow resuming playback since this is a configuration change, not a seek
     }
-  }, [assistantMuted, audioCoexistenceSettings?.interruption_level, cancelSpeech]);
+  }, [assistantMuted, cancelSpeech]);
 
   // 3. Cancel speech on explicit seekEpoch signal changes
   useEffect(() => {
@@ -234,14 +224,6 @@ export function useSpokenCuePlayback({
     }
 
     if (assistantMuted) {
-      return;
-    }
-
-    const isSilentOrHapticOnly =
-      audioCoexistenceSettings?.interruption_level === InterruptionLevel.SILENT ||
-      audioCoexistenceSettings?.interruption_level === InterruptionLevel.HAPTIC_ONLY;
-
-    if (isSilentOrHapticOnly) {
       return;
     }
 
@@ -347,7 +329,6 @@ export function useSpokenCuePlayback({
     text,
     recommendedPlaybackAction,
     assistantMuted,
-    audioCoexistenceSettings?.interruption_level,
     feedbackModalities,
     voiceSettings,
     timestampMs,

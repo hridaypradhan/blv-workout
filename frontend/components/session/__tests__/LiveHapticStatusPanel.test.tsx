@@ -22,7 +22,7 @@ describe("LiveHapticStatusPanel", () => {
       timestamp: Date.now() - 1000,
       eventName: "squat_down",
       deliveryMode: "indicator",
-      targetLimbs: ["left_leg", "right_leg"],
+      targetLimbs: ["left_arm", "right_arm"],
       statusMessage: "Simulated",
     },
   ];

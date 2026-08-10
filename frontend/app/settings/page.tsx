@@ -5,7 +5,7 @@ import PageWrapper from "@/components/layout/PageWrapper";
 import { getActiveUserId, notifyActiveUserUpdated } from "@/lib/prototypeUser";
 import { updateUserSettings } from "@/lib/api";
 import { mergeUserPreferences } from "@/lib/userPreferences";
-import { AssistantPersona, InterruptionLevel, AssistantVerbosity } from "@/types";
+import { AssistantPersona, AssistantVerbosity } from "@/types";
 import { useUserProfile } from "@/components/layout/UserProfileContext";
 import HapticSettingsPanel from "@/components/settings/HapticSettingsPanel";
 import { useHapticPreferenceSettings } from "@/lib/hooks/useHapticPreferenceSettings";
@@ -28,15 +28,10 @@ export default function Settings() {
 
   // Settings state variables
   const [name, setName] = useState("");
-  const [visionLoss, setVisionLoss] = useState("vl-blind");
-  const [screenReader, setScreenReader] = useState("none");
   const [assistantPersona, setAssistantPersona] = useState("guide");
   const [ttsSpeed, setTtsSpeed] = useState(1.0);
   const [voiceSelect, setVoiceSelect] = useState("system");
-  const [spatialAudio, setSpatialAudio] = useState(true);
   const [pauseBeforeSpeaking, setPauseBeforeSpeaking] = useState(true);
-  const [interruptionLevel, setInterruptionLevel] = useState("brief_speech");
-  const [hapticFirst, setHapticFirst] = useState(true);
   const [assistantVerbosity, setAssistantVerbosity] = useState("moderate");
 
   // Status feedback state
@@ -60,21 +55,8 @@ export default function Settings() {
         if (typeof vs.voice_id === "string") {
           setVoiceSelect(vs.voice_id);
         }
-        if (typeof vs.spatial_audio === "boolean") {
-          setSpatialAudio(vs.spatial_audio);
-        }
-        if (typeof vs.haptic_first === "boolean") {
-          setHapticFirst(vs.haptic_first);
-        }
-        if (typeof vs.vision_loss === "string") {
-          setVisionLoss(vs.vision_loss);
-        }
-        if (typeof vs.screen_reader === "string") {
-          setScreenReader(vs.screen_reader);
-        }
       }
       if (prefs.audio_coexistence) {
-        setInterruptionLevel(prefs.audio_coexistence.interruption_level ?? "brief_speech");
         setAssistantVerbosity(prefs.audio_coexistence.assistant_verbosity ?? "moderate");
         setPauseBeforeSpeaking(prefs.audio_coexistence.pause_before_speaking !== false);
       }
@@ -96,16 +78,10 @@ export default function Settings() {
         voice_settings: {
           tts_rate: ttsSpeed,
           voice_id: voiceSelect,
-          spatial_audio: spatialAudio,
-          haptic_first: hapticFirst,
-          vision_loss: visionLoss,
-          screen_reader: screenReader,
         },
         audio_coexistence: {
-          interruption_level: interruptionLevel as InterruptionLevel,
           assistant_verbosity: assistantVerbosity as AssistantVerbosity,
           pause_before_speaking: pauseBeforeSpeaking,
-          correction_frequency: "medium",
         },
         haptic_preferences: hapticPreferences,
       };
@@ -163,18 +139,14 @@ export default function Settings() {
         <div className="mb-8">
           <h1 className="text-3xl font-extrabold text-white">Accessibility & Preferences</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Customize assistant voices, audio coexistence, and supplementary cue frequencies.
+            Customize your assistant voice, feedback detail, and haptic cues.
           </p>
         </div>
 
         <form onSubmit={handleSaveSettings} className="space-y-8">
           <ProfileBasicsSettingsSection
             name={name}
-            visionLoss={visionLoss}
-            screenReader={screenReader}
             onNameChange={setName}
-            onVisionLossChange={setVisionLoss}
-            onScreenReaderChange={setScreenReader}
           />
 
           <AssistantPersonaSettingsSection
@@ -237,23 +209,6 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Spatial Audio Toggle */}
-              <div className="flex items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
-                <div className="flex flex-col gap-0.5">
-                  <label htmlFor="spatial-audio-toggle" className="text-sm font-bold text-slate-200 cursor-pointer">
-                    Spatial Stereo Audio
-                  </label>
-                  <span className="text-xs text-slate-400">Pans audio correction to left/right speakers to match arm/leg positions.</span>
-                </div>
-                <input
-                  type="checkbox"
-                  id="spatial-audio-toggle"
-                  checked={spatialAudio}
-                  onChange={(e) => setSpatialAudio(e.target.checked)}
-                  className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
-                />
-              </div>
-
               {/* Pause Before Speaking Toggle */}
               <div className="flex items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
                 <div className="flex flex-col gap-0.5">
@@ -273,63 +228,7 @@ export default function Settings() {
             </div>
           </section>
 
-          {/* Section 3: Interruption Level & Correction Frequency */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="frequency-heading">
-            <h2 id="frequency-heading" className="text-xl font-bold text-white mb-2">
-              Correction Frequency & Interruption Level
-            </h2>
-            <p className="text-xs text-slate-400 mb-6">
-              Configure how the assistant coexists with or interrupts the original trainer&apos;s audio.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {[
-                { id: "int-silent", value: "silent", label: "Silent", desc: "No voice feedback. Playback is entirely uninterrupted." },
-                { id: "int-haptic", value: "haptic_only", label: "Haptic Only", desc: "Vibration cues on sleeves. Speech is fully silenced." },
-                { id: "int-brief", value: "brief_speech", label: "Brief Speech", desc: "Short correction words only during clear speech gaps." },
-                { id: "int-full", value: "full_speech", label: "Full Speech", desc: "Ducks YouTube audio to deliver complete form guidance." },
-              ].map((lvl) => (
-                <label
-                  key={lvl.id}
-                  htmlFor={lvl.id}
-                  className="relative flex flex-col p-4 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400"
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      id={lvl.id}
-                      name="interruption-level"
-                      value={lvl.value}
-                      checked={interruptionLevel === lvl.value}
-                      onChange={(e) => setInterruptionLevel(e.target.value)}
-                      className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400"
-                    />
-                    <span className="text-sm font-bold text-white">{lvl.label}</span>
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1.5">{lvl.desc}</span>
-                </label>
-              ))}
-            </div>
-
-            {/* Haptic-First Mode Toggle */}
-            <div className="flex items-center justify-between gap-4 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
-              <div className="flex flex-col gap-0.5">
-                <label htmlFor="haptic-first-toggle" className="text-sm font-bold text-slate-200 cursor-pointer">
-                  Haptic-First Mode
-                </label>
-                <span className="text-xs text-slate-400">Deliver all posture adjustments via haptic sleeve ticks first, only speaking if you don&apos;t adjust.</span>
-              </div>
-              <input
-                type="checkbox"
-                id="haptic-first-toggle"
-                checked={hapticFirst}
-                onChange={(e) => setHapticFirst(e.target.checked)}
-                className="w-10 h-5 bg-slate-900 border-slate-800 text-yellow-400 focus:ring-yellow-400 rounded-full cursor-pointer accent-yellow-400"
-              />
-            </div>
-          </section>
-
-          {/* Section 4: Assistant Verbosity Level */}
+          {/* Assistant feedback detail */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl" aria-labelledby="verbosity-heading">
             <h2 id="verbosity-heading" className="text-xl font-bold text-white mb-2">
               Assistant Verbosity

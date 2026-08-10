@@ -14,7 +14,6 @@ export interface SetupVoiceCommandProps {
   onRepeatGuidance: () => void;
   onCancelCountdown: () => void;
   onStartWorkout: () => void;
-  onChooseDifficulty: (difficulty: string) => void;
   onAskAssistant?: (query: string) => void;
   isAlignmentOpen: boolean;
   isCountdownActive: boolean;
@@ -30,7 +29,6 @@ export function useSetupVoiceCommands({
   onRepeatGuidance,
   onCancelCountdown,
   onStartWorkout,
-  onChooseDifficulty,
   onAskAssistant,
   isAlignmentOpen,
   isCountdownActive,
@@ -140,18 +138,6 @@ export function useSetupVoiceCommands({
           onStartWorkout();
         }
         break;
-      case "choose_fresh":
-        speakText("Difficulty set to fresh.");
-        onChooseDifficulty("diff-fresh");
-        break;
-      case "choose_normal":
-        speakText("Difficulty set to normal.");
-        onChooseDifficulty("diff-norm");
-        break;
-      case "choose_tired":
-        speakText("Difficulty set to tired.");
-        onChooseDifficulty("diff-tired");
-        break;
       case "ask_assistant":
         if (onAskAssistant && cmd.payload) {
           speakText(`Asking assistant: ${cmd.payload}`);
@@ -203,7 +189,6 @@ export function useSetupVoiceCommands({
     onRepeatGuidance,
     onCancelCountdown,
     onStartWorkout,
-    onChooseDifficulty,
     onAskAssistant,
     isAlignmentOpen,
     isCountdownActive,

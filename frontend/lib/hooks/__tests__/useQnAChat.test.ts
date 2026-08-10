@@ -2,7 +2,7 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useQnAChat } from "../useQnAChat";
 import { askAssistant } from "@/lib/api";
-import { InterruptionLevel, AssistantVerbosity, User } from "@/types";
+import { AssistantVerbosity, User } from "@/types";
 
 vi.mock("@/lib/api", () => ({
   askAssistant: vi.fn(),
@@ -19,10 +19,8 @@ describe("useQnAChat Hook Q&A Speech Integration", () => {
     cuePlan: null,
     transcript: null,
     coexistenceSettings: {
-      interruption_level: InterruptionLevel.BRIEF_SPEECH,
       assistant_verbosity: AssistantVerbosity.MODERATE,
       pause_before_speaking: true,
-      correction_frequency: "medium",
     },
     assistantMuted: false,
     metadata: null,

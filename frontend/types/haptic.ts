@@ -1,8 +1,6 @@
 export type HapticLimb =
   | "left_arm"
-  | "right_arm"
-  | "left_leg"
-  | "right_leg";
+  | "right_arm";
 
 export type HapticCategory =
   | "start"

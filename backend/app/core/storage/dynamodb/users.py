@@ -13,7 +13,6 @@ from app.models.schemas import (
     AssistantPersona,
     FeedbackModality,
     AudioCoexistenceSettings,
-    InterruptionLevel,
     AssistantVerbosity,
 )
 from app.core.storage.dynamodb.utils import python_to_dynamodb, dynamodb_to_python
@@ -44,10 +43,8 @@ class DynamoDBUserStorage(UserStorage):
             voice_settings={"tts_rate": 1.0, "voice_id": "system"},
             feedback_modalities=[FeedbackModality.AUDIO, FeedbackModality.HAPTIC],
             audio_coexistence=AudioCoexistenceSettings(
-                interruption_level=InterruptionLevel.BRIEF_SPEECH,
                 assistant_verbosity=AssistantVerbosity.MODERATE,
                 pause_before_speaking=True,
-                correction_frequency="medium",
             ),
             created_at=datetime.now(timezone.utc),
         )

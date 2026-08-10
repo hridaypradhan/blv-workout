@@ -10,7 +10,6 @@ import {
   TrainerInstructionEvent,
   CuePlan,
   TranscriptArtifact,
-  InterruptionLevel,
   FeedbackModality,
 } from "@/types";
 
@@ -159,9 +158,6 @@ export function useQnAChat({
         { sender: "assistant", text: response.answer_text }
       ]);
       const isSpeechSynthAvailable = typeof window !== "undefined" && !!window.speechSynthesis;
-      const isSilentOrHapticOnly =
-        coexistenceSettings?.interruption_level === InterruptionLevel.SILENT ||
-        coexistenceSettings?.interruption_level === InterruptionLevel.HAPTIC_ONLY;
       const audioFeedbackDisabled =
         userProfile?.feedback_modalities &&
         !userProfile.feedback_modalities.includes(FeedbackModality.AUDIO);
@@ -169,7 +165,6 @@ export function useQnAChat({
       const isSpeechEnabled =
         isSpeechSynthAvailable &&
         !assistantMuted &&
-        !isSilentOrHapticOnly &&
         !audioFeedbackDisabled;
 
       if (isSpeechEnabled) {

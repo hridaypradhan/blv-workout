@@ -29,10 +29,8 @@ const mockUser = {
   voice_settings: {},
   feedback_modalities: ["audio"],
   audio_coexistence: {
-    interruption_level: "brief_speech",
     assistant_verbosity: "moderate",
     pause_before_speaking: true,
-    correction_frequency: "medium",
   },
 };
 vi.mock("@/components/layout/UserProfileContext", () => ({
@@ -356,10 +354,6 @@ describe("LiveSession Q&A Speech Integration", () => {
   });
 
   describe("Form Correction Spoken Cue Delivery", () => {
-    beforeEach(() => {
-      mockUser.audio_coexistence.interruption_level = "brief_speech";
-    });
-
     test("onCorrectionReady sets currentSpokenCue when audio is allowed", () => {
       render(<LiveSessionPage params={{ videoId: "video-123" }} />);
 
@@ -380,25 +374,6 @@ describe("LiveSession Q&A Speech Integration", () => {
       expect(lastPlaybackProps.recommendedPlaybackAction).toBe("pause_before_speaking");
       expect(lastPlaybackProps.shouldDeliver).toBe(true);
       expect(lastPlaybackProps.modality).toBe("audio");
-    });
-
-    test("onCorrectionReady does not set spoken cue when audio is muted or in haptic-only mode", () => {
-      mockUser.audio_coexistence.interruption_level = "haptic_only";
-      render(<LiveSessionPage params={{ videoId: "video-123" }} />);
-
-      const poseProps = mockUsePoseSessionEvents.mock.calls[0][0];
-
-      act(() => {
-        poseProps.onCorrectionReady(
-          { text: "Keep knees aligned.", modality: "speech" },
-          12000,
-          { joint: "left_knee", observed_angle: 60, expected_range: [75, 180], severity: "medium" }
-        );
-      });
-
-      // No new spoken cue should be dispatched to useSpokenCuePlayback
-      const lastPlaybackProps = mockUseSpokenCuePlayback.mock.calls[mockUseSpokenCuePlayback.mock.calls.length - 1][0];
-      expect(lastPlaybackProps.text).not.toBe("Keep knees aligned.");
     });
 
     test("disconnected haptic sleeves do not prevent verbal form correction playback", () => {

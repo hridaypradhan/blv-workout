@@ -1,39 +1,39 @@
 import React from "react";
 
 export interface SetupAudioCoexistenceSectionProps {
-  interruptionLevel: string;
-  setInterruptionLevel: (level: string) => void;
   pauseBeforeSpeaking: boolean;
   setPauseBeforeSpeaking: (pause: boolean) => void;
+  assistantVerbosity: string;
+  setAssistantVerbosity: (verbosity: string) => void;
 }
 
 export function SetupAudioCoexistenceSection({
-  interruptionLevel,
-  setInterruptionLevel,
   pauseBeforeSpeaking,
   setPauseBeforeSpeaking,
+  assistantVerbosity,
+  setAssistantVerbosity,
 }: SetupAudioCoexistenceSectionProps) {
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl md:rounded-3xl p-4 sm:p-6 shadow-xl" aria-labelledby="audio-coexistence-heading" id="audio-coexistence-section">
       <h2 id="audio-coexistence-heading" className="text-lg font-bold text-white mb-2">
-        Audio Coexistence (Session Overrides)
+        Audio Settings
       </h2>
       <p className="text-sm text-slate-300 mb-4">
-        Configure how the assistant coexists with the trainer&apos;s audio. (These selections will override your saved defaults for this session only).
+        Full speech is always enabled. The assistant delivers complete form guidance alongside the trainer&apos;s audio.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6" role="radiogroup" aria-labelledby="audio-coexistence-heading">
+      {/* Assistant Verbosity */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6" role="radiogroup" aria-label="Assistant verbosity level">
         {[
-          { id: "setup-int-silent", value: "silent", label: "Silent", desc: "No voice feedback. Playback is entirely uninterrupted." },
-          { id: "setup-int-haptic", value: "haptic_only", label: "Haptic Only", desc: "Vibration cues on sleeves. Speech is fully silenced." },
-          { id: "setup-int-brief", value: "brief_speech", label: "Brief Speech", desc: "Short correction words only during clear speech gaps." },
-          { id: "setup-int-full", value: "full_speech", label: "Full Speech", desc: "Ducks YouTube audio to deliver complete form guidance." },
+          { id: "setup-verbosity-minimal", value: "minimal", label: "Minimal", desc: "Short, essential corrections only." },
+          { id: "setup-verbosity-moderate", value: "moderate", label: "Moderate", desc: "Balanced guidance with clear context." },
+          { id: "setup-verbosity-detailed", value: "detailed", label: "Detailed", desc: "Thorough explanations and cues." },
         ].map((lvl) => (
           <label
             key={lvl.id}
             htmlFor={lvl.id}
             className={`relative flex flex-col p-4 rounded-xl cursor-pointer select-none transition-all focus-within:ring-2 focus-within:ring-yellow-400 ${
-              interruptionLevel === lvl.value
+              assistantVerbosity === lvl.value
                 ? "bg-slate-950 border-2 border-yellow-400"
                 : "bg-slate-950 border border-slate-800 hover:border-slate-700"
             }`}
@@ -42,10 +42,10 @@ export function SetupAudioCoexistenceSection({
               <input
                 type="radio"
                 id={lvl.id}
-                name="interruption-level"
+                name="assistant-verbosity"
                 value={lvl.value}
-                checked={interruptionLevel === lvl.value}
-                onChange={(e) => setInterruptionLevel(e.target.value)}
+                checked={assistantVerbosity === lvl.value}
+                onChange={(e) => setAssistantVerbosity(e.target.value)}
                 className="w-4 h-4 text-yellow-400 bg-slate-900 border-slate-800 focus:ring-yellow-400"
               />
               <span className="text-sm font-bold text-white">{lvl.label}</span>

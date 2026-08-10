@@ -1,4 +1,4 @@
-import { User, AssistantPersona, FeedbackModality, InterruptionLevel, AssistantVerbosity, HapticPreferences } from "@/types";
+import { User, AssistantPersona, FeedbackModality, AssistantVerbosity, HapticPreferences } from "@/types";
 
 export const CANONICAL_HAPTIC_CATEGORIES = ["start", "finish", "reps", "speed_up", "slow_down"] as const;
 export type CanonicalHapticCategory = typeof CANONICAL_HAPTIC_CATEGORIES[number];
@@ -15,18 +15,12 @@ export const DEFAULT_USER_PREFERENCES = {
   assistant_persona: AssistantPersona.GUIDE,
   feedback_modalities: [FeedbackModality.AUDIO, FeedbackModality.HAPTIC],
   voice_settings: {
-    vision_loss: "vl-blind",
-    screen_reader: "none",
     tts_rate: 1.0,
     voice_id: "system",
-    spatial_audio: true,
-    haptic_first: true,
   },
   audio_coexistence: {
-    interruption_level: InterruptionLevel.BRIEF_SPEECH,
     assistant_verbosity: AssistantVerbosity.MODERATE,
     pause_before_speaking: true,
-    correction_frequency: "medium",
   },
   haptic_preferences: { ...HAPTIC_CATEGORY_DEFAULT_IDS },
 };

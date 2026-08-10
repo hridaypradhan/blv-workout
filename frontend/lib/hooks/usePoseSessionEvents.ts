@@ -48,6 +48,17 @@ interface UsePoseSessionEventsProps {
   onPersonaRepCompleted?: (canSpeak: boolean) => PersonaTriggerDecision;
   onPersonaTrigger?: (decision: PersonaTriggerDecision, timestampMs: number) => void;
   canSpeakPersonaCue?: boolean;
+  onCorrectionReady?: (
+    response: {
+      text: string;
+      modality?: string;
+      priority?: string;
+      persona?: string;
+      metadata?: Record<string, unknown>;
+    },
+    timestampMs: number,
+    latestFormError: FormError
+  ) => void;
 }
 
 export function usePoseSessionEvents({
@@ -65,9 +76,15 @@ export function usePoseSessionEvents({
   onPersonaRepCompleted,
   onPersonaTrigger,
   canSpeakPersonaCue = false,
+  onCorrectionReady,
 }: UsePoseSessionEventsProps) {
   const repsBufferRef = useRef<RepsBufferItem[]>([]);
   const formErrorsBufferRef = useRef<FormErrorsBufferItem[]>([]);
+
+  const onCorrectionReadyRef = useRef(onCorrectionReady);
+  useEffect(() => {
+    onCorrectionReadyRef.current = onCorrectionReady;
+  }, [onCorrectionReady]);
 
   // Track the last handled rep count from the active provider to avoid duplicate triggers
   const lastHandledRepPerProviderRef = useRef<Record<string, number>>({});
@@ -260,19 +277,23 @@ export function usePoseSessionEvents({
 
     generateCorrection(correctionPayload)
       .then((response) => {
-        updateLatestAutomaticCue(response.text, "correction");
-        announce(`Assistant correction: ${response.text}`);
+        if (onCorrectionReadyRef.current) {
+          onCorrectionReadyRef.current(response, currentTimeMs, latestFormError);
+        } else {
+          updateLatestAutomaticCue(response.text, "correction");
+          announce(`Assistant correction: ${response.text}`);
 
-        logSessionEvent(SESSION_EVENTS.ASSISTANT_CORRECTION_DELIVERED, currentTimeMs, {
-          text: response.text,
-          joint: latestFormError.joint,
-          modality: response.modality,
-          priority: response.priority,
-          persona: response.persona,
-          source: response.metadata?.source,
-          provider: response.metadata?.provider,
-          correction_kind: response.metadata?.correction_kind || latestFormError.metadata?.correction_kind,
-        });
+          logSessionEvent(SESSION_EVENTS.ASSISTANT_CORRECTION_DELIVERED, currentTimeMs, {
+            text: response.text,
+            joint: latestFormError.joint,
+            modality: response.modality,
+            priority: response.priority,
+            persona: response.persona,
+            source: response.metadata?.source,
+            provider: response.metadata?.provider,
+            correction_kind: response.metadata?.correction_kind || latestFormError.metadata?.correction_kind,
+          });
+        }
       })
       .catch((err) => {
         console.error("Failed to generate correction cue:", err);

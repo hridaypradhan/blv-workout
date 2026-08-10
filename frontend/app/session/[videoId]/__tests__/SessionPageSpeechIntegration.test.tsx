@@ -139,26 +139,31 @@ vi.mock("@/lib/hooks/useSessionTelemetry", () => ({
 vi.mock("@/lib/hooks/useHapticEventDelivery", () => ({
   useHapticEventDelivery: () => ({ recentEvents: [], triggerHapticEvent: vi.fn() }),
 }));
-vi.mock("@/lib/hooks/useHapticDeviceStatus", () => ({
-  useHapticDeviceStatus: () => ({
-    status: "connected",
-    statusText: "Connected",
-    deviceStatuses: [],
-    isLoading: false,
-    error: null,
-  }),
+const mockUseHapticDeviceStatus = vi.fn(() => ({
+  status: "connected",
+  statusText: "Connected",
+  deviceStatuses: [],
+  isLoading: false,
+  error: null,
 }));
+vi.mock("@/lib/hooks/useHapticDeviceStatus", () => ({
+  useHapticDeviceStatus: () => mockUseHapticDeviceStatus(),
+}));
+const mockUsePoseSessionEvents = vi.fn();
 vi.mock("@/lib/hooks/usePoseSessionEvents", () => ({
-  usePoseSessionEvents: () => ({
-    startPoseTracking: vi.fn(),
-    stopPoseTracking: vi.fn(),
-    isPrototypeTracking: false,
-    currentAngles: {},
-    trackingStatusLabel: "",
-    latestRepCount: 0,
-    repsBufferRef: { current: [] },
-    formErrorsBufferRef: { current: [] },
-  }),
+  usePoseSessionEvents: (props: unknown) => {
+    mockUsePoseSessionEvents(props);
+    return {
+      startPoseTracking: vi.fn(),
+      stopPoseTracking: vi.fn(),
+      isPrototypeTracking: false,
+      currentAngles: {},
+      trackingStatusLabel: "",
+      latestRepCount: 0,
+      repsBufferRef: { current: [] },
+      formErrorsBufferRef: { current: [] },
+    };
+  },
 }));
 vi.mock("@/lib/hooks/useLiveVoiceCommands", () => ({
   useLiveVoiceCommands: () => ({
@@ -348,5 +353,81 @@ describe("LiveSession Q&A Speech Integration", () => {
     expect(context.latest_form_error).toBeNull();
     expect(context.latest_rep_event).toBeNull();
     expect(context.notes).toContain("Camera is offline or fallback simulation is active");
+  });
+
+  describe("Form Correction Spoken Cue Delivery", () => {
+    beforeEach(() => {
+      mockUser.audio_coexistence.interruption_level = "brief_speech";
+    });
+
+    test("onCorrectionReady sets currentSpokenCue when audio is allowed", () => {
+      render(<LiveSessionPage params={{ videoId: "video-123" }} />);
+
+      const poseProps = mockUsePoseSessionEvents.mock.calls[0][0];
+      expect(poseProps.onCorrectionReady).toBeDefined();
+
+      act(() => {
+        poseProps.onCorrectionReady(
+          { text: "Keep knees aligned with toes.", modality: "speech" },
+          10000,
+          { joint: "left_knee", observed_angle: 60, expected_range: [75, 180], severity: "medium" }
+        );
+      });
+
+      const lastPlaybackProps = mockUseSpokenCuePlayback.mock.calls[mockUseSpokenCuePlayback.mock.calls.length - 1][0];
+      expect(lastPlaybackProps.text).toBe("Keep knees aligned with toes.");
+      expect(lastPlaybackProps.cueId).toBe("correction-left_knee-10000");
+      expect(lastPlaybackProps.recommendedPlaybackAction).toBe("pause_before_speaking");
+      expect(lastPlaybackProps.shouldDeliver).toBe(true);
+      expect(lastPlaybackProps.modality).toBe("audio");
+    });
+
+    test("onCorrectionReady does not set spoken cue when audio is muted or in haptic-only mode", () => {
+      mockUser.audio_coexistence.interruption_level = "haptic_only";
+      render(<LiveSessionPage params={{ videoId: "video-123" }} />);
+
+      const poseProps = mockUsePoseSessionEvents.mock.calls[0][0];
+
+      act(() => {
+        poseProps.onCorrectionReady(
+          { text: "Keep knees aligned.", modality: "speech" },
+          12000,
+          { joint: "left_knee", observed_angle: 60, expected_range: [75, 180], severity: "medium" }
+        );
+      });
+
+      // No new spoken cue should be dispatched to useSpokenCuePlayback
+      const lastPlaybackProps = mockUseSpokenCuePlayback.mock.calls[mockUseSpokenCuePlayback.mock.calls.length - 1][0];
+      expect(lastPlaybackProps.text).not.toBe("Keep knees aligned.");
+    });
+
+    test("disconnected haptic sleeves do not prevent verbal form correction playback", () => {
+      mockUseHapticDeviceStatus.mockReturnValue({
+        status: "disconnected",
+        statusText: "Disconnected",
+        deviceStatuses: [
+          { key: "left_arm", name: "Left Arm", status_text: "Disconnected", connected: false },
+          { key: "right_arm", name: "Right Arm", status_text: "Disconnected", connected: false },
+        ],
+        isLoading: false,
+        error: null,
+      });
+
+      render(<LiveSessionPage params={{ videoId: "video-123" }} />);
+
+      const poseProps = mockUsePoseSessionEvents.mock.calls[0][0];
+
+      act(() => {
+        poseProps.onCorrectionReady(
+          { text: "Straighten your back.", modality: "speech" },
+          15000,
+          { joint: "spine", observed_angle: 30, expected_range: [0, 15], severity: "high" }
+        );
+      });
+
+      const lastPlaybackProps = mockUseSpokenCuePlayback.mock.calls[mockUseSpokenCuePlayback.mock.calls.length - 1][0];
+      expect(lastPlaybackProps.text).toBe("Straighten your back.");
+      expect(lastPlaybackProps.cueId).toBe("correction-spine-15000");
+    });
   });
 });

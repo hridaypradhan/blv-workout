@@ -11,6 +11,7 @@ export interface SetupPositioningGuidePanelProps {
   requiredBodyOrientation: BodyOrientation;
   onReadyChange?: (isReady: boolean) => void;
   onGuidanceChange?: (guidance: string, isReady: boolean) => void;
+  isCountdownActive?: boolean;
 }
 
 export function SetupPositioningGuidePanel({
@@ -19,6 +20,7 @@ export function SetupPositioningGuidePanel({
   requiredBodyOrientation,
   onReadyChange,
   onGuidanceChange,
+  isCountdownActive = false,
 }: SetupPositioningGuidePanelProps) {
   const {
     poseResult,
@@ -138,8 +140,10 @@ export function SetupPositioningGuidePanel({
 
           {/* Screen reader live announcements */}
           <div className="sr-only" aria-live="polite">
-            {guideResult
-              ? `Stance update: ${guideResult.guidance}. ${guideResult.isReady ? "Ready to begin workout." : ""}`
+            {isCountdownActive
+              ? ""
+              : guideResult
+              ? `Stance update: ${guideResult.guidance}. ${guideResult.isReady ? "Hold still." : ""}`
               : "Awaiting video landmarks detection."}
           </div>
         </div>

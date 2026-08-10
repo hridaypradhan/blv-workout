@@ -12,11 +12,11 @@ export function CountdownOverlay({
   if (countdown === null) return null;
 
   return (
-    <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-6 text-center animate-fade-in">
-      <span className="text-[120px] font-extrabold text-yellow-400 animate-ping animate-duration-1000">
+    <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-6 text-center animate-fade-in" role="region" aria-label="Countdown">
+      <span className="text-[120px] font-extrabold text-yellow-400 animate-ping animate-duration-1000" aria-hidden="true">
         {countdown}
       </span>
-      <p className="text-xl font-bold text-white mt-4">Hold still...</p>
+      <p className="text-xl font-bold text-white mt-4" aria-hidden="true">Hold still...</p>
       <button
         type="button"
         onClick={handleCancelCountdown}

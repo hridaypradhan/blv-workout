@@ -5,7 +5,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 /**
  * Status values for the speech recognition adapter.
  */
-export type SpeechRecognitionStatus = "unsupported" | "idle" | "listening" | "error";
+export type SpeechRecognitionStatus = "unsupported" | "idle" | "listening" | "retrying" | "blocked" | "error";
 
 /**
  * A consumable speech recognition result with a unique ID.
@@ -101,12 +101,16 @@ export function mapSpeechError(rawCode: string): string {
   }
 }
 
+function isRecoverableSpeechError(rawCode: string | null): boolean {
+  return rawCode === "no-speech";
+}
+
 /**
  * Browser speech recognition adapter hook.
  *
  * Uses the Web Speech API (SpeechRecognition / webkitSpeechRecognition).
  * Handles unsupported browsers cleanly. Supports explicit start/stop only —
- * the mic never starts without a user action.
+ * the mic never starts without user intent.
  *
  * Only emits final recognition results. Interim results are ignored for
  * command execution safety.
@@ -123,16 +127,28 @@ export function useSpeechRecognition() {
   const [error, setError] = useState<string | null>(null);
   const [rawError, setRawError] = useState<string | null>(null);
 
+  const [userWantsVoiceControl, setUserWantsVoiceControl] = useState<boolean>(false);
+  const userWantsVoiceRef = useRef<boolean>(false);
+
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isStoppingRef = useRef(false);
   /** Whether onerror fired during the current recognition session. */
   const hadErrorRef = useRef(false);
+  const lastErrorCodeRef = useRef<string | null>(null);
+
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearRestartTimer = useCallback(() => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+  }, []);
 
   /**
-   * Start listening for voice input.
-   * Creates a new SpeechRecognition instance each time to avoid stale state.
+   * Internal function to initialize and start browser speech recognition.
    */
-  const startListening = useCallback(() => {
+  const startListeningInternal = useCallback(() => {
     const SpeechRecognitionAPI =
       typeof window !== "undefined"
         ? window.SpeechRecognition || window.webkitSpeechRecognition
@@ -143,7 +159,9 @@ export function useSpeechRecognition() {
       return;
     }
 
-    // Stop any existing recognition
+    clearRestartTimer();
+
+    // Stop any existing recognition instance
     if (recognitionRef.current) {
       try {
         isStoppingRef.current = true;
@@ -161,7 +179,6 @@ export function useSpeechRecognition() {
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: SpeechRecognitionResultEvent) => {
-      // Extract only final results
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal && result[0]) {
@@ -184,32 +201,76 @@ export function useSpeechRecognition() {
 
       hadErrorRef.current = true;
       const raw = event.error || "unknown";
+      lastErrorCodeRef.current = raw;
       setRawError(raw);
       setError(mapSpeechError(raw));
-      setStatus("error");
+
+      if (raw === "not-allowed" || raw === "service-not-allowed") {
+        userWantsVoiceRef.current = false;
+        setUserWantsVoiceControl(false);
+        setStatus("blocked");
+      } else if (isRecoverableSpeechError(raw) && userWantsVoiceRef.current) {
+        setStatus("retrying");
+      } else {
+        setStatus("error");
+      }
     };
 
     recognition.onend = () => {
-      // If onerror already fired for this session, keep the error status
-      // visible — do NOT overwrite it to "idle".
-      if (hadErrorRef.current) {
+      const wereStopping = isStoppingRef.current;
+      isStoppingRef.current = false;
+
+      const scheduleAutoRestart = (delayMs = 400) => {
+        clearRestartTimer();
+        restartTimerRef.current = setTimeout(() => {
+          if (!userWantsVoiceRef.current) return;
+
+          // Avoid restarting while app TTS is actively speaking
+          if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
+            scheduleAutoRestart(300);
+            return;
+          }
+
+          startListeningInternal();
+        }, delayMs);
+      };
+
+      // Explicit stop by user
+      if (wereStopping) {
+        setStatus("idle");
+        userWantsVoiceRef.current = false;
+        setUserWantsVoiceControl(false);
         return;
       }
 
-      // Only transition to idle if we're not intentionally stopping
-      // (to avoid a brief idle flash before cleanup)
-      if (!isStoppingRef.current) {
-        // Browser auto-stopped (e.g., extended silence)
+      // If onerror already fired for this session, keep blocked/error states
+      // visible unless the browser only reported temporary silence.
+      if (hadErrorRef.current) {
+        if (lastErrorCodeRef.current === "not-allowed" || lastErrorCodeRef.current === "service-not-allowed") {
+          userWantsVoiceRef.current = false;
+          setUserWantsVoiceControl(false);
+          setStatus("blocked");
+        } else if (isRecoverableSpeechError(lastErrorCodeRef.current) && userWantsVoiceRef.current) {
+          setStatus("retrying");
+          scheduleAutoRestart(400);
+        }
+        return;
+      }
+
+      // Natural end (e.g., silence timeout)
+      if (userWantsVoiceRef.current) {
+        setStatus("retrying");
+        scheduleAutoRestart(400);
+      } else {
         setStatus("idle");
       }
-      isStoppingRef.current = false;
     };
 
     recognitionRef.current = recognition;
     isStoppingRef.current = false;
     hadErrorRef.current = false;
+    lastErrorCodeRef.current = null;
 
-    // Clear any previous error state before retry
     setError(null);
     setRawError(null);
 
@@ -223,12 +284,25 @@ export function useSpeechRecognition() {
       setError(msg);
       setStatus("error");
     }
-  }, []);
+  }, [clearRestartTimer]);
 
   /**
-   * Stop listening for voice input.
+   * Start listening for voice input (explicit user intent).
+   */
+  const startListening = useCallback(() => {
+    userWantsVoiceRef.current = true;
+    setUserWantsVoiceControl(true);
+    startListeningInternal();
+  }, [startListeningInternal]);
+
+  /**
+   * Stop listening for voice input (explicit user intent).
    */
   const stopListening = useCallback(() => {
+    userWantsVoiceRef.current = false;
+    setUserWantsVoiceControl(false);
+    clearRestartTimer();
+
     if (recognitionRef.current) {
       try {
         isStoppingRef.current = true;
@@ -241,11 +315,13 @@ export function useSpeechRecognition() {
     setStatus("idle");
     setError(null);
     setRawError(null);
-  }, []);
+  }, [clearRestartTimer]);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
+      userWantsVoiceRef.current = false;
+      clearRestartTimer();
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
@@ -255,12 +331,10 @@ export function useSpeechRecognition() {
         recognitionRef.current = null;
       }
     };
-  }, []);
+  }, [clearRestartTimer]);
 
   /**
    * Clear the last result after it has been consumed.
-   * This is optional — ID-based dedup in consumers already prevents
-   * reprocessing, but clearing keeps the state clean.
    */
   const clearLastResult = useCallback(() => {
     setLastResult(null);
@@ -268,6 +342,7 @@ export function useSpeechRecognition() {
 
   return {
     status,
+    userWantsVoiceControl,
     lastTranscript,
     lastResult,
     error,

@@ -261,7 +261,7 @@ describe("useSpeechRecognition", () => {
   });
 
   // -- no-speech error --
-  test("no-speech error sets correct user-friendly message", () => {
+  test("no-speech error preserves user-friendly message while retrying", () => {
     const { result } = renderHook(() => useSpeechRecognition());
 
     act(() => {
@@ -272,26 +272,119 @@ describe("useSpeechRecognition", () => {
       mockRecognitionInstance!.onerror!({ error: "no-speech", message: "" });
     });
 
-    expect(result.current.status).toBe("error");
+    expect(result.current.status).toBe("retrying");
     expect(result.current.error).toBe("No speech was detected. Try again.");
     expect(result.current.rawError).toBe("no-speech");
   });
 
-  // -- Normal end (silence) sets idle --
-  test("onend without error sets status to idle (silence timeout)", () => {
+  test("no-speech followed by onend auto-restarts while user still wants voice control", () => {
+    vi.useFakeTimers();
     const { result } = renderHook(() => useSpeechRecognition());
 
     act(() => {
       result.current.startListening();
     });
 
+    act(() => {
+      mockRecognitionInstance!.onerror!({ error: "no-speech", message: "" });
+      mockRecognitionInstance!.onend!();
+    });
+
+    expect(result.current.status).toBe("retrying");
+    expect(result.current.userWantsVoiceControl).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(result.current.status).toBe("listening");
+    expect(mockRecognitionInstance!.start).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  // -- Natural end (silence) triggers retrying and auto-restart when userWantsVoiceControl is true --
+  test("onend without explicit stop sets status to retrying and auto-restarts listening", () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSpeechRecognition());
+
+    act(() => {
+      result.current.startListening();
+    });
+    expect(result.current.status).toBe("listening");
+    expect(result.current.userWantsVoiceControl).toBe(true);
+
     // Browser auto-stops after silence — no onerror, just onend
     act(() => {
       mockRecognitionInstance!.onend!();
     });
 
+    expect(result.current.status).toBe("retrying");
+
+    // Advance timer to trigger auto-restart
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(result.current.status).toBe("listening");
+    expect(result.current.userWantsVoiceControl).toBe(true);
+    vi.useRealTimers();
+  });
+
+  // -- Explicit stop disables userWantsVoiceControl and prevents restart --
+  test("stopListening sets status to idle and prevents auto-restart", () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSpeechRecognition());
+
+    act(() => {
+      result.current.startListening();
+    });
+    expect(result.current.userWantsVoiceControl).toBe(true);
+
+    act(() => {
+      result.current.stopListening();
+    });
+
     expect(result.current.status).toBe("idle");
-    expect(result.current.error).toBeNull();
+    expect(result.current.userWantsVoiceControl).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.status).toBe("idle");
+    expect(mockRecognitionInstance!.start).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  // -- Permission error sets status to blocked and prevents restart --
+  test("permission error 'not-allowed' sets status to blocked and prevents auto-restart", () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSpeechRecognition());
+
+    act(() => {
+      result.current.startListening();
+    });
+
+    act(() => {
+      mockRecognitionInstance!.onerror!({ error: "not-allowed", message: "" });
+    });
+
+    expect(result.current.status).toBe("blocked");
+    expect(result.current.userWantsVoiceControl).toBe(false);
+
+    act(() => {
+      mockRecognitionInstance!.onend!();
+    });
+
+    expect(result.current.status).toBe("blocked");
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.status).toBe("blocked");
+    expect(mockRecognitionInstance!.start).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   // -- Transcript delivery --

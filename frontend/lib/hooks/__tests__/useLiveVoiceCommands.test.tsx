@@ -13,9 +13,12 @@ let mockLastResult: { id: string; transcript: string; createdAt: number } | null
 let mockError: string | null = null;
 let mockRawError: string | null = null;
 
+let mockUserWantsVoiceControl = false;
+
 vi.mock("../useSpeechRecognition", () => ({
   useSpeechRecognition: () => ({
     status: mockStatus,
+    userWantsVoiceControl: mockUserWantsVoiceControl,
     lastTranscript: mockLastTranscript,
     lastResult: mockLastResult,
     error: mockError,
@@ -83,6 +86,7 @@ describe("useLiveVoiceCommands", () => {
     vi.clearAllMocks();
     _testResultCounter = 0;
     mockStatus = "idle";
+    mockUserWantsVoiceControl = false;
     mockLastTranscript = "";
     mockLastResult = null;
     mockError = null;
@@ -100,10 +104,33 @@ describe("useLiveVoiceCommands", () => {
     vi.restoreAllMocks();
   });
 
-  test("returns voice status from speech recognition", () => {
+  test("returns voice status and userWantsVoiceControl from speech recognition", () => {
+    mockUserWantsVoiceControl = true;
+    mockStatus = "listening";
     const props = createProps();
     const { result } = renderHook(() => useLiveVoiceCommands(props));
-    expect(result.current.voiceStatus).toBe("idle");
+    expect(result.current.voiceStatus).toBe("listening");
+    expect(result.current.userWantsVoiceControl).toBe(true);
+  });
+
+  test("setup handoff: autoStarts voice when autoStart prop is true", () => {
+    mockStatus = "idle";
+    const props = createProps({ autoStart: true });
+    renderHook(() => useLiveVoiceCommands(props));
+
+    expect(mockStartListening).toHaveBeenCalledTimes(1);
+    expect(props.logSessionEvent).toHaveBeenCalledWith(
+      "voice_mic_enabled",
+      expect.any(Number)
+    );
+  });
+
+  test("setup handoff: does NOT autoStart voice when autoStart prop is false", () => {
+    mockStatus = "idle";
+    const props = createProps({ autoStart: false });
+    renderHook(() => useLiveVoiceCommands(props));
+
+    expect(mockStartListening).not.toHaveBeenCalled();
   });
 
   test("startVoice calls startListening, logs event, and announces", () => {

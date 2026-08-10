@@ -16,6 +16,8 @@ import {
   AssistantVerbosity,
   AudioCoexistenceSettings,
   RuntimeCueSelectionResponse,
+  FeedbackModality,
+  FormError,
 } from "@/types";
 import { SESSION_EVENTS } from "@/lib/sessionEvents";
 import { useAutomaticCue } from "@/lib/hooks/useAutomaticCue";
@@ -486,6 +488,94 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     handlePersonaTrigger(onPersonaProgress(progress, undefined, canSpeakPersonaCue), currentTimeMs);
   }, [canSpeakPersonaCue, currentExercise, currentTime, currentTimeMs, handlePersonaTrigger, isPlaying, onPersonaProgress]);
 
+  const handleCorrectionReady = React.useCallback(
+    (
+      response: {
+        text: string;
+        modality?: string;
+        priority?: string;
+        persona?: string;
+        metadata?: Record<string, unknown>;
+      },
+      timestampMs: number,
+      latestFormError: FormError
+    ) => {
+      // 1. Log delivered telemetry
+      logSessionEvent(SESSION_EVENTS.ASSISTANT_CORRECTION_DELIVERED, timestampMs, {
+        text: response.text,
+        joint: latestFormError.joint,
+        modality: response.modality,
+        priority: response.priority,
+        persona: response.persona,
+        source: response.metadata?.source,
+        provider: response.metadata?.provider,
+        correction_kind: response.metadata?.correction_kind || latestFormError.metadata?.correction_kind,
+      });
+
+      // 2. Check positioning gate
+      if (isLiveGateOpen) {
+        logSessionEvent(SESSION_EVENTS.CORRECTION_SPEECH_SUPPRESSED_BY_GATE, timestampMs, {
+          text: response.text,
+          joint: latestFormError.joint,
+          reason: "positioning_gate_active",
+        });
+        announce(`Assistant correction (text only): ${response.text}`);
+        return;
+      }
+
+      // 3. Update UI state and announcement
+      updateLatestAutomaticCue(response.text, "correction");
+      announce(`Assistant correction: ${response.text}`);
+
+      // 4. Check speech policy restrictions
+      if (assistantMuted) {
+        return;
+      }
+
+      const isSilentOrHapticOnly =
+        coexistenceSettings.interruption_level === InterruptionLevel.SILENT ||
+        coexistenceSettings.interruption_level === InterruptionLevel.HAPTIC_ONLY;
+
+      if (isSilentOrHapticOnly) {
+        return;
+      }
+
+      if (
+        userProfile?.feedback_modalities &&
+        !userProfile.feedback_modalities.includes(FeedbackModality.AUDIO)
+      ) {
+        return;
+      }
+
+      // 5. Dispatch spoken cue with stable cue ID
+      const correctionCueId = `correction-${latestFormError.joint}-${Math.round(timestampMs)}`;
+      setCurrentSpokenCue({
+        cue_id: correctionCueId,
+        should_deliver: true,
+        modality: "audio",
+        text: response.text,
+        haptic_cue_ref: null,
+        interruption_policy_hint: "pause_then_speak",
+        recommended_playback_action: coexistenceSettings.pause_before_speaking
+          ? "pause_before_speaking"
+          : "none",
+        reason: `Assistant form correction (${latestFormError.joint})`,
+        timestampMs,
+      });
+    },
+    [
+      isLiveGateOpen,
+      assistantMuted,
+      coexistenceSettings.interruption_level,
+      coexistenceSettings.pause_before_speaking,
+      userProfile?.feedback_modalities,
+      logSessionEvent,
+      announce,
+      updateLatestAutomaticCue,
+      setCurrentSpokenCue,
+    ]
+  );
+
   const {
     startPoseTracking,
     stopPoseTracking,
@@ -509,6 +599,7 @@ function LiveSessionContent({ params }: LiveSessionProps) {
     onPersonaRepCompleted: (canSpeak) => onPersonaRepCompleted(true, null, canSpeak),
     onPersonaTrigger: handlePersonaTrigger,
     canSpeakPersonaCue,
+    onCorrectionReady: handleCorrectionReady,
   });
 
   // Invalidate stale cues on seek or mute/video change
@@ -681,9 +772,20 @@ function LiveSessionContent({ params }: LiveSessionProps) {
       announce,
     });
 
+  const initialVoiceIntent = React.useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const fromQuery = searchParams.get("voiceIntent") === "true" || searchParams.get("overrideVoice") === "true";
+    const fromStorage = sessionStorage.getItem("fitA11y_voiceIntent") === "true";
+    if (fromStorage) {
+      sessionStorage.removeItem("fitA11y_voiceIntent");
+    }
+    return fromQuery || fromStorage;
+  }, [searchParams]);
+
   // Live voice command orchestration
   const { voiceStatus, startVoice, stopVoice, lastTranscript: voiceLastTranscript, voiceError } =
     useLiveVoiceCommands({
+      autoStart: initialVoiceIntent,
       isPlaying,
       play: handleManualPlay,
       pause: handleManualPause,

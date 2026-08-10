@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PageWrapper from "@/components/layout/PageWrapper";
@@ -236,11 +236,22 @@ export default function SessionSetup({ params }: SetupPageProps) {
       }
 
       // Do NOT patch user settings from pre-session setup. Pass overrides via query params instead.
+      const isVoiceListening = setupVoiceStatusRef.current === "listening" || setupVoiceStatusRef.current === "retrying";
       const queryParams = new URLSearchParams();
       queryParams.set("sessionId", session.id);
       queryParams.set("overrideLevel", interruptionLevel);
       queryParams.set("overridePause", String(pauseBeforeSpeaking));
       queryParams.set("overrideDifficulty", difficulty);
+      if (isVoiceListening) {
+        queryParams.set("voiceIntent", "true");
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("fitA11y_voiceIntent", "true");
+        }
+      } else {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("fitA11y_voiceIntent");
+        }
+      }
 
       window.dispatchEvent(new Event("navigation-start"));
       router.push(`/session/${params.videoId}?${queryParams.toString()}`);
@@ -276,6 +287,11 @@ export default function SessionSetup({ params }: SetupPageProps) {
     isCameraStreamReady: cameraStream.status === "ready" && cameraStream.stream !== null,
     isStarting,
   });
+
+  const setupVoiceStatusRef = useRef(setupVoice.status);
+  useEffect(() => {
+    setupVoiceStatusRef.current = setupVoice.status;
+  }, [setupVoice.status]);
 
   if (isLoadingArtifacts) {
     return (

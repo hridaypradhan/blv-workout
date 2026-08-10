@@ -54,6 +54,7 @@ export interface UseLiveVoiceCommandsProps {
 
 export interface UseLiveVoiceCommandsReturn {
   voiceStatus: SpeechRecognitionStatus;
+  userWantsVoiceControl: boolean;
   startVoice: () => void;
   stopVoice: () => void;
   lastTranscript: string;
@@ -105,6 +106,7 @@ export function useLiveVoiceCommands({
 }: UseLiveVoiceCommandsProps): UseLiveVoiceCommandsReturn {
   const {
     status: voiceStatus,
+    userWantsVoiceControl,
     lastTranscript,
     lastResult,
     error: voiceError,
@@ -317,7 +319,7 @@ export function useLiveVoiceCommands({
     clearLastResult();
   }, [lastResult, executeCommand, clearLastResult]);
 
-  // Auto-start voice control on mount if supported
+  // Auto-start voice control on mount if supported and requested
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (autoStart && !autoStartedRef.current && voiceStatus === "idle") {
@@ -332,6 +334,7 @@ export function useLiveVoiceCommands({
 
   return {
     voiceStatus,
+    userWantsVoiceControl,
     startVoice,
     stopVoice,
     lastTranscript,

@@ -151,8 +151,12 @@ export function CameraPositioningGate({
 
   // Repeat current alignment instructions
   const handleRepeatGuidance = React.useCallback(() => {
-    speakText(currentGuidance);
-  }, [currentGuidance, speakText]);
+    if (countdownActiveRef.current && countdown !== null) {
+      speakText(`Position confirmed. Starting in ${countdown}.`);
+    } else {
+      speakText(currentGuidance);
+    }
+  }, [currentGuidance, countdown, speakText]);
 
   // Bind stream to video preview element inside modal
   useEffect(() => {
@@ -172,17 +176,15 @@ export function CameraPositioningGate({
       countdownActiveRef.current = true;
       onCountdownActiveChange?.(true);
       setCountdown(5);
-      speakText("Position confirmed. Starting in 5.");
+      speakText("Position confirmed. Starting in 5, 4, 3, 2, 1.");
 
       let currentVal = 5;
       countdownIntervalRef.current = setInterval(() => {
         currentVal -= 1;
         if (currentVal > 0) {
           setCountdown(currentVal);
-          speakText(String(currentVal));
         } else {
           clearCountdown();
-          cancelSpeech();
           onComplete();
         }
       }, 1000);
@@ -191,15 +193,14 @@ export function CameraPositioningGate({
       onCountdownCancelled?.();
       speakText("Position lost. Resuming setup.");
     }
-  }, [isReady, onComplete, isActionPending, onCountdownActiveChange, onCountdownCancelled, clearCountdown, cancelSpeech, speakText]);
+  }, [isReady, onComplete, isActionPending, onCountdownActiveChange, onCountdownCancelled, clearCountdown, speakText]);
 
   const handleCancelCountdown = React.useCallback(() => {
     clearCountdown();
     onCountdownCancelled?.();
-    cancelSpeech();
     setIsReady(false);
     speakText("Countdown cancelled.");
-  }, [clearCountdown, onCountdownCancelled, cancelSpeech, speakText]);
+  }, [clearCountdown, onCountdownCancelled, speakText]);
 
   // Listen to parent cancel countdown trigger
   useEffect(() => {
@@ -355,6 +356,7 @@ export function CameraPositioningGate({
                   requiredBodyOrientation={requiredBodyOrientation}
                   onReadyChange={setIsReady}
                   onGuidanceChange={handleGuidanceChange}
+                  isCountdownActive={countdown !== null}
                 />
               </div>
 

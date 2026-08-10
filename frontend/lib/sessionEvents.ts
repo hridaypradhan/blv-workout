@@ -37,6 +37,7 @@ export const SESSION_EVENTS = {
   POSITIONING_GATE_COMPLETED: "positioning_gate_completed",
   CUE_SUPPRESSED_BY_GATE: "cue_suppressed_by_gate",
   QA_SPEECH_SUPPRESSED_BY_GATE: "qa_speech_suppressed_by_gate",
+  CORRECTION_SPEECH_SUPPRESSED_BY_GATE: "correction_speech_suppressed_by_gate",
   CAMERA_REQUESTED: "camera_requested",
   CAMERA_READY: "camera_ready",
   CAMERA_FAILED: "camera_failed",

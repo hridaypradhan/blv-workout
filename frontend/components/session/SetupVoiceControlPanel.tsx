@@ -22,6 +22,10 @@ export function SetupVoiceControlPanel({
     switch (status) {
       case "listening":
         return "bg-emerald-500/10 border-emerald-500/30 text-emerald-400";
+      case "retrying":
+        return "bg-amber-500/10 border-amber-500/30 text-amber-400";
+      case "blocked":
+        return "bg-red-500/10 border-red-500/30 text-red-400";
       case "error":
         return "bg-red-500/10 border-red-500/30 text-red-400";
       case "unsupported":
@@ -35,6 +39,10 @@ export function SetupVoiceControlPanel({
     switch (status) {
       case "listening":
         return "Listening for setup commands...";
+      case "retrying":
+        return "Re-connecting voice control...";
+      case "blocked":
+        return "Voice permission is blocked in browser.";
       case "error":
         return "Voice error. Try clicking the button again.";
       case "unsupported":

@@ -21,13 +21,25 @@ function getStatusConfig(status: SpeechRecognitionStatus) {
       return {
         dotClass: "bg-slate-500",
         label: "Voice Off",
-        description: "Tap the microphone to start voice commands.",
+        description: "Voice controls turned off. Tap mic to enable.",
       };
     case "listening":
       return {
         dotClass: "bg-emerald-400 animate-pulse",
         label: "Listening",
         description: "Mic is on — speak a command.",
+      };
+    case "retrying":
+      return {
+        dotClass: "bg-amber-400 animate-pulse",
+        label: "Retrying...",
+        description: "Re-connecting voice control after silence...",
+      };
+    case "blocked":
+      return {
+        dotClass: "bg-red-500",
+        label: "Voice Blocked",
+        description: "Microphone or speech recognition permission is blocked.",
       };
     case "error":
       return {
@@ -45,7 +57,9 @@ export default function VoiceControlPanel({
   lastTranscript,
   voiceError,
 }: VoiceControlPanelProps) {
-  const isListening = voiceStatus === "listening";
+  const isListening = voiceStatus === "listening" || voiceStatus === "retrying";
+  const isRetrying = voiceStatus === "retrying";
+  const isBlocked = voiceStatus === "blocked";
   const isUnsupported = voiceStatus === "unsupported";
   const isError = voiceStatus === "error";
   const config = getStatusConfig(voiceStatus);
@@ -54,7 +68,7 @@ export default function VoiceControlPanel({
     if (isListening) {
       stopVoice();
     } else {
-      // Allow starting from idle or error state (retry)
+      // Allow starting from idle, error, or blocked retry attempt
       startVoice();
     }
   };
@@ -90,8 +104,10 @@ export default function VoiceControlPanel({
           disabled={isUnsupported}
           className={`flex items-center justify-center w-12 h-12 rounded-xl border transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 shrink-0 ${
             isListening
-              ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30"
-              : isError
+              ? isRetrying
+                ? "bg-amber-500/20 border-amber-500/40 text-amber-400 hover:bg-amber-500/30"
+                : "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30"
+              : isBlocked || isError
               ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30"
               : isUnsupported
               ? "bg-slate-950 border-slate-800 text-slate-600 cursor-not-allowed"
@@ -103,6 +119,8 @@ export default function VoiceControlPanel({
               ? "Voice control is not supported in this browser"
               : isListening
               ? "Microphone is on. Click to stop voice control."
+              : isBlocked
+              ? "Voice control blocked. Click to retry."
               : isError
               ? "Voice control error. Click to retry."
               : "Click to start voice control"

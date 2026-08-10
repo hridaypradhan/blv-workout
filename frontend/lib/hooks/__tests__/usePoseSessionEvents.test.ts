@@ -216,4 +216,88 @@ describe("usePoseSessionEvents hook", () => {
       })
     );
   });
+
+  test("invokes onCorrectionReady callback when correction is generated", async () => {
+    const mockFormError: FormError = {
+      joint: "left_knee",
+      observed_angle: 60,
+      expected_range: [75, 180],
+      severity: "medium",
+      message: "observed knee angle 60 out of range",
+    };
+
+    const activePoseRuntime: PoseRuntimeContract = {
+      poseData: {},
+      isReady: true,
+      providerSource: "camera_mediapipe",
+      runtimeStatus: "active",
+      isTracking: true,
+      startTracking: vi.fn(),
+      stopTracking: vi.fn(),
+      currentAngles: { left_knee: 60 },
+      latestRepEvent: null,
+      latestFormError: mockFormError,
+      trackingStatusLabel: "Active",
+    };
+
+    const onCorrectionReady = vi.fn();
+
+    renderHook(() =>
+      usePoseSessionEvents({
+        ...defaultProps,
+        activePoseRuntime,
+        onCorrectionReady,
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(onCorrectionReady).toHaveBeenCalledTimes(1);
+    });
+
+    expect(onCorrectionReady).toHaveBeenCalledWith(
+      { text: "Keep back straight", modality: "speech" },
+      5000,
+      mockFormError
+    );
+  });
+
+  test("logs ASSISTANT_CORRECTION_SUPPRESSED when canVoiceCorrection returns false", () => {
+    const mockFormError: FormError = {
+      joint: "left_knee",
+      observed_angle: 60,
+      expected_range: [75, 180],
+      severity: "medium",
+      message: "knee position error",
+    };
+
+    const activePoseRuntime: PoseRuntimeContract = {
+      poseData: {},
+      isReady: true,
+      providerSource: "camera_mediapipe",
+      runtimeStatus: "active",
+      isTracking: true,
+      startTracking: vi.fn(),
+      stopTracking: vi.fn(),
+      currentAngles: { left_knee: 60 },
+      latestRepEvent: null,
+      latestFormError: mockFormError,
+      trackingStatusLabel: "Active",
+    };
+
+    renderHook(() =>
+      usePoseSessionEvents({
+        ...defaultProps,
+        activePoseRuntime,
+        canVoiceCorrection: () => false,
+      })
+    );
+
+    expect(defaultProps.logSessionEvent).toHaveBeenCalledWith(
+      SESSION_EVENTS.ASSISTANT_CORRECTION_SUPPRESSED,
+      5000,
+      expect.objectContaining({
+        reason: "persona_correction_cap_reached",
+      })
+    );
+  });
 });
